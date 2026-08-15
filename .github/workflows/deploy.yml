@@ -35,6 +35,11 @@ jobs:
           command_timeout: 20m
           script: |
             set -e
+            sudo mkdir -p /opt/filedtracker
+            sudo chown ec2-user:ec2-user /opt/filedtracker
+            if [ ! -f /opt/filedtracker/.env ] && [ -f /opt/filetracker/.env ]; then
+              cp /opt/filetracker/.env /opt/filedtracker/.env
+            fi
             cd /opt/filedtracker
             if [ ! -f .env ]; then
               echo "Create /opt/filedtracker/.env on the server first (see DEPLOY.md)"
