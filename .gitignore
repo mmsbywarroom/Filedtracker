@@ -1,0 +1,7 @@
+node_modules
+.next
+.env
+prisma/dev.db
+prisma/dev.db-journal
+public/models
+filedtracker.tar.gz

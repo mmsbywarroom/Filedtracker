@@ -1,0 +1,28 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  @apply bg-sand text-ink antialiased;
+}
+
+.leaflet-container {
+  background: #e8eef4;
+  font-family: inherit;
+}
+
+input,
+button,
+select,
+textarea {
+  font: inherit;
+}

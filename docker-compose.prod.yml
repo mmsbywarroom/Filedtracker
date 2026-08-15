@@ -1,0 +1,31 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: fieldtrack
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fieldtrack}
+      POSTGRES_DB: fieldtrack
+    volumes:
+      - fieldtrack_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fieldtrack -d fieldtrack"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    image: filedtracker:latest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://fieldtrack:${POSTGRES_PASSWORD:-fieldtrack}@db:5432/fieldtrack
+    ports:
+      - "3000:3000"
+
+volumes:
+  fieldtrack_pg:
