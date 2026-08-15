@@ -40,7 +40,14 @@ jobs:
               echo "Create /opt/filedtracker/.env on the server first (see DEPLOY.md)"
               exit 1
             fi
-            gzip -dc filedtracker.tar.gz | docker load
-            docker compose -f docker-compose.prod.yml up -d
+            if ! command -v docker >/dev/null 2>&1; then
+              sudo dnf install -y docker
+              sudo systemctl enable --now docker
+              sudo mkdir -p /usr/libexec/docker/cli-plugins
+              sudo curl -SL https://github.com/docker/compose/releases/download/v2.29.7/docker-compose-linux-x86_64 -o /usr/libexec/docker/cli-plugins/docker-compose
+              sudo chmod +x /usr/libexec/docker/cli-plugins/docker-compose
+            fi
+            gzip -dc filedtracker.tar.gz | sudo docker load
+            sudo docker compose -f docker-compose.prod.yml up -d
             rm -f filedtracker.tar.gz
-            docker compose -f docker-compose.prod.yml ps
+            sudo docker compose -f docker-compose.prod.yml ps
