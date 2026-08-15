@@ -19,6 +19,7 @@ declare global {
   interface Window {
     google?: any;
     __ftGoogleMapsPromise?: Promise<any>;
+    gm_authFailure?: () => void;
   }
 }
 
@@ -57,11 +58,11 @@ export default function RouteMap({
         return;
       }
       window.gm_authFailure = () => {
-        setError("Google ne key reject ki. Maps JavaScript API Enable karo, billing on karo, aur FieldTrack Web key pe HTTP referrer check karo.");
+        setError("Google Maps key rejected. Enable Maps JavaScript API, billing, and HTTP referrers.");
       };
       const google = await loadGoogle(cfg.key);
       if (!google?.maps) {
-        setError("Google Maps script load nahi hui. Maps JavaScript API enable karo.");
+        setError("Google Maps script failed to load. Enable Maps JavaScript API.");
         return;
       }
       if (cancelled || !el.current) return;
