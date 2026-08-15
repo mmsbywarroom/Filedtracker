@@ -52,7 +52,10 @@ jobs:
               sudo curl -SL https://github.com/docker/compose/releases/download/v2.29.7/docker-compose-linux-x86_64 -o /usr/libexec/docker/cli-plugins/docker-compose
               sudo chmod +x /usr/libexec/docker/cli-plugins/docker-compose
             fi
+            sudo docker image prune -af
+            sudo docker builder prune -af || true
             gzip -dc filedtracker.tar.gz | sudo docker load
             sudo docker compose -f docker-compose.prod.yml up -d
             rm -f filedtracker.tar.gz
+            sudo docker image prune -f
             sudo docker compose -f docker-compose.prod.yml ps
