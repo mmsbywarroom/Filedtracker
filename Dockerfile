@@ -9,4 +9,4 @@ RUN npx prisma generate && npm run build
 EXPOSE 3000
 ENV PORT=3000
 ENV NODE_ENV=production
-CMD ["sh", "-c", "npx prisma db push --skip-generate && npx tsx prisma/seed.ts && npm start"]
+CMD ["sh", "-c", "npx prisma migrate deploy && npx tsx prisma/seed.ts && npm start"]
