@@ -52,11 +52,18 @@ export default function RouteMap({
     let cancelled = false;
     (async () => {
       const cfg = await fetch("/api/maps/config").then((r) => r.json());
-      if (!cfg.key) {
+      if (!cfg.hasKey && !cfg.key) {
         setError("Google Maps key missing. Add GOOGLE_MAPS_API_KEY on the server.");
         return;
       }
+      window.gm_authFailure = () => {
+        setError("Google ne key reject ki. Maps JavaScript API Enable karo, billing on karo, aur FieldTrack Web key pe HTTP referrer check karo.");
+      };
       const google = await loadGoogle(cfg.key);
+      if (!google?.maps) {
+        setError("Google Maps script load nahi hui. Maps JavaScript API enable karo.");
+        return;
+      }
       if (cancelled || !el.current) return;
 
       const raw = [
@@ -126,7 +133,7 @@ export default function RouteMap({
           position: path[Math.floor(path.length / 2)],
         }).open(map);
       }
-    })().catch(() => setError("Could not load Google Maps."));
+    })().catch((e) => setError(e instanceof Error ? e.message : "Could not load Google Maps."));
     return () => {
       cancelled = true;
     };

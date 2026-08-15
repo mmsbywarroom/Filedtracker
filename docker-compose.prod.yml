@@ -6,5 +6,6 @@ services:
       - .env
     environment:
       NODE_OPTIONS: --dns-result-order=ipv4first
+      GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY}
     ports:
       - "3000:3000"
