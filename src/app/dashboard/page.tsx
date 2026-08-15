@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { FaceCapture } from "@/components/FaceCapture";
 import RouteMap from "@/components/RouteMapDynamic";
 import { formatDuration, formatKm } from "@/lib/utils";
+import { loadFaceModels } from "@/lib/face";
 
 type User = {
   id: string;
@@ -61,6 +62,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     refresh();
+    loadFaceModels().catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -113,12 +115,12 @@ export default function DashboardPage() {
     if (!res.ok || !data.matched) throw new Error("Face did not match the registered user.");
   }
 
-  async function onRegister(descriptor: number[]) {
+  async function onRegister(descriptor: number[], image: string) {
     setBusy(true);
     const res = await fetch("/api/face/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ descriptor }),
+      body: JSON.stringify({ descriptor, image }),
     });
     setBusy(false);
     if (!res.ok) {
@@ -131,7 +133,7 @@ export default function DashboardPage() {
     refresh();
   }
 
-  async function punch(kind: "in" | "out", descriptor: number[]) {
+  async function punch(kind: "in" | "out", descriptor: number[], image: string) {
     setBusy(true);
     setMsg("");
     try {
@@ -141,6 +143,7 @@ export default function DashboardPage() {
         lat: pos.coords.latitude,
         lng: pos.coords.longitude,
         accuracy: pos.coords.accuracy,
+        image,
       };
       const url = kind === "in" ? "/api/attendance" : "/api/attendance/punch-out";
       const res = await fetch(url, {
@@ -177,11 +180,11 @@ export default function DashboardPage() {
   if (!user) return <div className="grid min-h-screen place-items-center">Loading…</div>;
 
   return (
-    <main className="min-h-screen bg-[#e8eef4]">
+    <main className="min-h-screen bg-sand">
       <div className="mx-auto max-w-6xl px-4 py-5">
         <header className="mb-4 flex items-center justify-between rounded-3xl bg-white px-4 py-3 shadow-card">
           <div>
-            <p className="text-xs uppercase tracking-wider text-navy/50">Your location</p>
+            <p className="text-xs uppercase tracking-wider text-navy/50">Aam Aadmi Party</p>
             <h1 className="font-semibold">{user.name}</h1>
             <p className="text-sm text-navy/60">
               {user.sectorAllotted} · {user.assemblyName}
@@ -199,7 +202,7 @@ export default function DashboardPage() {
             <FaceCapture
               busy={busy}
               actionLabel={mode === "register" ? "Save my face" : mode === "in" ? "Confirm punch in" : "Confirm punch out"}
-              onCapture={(d) => (mode === "register" ? onRegister(d) : punch(mode, d))}
+              onCapture={(d, image) => (mode === "register" ? onRegister(d, image) : punch(mode, d, image))}
             />
             <button className="mt-3 w-full text-sm text-navy/50" onClick={() => setMode("idle")}>
               Cancel
@@ -246,7 +249,7 @@ export default function DashboardPage() {
               </button>
             )}
             {user.faceRegisteredAt && !open && (
-              <button onClick={() => setMode("in")} className="flex items-center gap-2 rounded-full bg-[#0f9d8e] px-6 py-3 font-semibold text-white">
+              <button onClick={() => setMode("in")} className="flex items-center gap-2 rounded-full bg-teal px-6 py-3 font-semibold text-white">
                 Start · Punch in
               </button>
             )}

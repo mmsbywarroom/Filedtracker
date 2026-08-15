@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { FacePhoto } from "@/components/FacePhoto";
 
 type Row = {
   id: string;
@@ -12,6 +13,9 @@ type Row = {
   sectorAllotted: string;
   zone: string;
   district: string;
+  faceImage: string | null;
+  punchInFace: string | null;
+  punchOutFace: string | null;
   punchInAt: string;
   punchOutAt: string | null;
   punchInAddress: string | null;
@@ -83,8 +87,11 @@ export default function DailyRecordsPage() {
                 <th className="px-3 py-3">Name</th>
                 <th className="px-3 py-3">Number</th>
                 <th className="px-3 py-3">Sector</th>
+                <th className="px-3 py-3">Registered</th>
                 <th className="px-3 py-3">Punch in</th>
+                <th className="px-3 py-3">In face</th>
                 <th className="px-3 py-3">Punch out</th>
+                <th className="px-3 py-3">Out face</th>
                 <th className="px-3 py-3">Distance</th>
                 <th className="px-3 py-3">Marks</th>
                 <th className="px-3 py-3">Status</th>
@@ -98,14 +105,23 @@ export default function DailyRecordsPage() {
                   <td className="px-3 py-3">{r.phone}</td>
                   <td className="px-3 py-3">{r.sectorAllotted}</td>
                   <td className="px-3 py-3">
+                    <FacePhoto src={r.faceImage} label={`${r.name} registered`} />
+                  </td>
+                  <td className="px-3 py-3">
                     {new Date(r.punchInAt).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" })}
                     {r.punchInAddress ? <p className="max-w-[160px] text-xs text-navy/50">{r.punchInAddress}</p> : null}
+                  </td>
+                  <td className="px-3 py-3">
+                    <FacePhoto src={r.punchInFace} label={`${r.name} punch in`} />
                   </td>
                   <td className="px-3 py-3">
                     {r.punchOutAt
                       ? new Date(r.punchOutAt).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" })
                       : "—"}
                     {r.punchOutAddress ? <p className="max-w-[160px] text-xs text-navy/50">{r.punchOutAddress}</p> : null}
+                  </td>
+                  <td className="px-3 py-3">
+                    <FacePhoto src={r.punchOutFace} label={`${r.name} punch out`} />
                   </td>
                   <td className="px-3 py-3">{(r.distanceMeters / 1000).toFixed(2)} km</td>
                   <td className="px-3 py-3">{r.marks}</td>

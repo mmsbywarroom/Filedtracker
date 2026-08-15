@@ -20,7 +20,7 @@ export async function signSession(payload: SessionPayload) {
   return new SignJWT(payload)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime("12h")
+    .setExpirationTime("30d")
     .sign(secret());
 }
 
@@ -31,12 +31,18 @@ export async function setSessionCookie(payload: SessionPayload) {
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: 60 * 60 * 12,
+    maxAge: 60 * 60 * 24 * 30,
   });
 }
 
 export async function clearSession() {
-  cookies().delete(COOKIE);
+  cookies().set(COOKIE, "", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 0,
+  });
 }
 
 export async function getSession(): Promise<SessionPayload | null> {

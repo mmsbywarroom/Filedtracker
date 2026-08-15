@@ -5,21 +5,22 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        ink: "#0b1220",
-        navy: "#12263a",
+        // Aam Aadmi Party site: navy header, blue CTA, yellow accent, pale yellow band
+        ink: "#0A1628",
+        navy: "#12305A",
         teal: {
-          DEFAULT: "#0f766e",
-          bright: "#14b8a6",
+          DEFAULT: "#1A56C4",
+          bright: "#FFD100",
         },
-        sand: "#f4efe6",
-        route: "#1a73e8",
+        sand: "#FFF6D4",
+        route: "#1A56C4",
       },
       fontFamily: {
         sans: ["var(--font-plus-jakarta)", "system-ui", "sans-serif"],
       },
       boxShadow: {
-        float: "0 12px 40px rgba(11, 18, 32, 0.12)",
-        card: "0 8px 24px rgba(18, 38, 58, 0.08)",
+        float: "0 12px 40px rgba(10, 22, 40, 0.14)",
+        card: "0 8px 24px rgba(18, 48, 90, 0.08)",
       },
     },
   },

@@ -30,8 +30,8 @@ export default function AdminLoginPage() {
   return (
     <main className="grid min-h-screen place-items-center bg-ink px-4">
       <div className="w-full max-w-md rounded-[2rem] bg-white p-8 shadow-float">
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-teal">Admin</p>
-        <h1 className="mt-2 text-2xl font-semibold">Command access</h1>
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-teal">Aam Aadmi Party</p>
+        <h1 className="mt-2 text-2xl font-semibold">Admin login</h1>
         <form onSubmit={onSubmit} className="mt-6 space-y-4">
           <input
             type="email"
@@ -48,7 +48,7 @@ export default function AdminLoginPage() {
             placeholder="Password"
           />
           {error && <p className="text-sm text-red-600">{error}</p>}
-          <button disabled={busy} className="w-full rounded-2xl bg-ink py-3 font-semibold text-white">
+          <button disabled={busy} className="w-full rounded-2xl bg-teal py-3 font-semibold text-white">
             {busy ? "Signing in…" : "Enter admin"}
           </button>
         </form>

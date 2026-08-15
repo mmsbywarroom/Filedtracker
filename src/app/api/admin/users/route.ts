@@ -37,6 +37,7 @@ export async function GET() {
       district: u.district,
       isActive: u.isActive,
       faceRegistered: Boolean(u.faceRegisteredAt),
+      faceImage: u.faceImage,
       lastPunchIn: u.attendances[0]?.punchInAt ?? null,
       lastPunchOut: u.attendances[0]?.punchOutAt ?? null,
     })),

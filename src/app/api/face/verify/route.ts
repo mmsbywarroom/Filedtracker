@@ -23,6 +23,7 @@ export async function POST(req: Request) {
   }
   const stored = JSON.parse(user.faceDescriptorJson) as number[];
   const dist = euclidean(stored, descriptor);
-  const matched = dist < 0.48;
+  // Same person at 1–2m is typically <0.5; different people are usually >0.6.
+  const matched = dist < 0.5;
   return NextResponse.json({ matched, distance: Number(dist.toFixed(4)) });
 }

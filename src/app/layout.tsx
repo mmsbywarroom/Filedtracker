@@ -8,14 +8,14 @@ const jakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "FieldTrack — Attendance & Travel Footprint",
-  description: "Secure field attendance with OTP, face punch, and live travel footprint.",
+  title: "FieldTrack — Aam Aadmi Party",
+  description: "Aam Aadmi Party field attendance with OTP, face punch, and travel footprint.",
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#0b1220",
+  themeColor: "#0A1628",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { sanitizeFaceImage } from "@/lib/faceImage";
 
 export async function GET() {
   const s = await requireUser();
@@ -26,6 +27,7 @@ export async function POST(req: Request) {
   const lat = Number(body?.lat);
   const lng = Number(body?.lng);
   const address = typeof body?.address === "string" ? body.address.slice(0, 200) : null;
+  const punchInFace = sanitizeFaceImage(body?.image);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
     return NextResponse.json({ error: "Location is required for punch in." }, { status: 400 });
   }
@@ -41,6 +43,7 @@ export async function POST(req: Request) {
       punchInLat: lat,
       punchInLng: lng,
       punchInAddress: address,
+      punchInFace,
       points: {
         create: { lat, lng, recordedAt: new Date(), accuracy: Number(body?.accuracy) || null },
       },

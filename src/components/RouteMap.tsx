@@ -1,9 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
-import { MapContainer, Marker, Polyline, Popup, TileLayer, useMap } from "react-leaflet";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
+import { useEffect, useRef, useState } from "react";
 import { formatDuration, formatKm } from "@/lib/utils";
 
 type Point = { lat: number; lng: number; recordedAt?: string };
@@ -18,28 +15,25 @@ type Props = {
   distanceMeters?: number;
 };
 
-const startIcon = L.divIcon({
-  className: "",
-  html: `<div style="width:18px;height:18px;background:#1a73e8;border:3px solid white;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,.3)"></div>`,
-  iconSize: [18, 18],
-  iconAnchor: [9, 9],
-});
+declare global {
+  interface Window {
+    google?: any;
+    __ftGoogleMapsPromise?: Promise<any>;
+  }
+}
 
-const endIcon = L.divIcon({
-  className: "",
-  html: `<div style="width:22px;height:22px;background:#ea4335;border:3px solid white;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 2px 8px rgba(0,0,0,.3)"></div>`,
-  iconSize: [22, 22],
-  iconAnchor: [11, 22],
-});
-
-function Fit({ pts }: { pts: [number, number][] }) {
-  const map = useMap();
-  useEffect(() => {
-    if (!pts.length) return;
-    if (pts.length === 1) map.setView(pts[0], 15);
-    else map.fitBounds(L.latLngBounds(pts), { padding: [40, 40] });
-  }, [map, pts]);
-  return null;
+function loadGoogle(key: string) {
+  if (window.google?.maps) return Promise.resolve(window.google);
+  if (window.__ftGoogleMapsPromise) return window.__ftGoogleMapsPromise;
+  window.__ftGoogleMapsPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}`;
+    script.async = true;
+    script.onload = () => resolve(window.google);
+    script.onerror = () => reject(new Error("Google Maps failed to load"));
+    document.head.appendChild(script);
+  });
+  return window.__ftGoogleMapsPromise;
 }
 
 export default function RouteMap({
@@ -51,55 +45,88 @@ export default function RouteMap({
   durationMs,
   distanceMeters,
 }: Props) {
-  const coords = useMemo(() => {
-    const list: [number, number][] = points.map((p) => [p.lat, p.lng]);
-    if (punchIn) list.unshift([punchIn.lat, punchIn.lng]);
-    if (punchOut) list.push([punchOut.lat, punchOut.lng]);
-    return list;
-  }, [points, punchIn, punchOut]);
+  const el = useRef<HTMLDivElement>(null);
+  const [error, setError] = useState("");
 
-  const center = coords[0] || [28.4595, 77.0266];
-  const mid = coords[Math.floor(coords.length / 2)] || center;
-  const label = [durationMs != null ? formatDuration(durationMs) : null, distanceMeters != null ? formatKm(distanceMeters) : null]
-    .filter(Boolean)
-    .join(" · ");
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const cfg = await fetch("/api/maps/config").then((r) => r.json());
+      if (!cfg.key) {
+        setError("Google Maps key missing. Add GOOGLE_MAPS_API_KEY on the server.");
+        return;
+      }
+      const google = await loadGoogle(cfg.key);
+      if (cancelled || !el.current) return;
+
+      const path = [
+        ...(punchIn ? [punchIn] : []),
+        ...points,
+        ...(punchOut ? [punchOut] : []),
+      ].map((p) => ({ lat: p.lat, lng: p.lng }));
+      const center = path[0] || { lat: 30.7333, lng: 76.7794 };
+
+      const map = new google.maps.Map(el.current, {
+        center,
+        zoom: 15,
+        mapTypeId: "roadmap",
+        streetViewControl: false,
+        mapTypeControl: true,
+        fullscreenControl: true,
+      });
+
+      if (path.length > 1) {
+        new google.maps.Polyline({
+          map,
+          path,
+          strokeColor: "#1A56C4",
+          strokeOpacity: 1,
+          strokeWeight: 6,
+        });
+      }
+
+      if (punchIn) {
+        new google.maps.Marker({
+          map,
+          position: punchIn,
+          title: startLabel,
+          label: { text: "IN", color: "white", fontSize: "10px" },
+        });
+      }
+      if (punchOut) {
+        new google.maps.Marker({
+          map,
+          position: punchOut,
+          title: endLabel,
+          label: { text: "OUT", color: "white", fontSize: "10px" },
+        });
+      }
+
+      const bounds = new google.maps.LatLngBounds();
+      path.forEach((p) => bounds.extend(p));
+      if (path.length) map.fitBounds(bounds, 48);
+
+      const label = [durationMs != null ? formatDuration(durationMs) : null, distanceMeters != null ? formatKm(distanceMeters) : null]
+        .filter(Boolean)
+        .join(" · ");
+      if (label && path.length) {
+        new google.maps.InfoWindow({
+          content: `<div style="font:600 13px system-ui;padding:4px 6px">${label}</div>`,
+          position: path[Math.floor(path.length / 2)],
+        }).open(map);
+      }
+    })().catch(() => setError("Could not load Google Maps."));
+    return () => {
+      cancelled = true;
+    };
+  }, [points, punchIn, punchOut, startLabel, endLabel, durationMs, distanceMeters]);
 
   return (
     <div className="relative h-full min-h-[420px] w-full overflow-hidden rounded-3xl">
-      <MapContainer center={center} zoom={14} className="h-full w-full" zoomControl={false}>
-        <TileLayer
-          attribution='&copy; OpenStreetMap'
-          url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-        />
-        {coords.length > 1 && (
-          <>
-            <Polyline positions={coords} pathOptions={{ color: "#8ab4f8", weight: 12, opacity: 0.45, lineCap: "round", lineJoin: "round" }} />
-            <Polyline positions={coords} pathOptions={{ color: "#1a73e8", weight: 7, opacity: 1, lineCap: "round", lineJoin: "round" }} />
-          </>
-        )}
-        {punchIn && (
-          <Marker position={[punchIn.lat, punchIn.lng]} icon={startIcon}>
-            <Popup>{startLabel}</Popup>
-          </Marker>
-        )}
-        {punchOut && (
-          <Marker position={[punchOut.lat, punchOut.lng]} icon={endIcon}>
-            <Popup>{endLabel}</Popup>
-          </Marker>
-        )}
-        {label && coords.length > 1 && (
-          <Marker
-            position={mid}
-            icon={L.divIcon({
-              className: "",
-              html: `<div style="background:#174ea6;color:white;padding:6px 12px;border-radius:16px;font:600 12px/1.2 system-ui;white-space:nowrap;box-shadow:0 4px 14px rgba(23,78,166,.35)">${label}</div>`,
-              iconSize: [120, 28],
-              iconAnchor: [60, 40],
-            })}
-          />
-        )}
-        <Fit pts={coords} />
-      </MapContainer>
+      <div ref={el} className="h-full min-h-[420px] w-full" />
+      {error && (
+        <div className="absolute inset-0 grid place-items-center bg-white/90 p-6 text-center text-sm text-navy/70">{error}</div>
+      )}
     </div>
   );
 }

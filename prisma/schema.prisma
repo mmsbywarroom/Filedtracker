@@ -23,6 +23,7 @@ model User {
   zone                String
   district            String
   faceDescriptorJson  String?
+  faceImage           String?
   faceRegisteredAt    DateTime?
   isActive            Boolean  @default(true)
   createdAt           DateTime @default(now())
@@ -53,6 +54,8 @@ model Attendance {
   punchOutLng   Float?
   punchInAddress String?
   punchOutAddress String?
+  punchInFace     String?
+  punchOutFace    String?
   distanceMeters Float   @default(0)
   createdAt     DateTime @default(now())
   points        TrackPoint[]

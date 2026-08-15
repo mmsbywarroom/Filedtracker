@@ -36,7 +36,7 @@ export default function FootprintPage({ params }: { params: { id: string } }) {
   }, [params.id]);
 
   return (
-    <main className="bg-[#e8eef4] px-4 py-5 md:px-8">
+    <main className="bg-sand px-4 py-5 md:px-8">
       <div>
         <Link href="/admin/records" className="text-sm text-navy/50">
           ← Daily records
