@@ -22,7 +22,7 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: "filedtracker.tar.gz,docker-compose.prod.yml,deploy/nginx.conf"
+          source: "filedtracker.tar.gz,docker-compose.prod.yml,deploy/nginx.conf,deploy/disk-cleanup.sh"
           target: /opt/filedtracker
           overwrite: true
 
@@ -58,4 +58,8 @@ jobs:
             sudo docker compose -f docker-compose.prod.yml up -d
             rm -f filedtracker.tar.gz
             sudo docker image prune -f
+            sudo cp -f /opt/filedtracker/deploy/disk-cleanup.sh /opt/filedtracker/disk-cleanup.sh
+            sudo chmod +x /opt/filedtracker/disk-cleanup.sh /opt/filedtracker/deploy/disk-cleanup.sh
+            echo '15 4 * * * root /opt/filedtracker/disk-cleanup.sh >> /var/log/filedtracker-cleanup.log 2>&1' | sudo tee /etc/cron.d/filedtracker-cleanup >/dev/null
+            sudo chmod 644 /etc/cron.d/filedtracker-cleanup
             sudo docker compose -f docker-compose.prod.yml ps
