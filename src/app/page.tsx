@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { FormEvent, useState } from "react";
 
 export default function HomePage() {
@@ -57,9 +56,6 @@ export default function HomePage() {
               <h1 className="text-xl font-semibold">FieldTrack</h1>
             </div>
           </div>
-          <Link href="/admin/login" className="rounded-full border border-navy/15 bg-white/70 px-4 py-2 text-sm font-medium text-navy backdrop-blur">
-            Admin login
-          </Link>
         </header>
 
         <section className="mt-10 grid flex-1 items-center gap-10 md:grid-cols-2">

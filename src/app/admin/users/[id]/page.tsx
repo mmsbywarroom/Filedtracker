@@ -36,10 +36,10 @@ export default function FootprintPage({ params }: { params: { id: string } }) {
   }, [params.id]);
 
   return (
-    <main className="min-h-screen bg-[#e8eef4]">
-      <div className="mx-auto max-w-6xl px-4 py-5">
-        <Link href="/admin" className="text-sm text-navy/50">
-          ← All users
+    <main className="bg-[#e8eef4] px-4 py-5 md:px-8">
+      <div>
+        <Link href="/admin/records" className="text-sm text-navy/50">
+          ← Daily records
         </Link>
         <div className="mt-3 mb-4 rounded-3xl bg-white px-4 py-3 shadow-card">
           <p className="text-xs uppercase tracking-wider text-navy/40">Travel footprint</p>
