@@ -59,11 +59,22 @@ export default function RouteMap({
       const google = await loadGoogle(cfg.key);
       if (cancelled || !el.current) return;
 
-      const path = [
+      const raw = [
         ...(punchIn ? [punchIn] : []),
         ...points,
         ...(punchOut ? [punchOut] : []),
       ].map((p) => ({ lat: p.lat, lng: p.lng }));
+
+      let path = raw;
+      if (raw.length > 1) {
+        const snapped = await fetch("/api/maps/snap", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ points: raw }),
+        }).then((r) => r.json());
+        if (Array.isArray(snapped.points) && snapped.points.length > 1) path = snapped.points;
+      }
+
       const center = path[0] || { lat: 30.7333, lng: 76.7794 };
 
       const map = new google.maps.Map(el.current, {
