@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { haversineMeters } from "@/lib/utils";
+import { googleMapsKey } from "@/lib/runtimeEnv";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 type Pt = { lat: number; lng: number };
 
@@ -18,7 +20,7 @@ function thin(points: Pt[], minMeters = 18) {
 
 export async function POST(req: Request) {
   if (!(await getSession())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const key = process.env["GOOGLE_MAPS_API_KEY"] || "";
+  const key = googleMapsKey();
   if (!key) return NextResponse.json({ points: [] });
   const body = await req.json().catch(() => null);
   const raw = Array.isArray(body?.points) ? (body.points as Pt[]) : [];
