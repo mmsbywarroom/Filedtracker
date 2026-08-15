@@ -58,8 +58,13 @@ jobs:
             sudo docker compose -f docker-compose.prod.yml up -d
             rm -f filedtracker.tar.gz
             sudo docker image prune -f
-            sudo cp -f /opt/filedtracker/deploy/disk-cleanup.sh /opt/filedtracker/disk-cleanup.sh
-            sudo chmod +x /opt/filedtracker/disk-cleanup.sh /opt/filedtracker/deploy/disk-cleanup.sh
+            sudo cp -f /opt/filedtracker/deploy/disk-cleanup.sh /opt/filedtracker/disk-cleanup.sh || true
+            sudo chmod +x /opt/filedtracker/disk-cleanup.sh 2>/dev/null || true
+            if ! command -v crond >/dev/null 2>&1; then
+              sudo dnf install -y cronie
+            fi
+            sudo mkdir -p /etc/cron.d
             echo '15 4 * * * root /opt/filedtracker/disk-cleanup.sh >> /var/log/filedtracker-cleanup.log 2>&1' | sudo tee /etc/cron.d/filedtracker-cleanup >/dev/null
             sudo chmod 644 /etc/cron.d/filedtracker-cleanup
+            sudo systemctl enable --now crond
             sudo docker compose -f docker-compose.prod.yml ps
