@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { haversineMeters } from "@/lib/utils";
+import { haversineMeters, isPlausibleStep } from "@/lib/utils";
 
 export async function POST(req: Request) {
   const s = await requireUser();
@@ -15,10 +15,14 @@ export async function POST(req: Request) {
   if (!open) return NextResponse.json({ error: "No active session." }, { status: 400 });
 
   const cleaned: { lat: number; lng: number; recordedAt: Date; accuracy: number | null }[] = [];
-  for (const p of points.slice(0, 40)) {
+  let prev = open.points[0] ? { lat: open.points[0].lat, lng: open.points[0].lng } : null;
+  for (const p of points.slice(0, 80)) {
     const lat = Number(p.lat);
     const lng = Number(p.lng);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+    const next = { lat, lng };
+    if (prev && !isPlausibleStep(prev, next, Number(p.accuracy))) continue;
+    prev = next;
     cleaned.push({
       lat,
       lng,
@@ -33,7 +37,7 @@ export async function POST(req: Request) {
   });
 
   let extra = 0;
-  let prev = open.points[0] ? { lat: open.points[0].lat, lng: open.points[0].lng } : null;
+  prev = open.points[0] ? { lat: open.points[0].lat, lng: open.points[0].lng } : null;
   for (const p of cleaned) {
     if (prev) extra += haversineMeters(prev, p);
     prev = p;

@@ -5,22 +5,42 @@ import * as faceapi from "face-api.js";
 let loaded = false;
 let loading: Promise<void> | null = null;
 
-export async function loadFaceModels() {
-  if (loaded) return;
-  if (loading) return loading;
-  const url = "https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights";
-  loading = Promise.all([
+const MODEL_URLS = [
+  "/weights",
+  "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.2/weights",
+  "https://unpkg.com/face-api.js@0.22.2/weights",
+];
+
+async function loadFrom(url: string) {
+  await Promise.all([
     faceapi.nets.tinyFaceDetector.loadFromUri(url),
     faceapi.nets.faceLandmark68Net.loadFromUri(url),
     faceapi.nets.faceRecognitionNet.loadFromUri(url),
-  ]).then(() => {
-    loaded = true;
+  ]);
+}
+
+export async function loadFaceModels() {
+  if (loaded) return;
+  if (loading) return loading;
+  loading = (async () => {
+    let last: unknown;
+    for (const url of MODEL_URLS) {
+      try {
+        await loadFrom(url);
+        loaded = true;
+        loading = null;
+        return;
+      } catch (err) {
+        last = err;
+      }
+    }
     loading = null;
-  });
+    throw last || new Error("Face models failed to load");
+  })();
   return loading;
 }
 
-const detector = () => new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.4 });
+const detector = () => new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.4 });
 
 export type FaceScanError = "no_face" | "too_far" | "multiple";
 
@@ -39,29 +59,17 @@ export async function scanFace(video: HTMLVideoElement): Promise<FaceScan> {
   const best = detections[0];
   const minSide = Math.min(video.videoWidth, video.videoHeight);
   const faceSide = Math.min(best.box.width, best.box.height);
-
-  // Allow ~1.5–2m on a phone selfie cam; reject tiny background faces.
-  if (faceSide < minSide * 0.08) return { ok: false, error: "too_far" };
+  if (faceSide < minSide * 0.1) return { ok: false, error: "too_far" };
 
   const second = detections[1];
   if (second && Math.min(second.box.width, second.box.height) > minSide * 0.14) {
     return { ok: false, error: "multiple" };
   }
 
-  const pad = 0.28;
-  const x = Math.max(0, best.box.x - best.box.width * pad);
-  const y = Math.max(0, best.box.y - best.box.height * pad);
-  const w = Math.min(video.videoWidth - x, best.box.width * (1 + pad * 2));
-  const h = Math.min(video.videoHeight - y, best.box.height * (1 + pad * 2));
-
-  const crop = document.createElement("canvas");
-  crop.width = 224;
-  crop.height = 224;
-  const ctx = crop.getContext("2d");
-  if (!ctx) return { ok: false, error: "no_face" };
-  ctx.drawImage(video, x, y, w, h, 0, 0, 224, 224);
-
-  const detail = await faceapi.detectSingleFace(crop, detector()).withFaceLandmarks().withFaceDescriptor();
+  const detail = await faceapi
+    .detectSingleFace(video, detector())
+    .withFaceLandmarks()
+    .withFaceDescriptor();
   if (!detail) return { ok: false, error: "no_face" };
 
   return {

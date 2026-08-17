@@ -24,6 +24,6 @@ export async function POST(req: Request) {
   const stored = JSON.parse(user.faceDescriptorJson) as number[];
   const dist = euclidean(stored, descriptor);
   // Same person with angle/light change is often 0.4–0.55; different people usually >0.6.
-  const matched = dist < 0.56;
+  const matched = dist < 0.54;
   return NextResponse.json({ matched, distance: Number(dist.toFixed(4)) });
 }

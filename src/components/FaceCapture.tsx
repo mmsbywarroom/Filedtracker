@@ -10,9 +10,9 @@ type Props = {
 };
 
 const hints = {
-  no_face: "Face nahi dikh raha. Camera ke saamne ruko, light theek rakho.",
-  too_far: "Bahut door ho. Ek kadam aage aao — background wala chehra nahi chalega.",
-  multiple: "Frame mein ek hi chehra hona chahiye.",
+  no_face: "Phone ko chehre ke saamne rakho",
+  too_far: "Thoda kareeb aao",
+  multiple: "Frame mein sirf aap hon",
 };
 
 function snapshot(video: HTMLVideoElement, box?: { x: number; y: number; width: number; height: number }) {
@@ -34,14 +34,17 @@ function snapshot(video: HTMLVideoElement, box?: { x: number; y: number; width: 
     const sy = (video.videoHeight - size) / 2;
     ctx.drawImage(video, sx, sy, size, size, 0, 0, 240, 240);
   }
-  return canvas.toDataURL("image/jpeg", 0.72);
+  return canvas.toDataURL("image/jpeg", 0.7);
 }
 
 export function FaceCapture({ actionLabel, onCapture, busy }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const lastGood = useRef<FaceScan | null>(null);
+  const firing = useRef(false);
+  const hits = useRef(0);
   const [camReady, setCamReady] = useState(false);
   const [modelsReady, setModelsReady] = useState(false);
+  const [locked, setLocked] = useState(false);
   const [error, setError] = useState("");
   const [hint, setHint] = useState("Camera khul raha hai…");
 
@@ -50,11 +53,8 @@ export function FaceCapture({ actionLabel, onCapture, busy }: Props) {
     let cancelled = false;
     (async () => {
       try {
-        const models = loadFaceModels().then(() => {
-          if (!cancelled) setModelsReady(true);
-        });
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
+          video: { facingMode: "user", width: { ideal: 480 }, height: { ideal: 480 } },
           audio: false,
         });
         if (cancelled || !videoRef.current) {
@@ -65,11 +65,19 @@ export function FaceCapture({ actionLabel, onCapture, busy }: Props) {
         videoRef.current.setAttribute("playsinline", "true");
         await videoRef.current.play();
         setCamReady(true);
-        setHint("Face models load ho rahe hain…");
-        await models;
-        if (!cancelled) setHint("Camera ke saamne natural distance pe ruko");
+        setError("");
+        setHint("Face unlock taiyar ho raha hai…");
       } catch {
-        setError("Camera permission chahiye. Chrome site settings mein Camera Allow karo.");
+        setError("Camera Allow karo: Chrome site settings → Camera → Allow.");
+        return;
+      }
+      try {
+        await loadFaceModels();
+        if (cancelled) return;
+        setModelsReady(true);
+        setHint("Phone unlock ki tarah camera dekho");
+      } catch {
+        if (!cancelled) setHint("Face scan load nahi hua. Page refresh karo.");
       }
     })();
     return () => {
@@ -78,57 +86,71 @@ export function FaceCapture({ actionLabel, onCapture, busy }: Props) {
     };
   }, []);
 
-  useEffect(() => {
-    if (!camReady || !modelsReady || busy) return;
-    let running = false;
-    const tick = async () => {
-      if (running || !videoRef.current) return;
-      running = true;
-      const result = await scanFace(videoRef.current);
-      lastGood.current = result.ok ? result : null;
-      if (result.ok) setHint("Face ready — Confirm dabao");
-      else setHint(hints[result.error]);
-      running = false;
-    };
-    const timer = window.setInterval(tick, 500);
-    tick();
-    return () => clearInterval(timer);
-  }, [camReady, modelsReady, busy]);
-
-  async function capture() {
-    if (!videoRef.current || !modelsReady) return;
-    setHint("Scanning face…");
-    const result = lastGood.current?.ok ? lastGood.current : await scanFace(videoRef.current);
-    if (!result.ok) {
-      setHint(hints[result.error]);
-      return;
-    }
+  async function submit(result: FaceScan) {
+    if (!result.ok || !videoRef.current || firing.current || busy) return;
+    firing.current = true;
+    setLocked(true);
+    setHint("Face locked");
     const image = snapshot(videoRef.current, result.box);
     try {
       await onCapture(result.descriptor, image);
     } catch (e) {
-      setHint(e instanceof Error ? e.message : "Punch fail. Dobara Confirm dabao.");
+      firing.current = false;
+      setLocked(false);
+      hits.current = 0;
+      setHint(e instanceof Error ? e.message : "Dobara camera dekho");
     }
   }
 
+  useEffect(() => {
+    if (!camReady || !modelsReady || busy || firing.current) return;
+    let running = false;
+    let timer = 0;
+    const tick = async () => {
+      if (running || !videoRef.current || firing.current) return;
+      running = true;
+      const result = await scanFace(videoRef.current);
+      if (result.ok) {
+        lastGood.current = result;
+        hits.current += 1;
+        setHint("Face mil gaya…");
+        if (hits.current >= 2) await submit(result);
+      } else {
+        hits.current = 0;
+        lastGood.current = null;
+        setHint(hints[result.error]);
+      }
+      running = false;
+    };
+    timer = window.setInterval(tick, 280);
+    tick();
+    return () => clearInterval(timer);
+  }, [camReady, modelsReady, busy]);
+
   return (
     <div className="flex flex-col items-center gap-4">
-      <div className="relative aspect-[3/4] w-full max-w-xs overflow-hidden rounded-[1.75rem] border-4 border-white shadow-float ring-4 ring-teal/30">
+      <div
+        className={`relative aspect-[3/4] w-full max-w-xs overflow-hidden rounded-[1.75rem] border-4 bg-black shadow-float ${
+          locked ? "border-emerald-400 ring-4 ring-emerald-300/50" : "border-white ring-4 ring-teal/30"
+        }`}
+      >
         <video ref={videoRef} className="h-full w-full object-cover scale-x-[-1]" playsInline muted autoPlay />
+        <div className="pointer-events-none absolute inset-0 grid place-items-center">
+          <div className={`h-40 w-40 rounded-full border-4 ${locked ? "border-emerald-400" : "border-white/80"}`} />
+        </div>
         {!camReady && (
-          <div className="absolute inset-0 grid place-items-center bg-navy/80 text-white text-sm">
-            Starting camera…
-          </div>
+          <div className="absolute inset-0 grid place-items-center bg-navy/80 text-white text-sm">Starting camera…</div>
         )}
       </div>
-      <p className="text-center text-sm text-navy/70">{error || hint}</p>
+      <p className="text-center text-sm font-medium text-navy/80">{error || hint}</p>
+      {!modelsReady && camReady && <p className="text-xs text-navy/50">Pehli baar 2–3 sec lag sakte hain, phir instant</p>}
       <button
         type="button"
-        disabled={!camReady || !modelsReady || busy}
-        onClick={capture}
+        disabled={!camReady || !modelsReady || busy || firing.current}
+        onClick={() => lastGood.current?.ok && submit(lastGood.current)}
         className="rounded-full bg-teal px-8 py-3 text-white font-semibold shadow-card disabled:opacity-50"
       >
-        {busy ? "Please wait…" : !modelsReady ? "Preparing face scan…" : actionLabel}
+        {busy || firing.current ? "Unlocking…" : !modelsReady ? "Preparing…" : actionLabel}
       </button>
     </div>
   );

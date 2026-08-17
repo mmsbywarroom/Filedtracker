@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FaceCapture } from "@/components/FaceCapture";
 import RouteMap from "@/components/RouteMapDynamic";
-import { formatDuration, formatKm } from "@/lib/utils";
+import { formatDuration, formatKm, isPlausibleStep } from "@/lib/utils";
 import { loadFaceModels } from "@/lib/face";
 
 type User = {
@@ -64,6 +64,9 @@ export default function DashboardPage() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const buffer = useRef<Point[]>([]);
+  const lastFix = useRef<{ lat: number; lng: number } | null>(null);
+  const mapTick = useRef(0);
+  const pendingGps = useRef<Promise<GeolocationPosition | null> | null>(null);
 
   async function refresh() {
     const me = await fetch("/api/me").then((r) => r.json());
@@ -83,41 +86,58 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
+    if (mode === "in" || mode === "out") {
+      pendingGps.current = getPosition().catch(() => null);
+    }
+  }, [mode]);
+
+  useEffect(() => {
     if (!open) return;
-    const watch = navigator.geolocation.watchPosition(
-      (pos) => {
-        buffer.current.push({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          recordedAt: new Date().toISOString(),
-        });
-        setOpen((cur) =>
-          cur
-            ? {
-                ...cur,
-                points: [
-                  ...cur.points,
-                  { lat: pos.coords.latitude, lng: pos.coords.longitude, recordedAt: new Date().toISOString() },
-                ],
-              }
-            : cur
-        );
-      },
-      () => {},
-      { enableHighAccuracy: true, maximumAge: 8000 }
-    );
-    const t = setInterval(async () => {
+    lastFix.current = open.points[open.points.length - 1] || { lat: open.punchInLat, lng: open.punchInLng };
+    let wake: { release: () => Promise<void> } | null = null;
+    navigator.wakeLock?.request("screen").then((lock) => {
+      wake = lock;
+    }).catch(() => {});
+
+    const flush = async () => {
       if (!buffer.current.length) return;
-      const points = buffer.current.splice(0, buffer.current.length);
+      const batch = buffer.current.splice(0, buffer.current.length);
       await fetch("/api/attendance/track", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ points }),
+        body: JSON.stringify({
+          points: batch.map((p) => ({ ...p, accuracy: 20 })),
+        }),
       });
-    }, 20000);
+    };
+
+    const watch = navigator.geolocation.watchPosition(
+      (pos) => {
+        if (pos.coords.accuracy > 80) return;
+        const next = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        if (lastFix.current && !isPlausibleStep(lastFix.current, next, pos.coords.accuracy)) return;
+        lastFix.current = next;
+        const point = { ...next, recordedAt: new Date().toISOString() };
+        buffer.current.push(point);
+        mapTick.current += 1;
+        if (mapTick.current % 4 === 0) {
+          setOpen((cur) => (cur ? { ...cur, points: [...cur.points, point] } : cur));
+        }
+      },
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 }
+    );
+    const t = setInterval(flush, 8000);
+    const onHide = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    document.addEventListener("visibilitychange", onHide);
     return () => {
       navigator.geolocation.clearWatch(watch);
       clearInterval(t);
+      document.removeEventListener("visibilitychange", onHide);
+      flush();
+      wake?.release().catch(() => {});
     };
     // track only while this punch session is open
   }, [open?.id]);
@@ -131,7 +151,7 @@ export default function DashboardPage() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Face check failed.");
     if (!data.matched) {
-      throw new Error("Face registered user se match nahi hua. Seedha camera dekho, light theek rakho, phir Confirm.");
+      throw new Error("Face match nahi hua. Seedha camera dekho.");
     }
   }
 
@@ -162,7 +182,8 @@ export default function DashboardPage() {
       let lng: number;
       let accuracy: number | null = null;
       try {
-        const pos = await getPosition();
+        const cached = pendingGps.current ? await pendingGps.current : null;
+        const pos = cached || (await getPosition());
         lat = pos.coords.latitude;
         lng = pos.coords.longitude;
         accuracy = pos.coords.accuracy;

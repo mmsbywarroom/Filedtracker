@@ -39,3 +39,25 @@ export function formatKm(meters: number) {
   if (meters < 1000) return `${Math.round(meters)} m`;
   return `${(meters / 1000).toFixed(1)} km`;
 }
+
+export type LatLng = { lat: number; lng: number };
+
+export function splitTrack<T extends LatLng>(points: T[], maxGapMeters = 280): T[][] {
+  if (!points.length) return [];
+  const segs: T[][] = [[points[0]]];
+  for (let i = 1; i < points.length; i++) {
+    const gap = haversineMeters(points[i - 1], points[i]);
+    if (gap > maxGapMeters) segs.push([points[i]]);
+    else segs[segs.length - 1].push(points[i]);
+  }
+  return segs;
+}
+
+export function isPlausibleStep(from: LatLng, to: LatLng, accuracy?: number | null) {
+  if (accuracy != null && accuracy > 80) return false;
+  const gap = haversineMeters(from, to);
+  if (gap < 6) return false;
+  if (gap > 280) return false;
+  return true;
+}
+

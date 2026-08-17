@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { formatDuration, formatKm } from "@/lib/utils";
+import { formatDuration, formatKm, splitTrack } from "@/lib/utils";
 
 type Point = { lat: number; lng: number; recordedAt?: string };
 
@@ -67,41 +67,53 @@ export default function RouteMap({
       }
       if (cancelled || !el.current) return;
 
-      const raw = [
-        ...(punchIn ? [punchIn] : []),
-        ...points,
-        ...(punchOut ? [punchOut] : []),
-      ].map((p) => ({ lat: p.lat, lng: p.lng }));
+      const raw = points
+        .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng))
+        .map((p) => ({ lat: p.lat, lng: p.lng }));
 
-      let path = raw;
+      let segments = splitTrack(raw, 280).filter((g) => g.length >= 2);
       if (raw.length > 1) {
         const snapped = await fetch("/api/maps/snap", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ points: raw }),
         }).then((r) => r.json());
-        if (Array.isArray(snapped.points) && snapped.points.length > 1) path = snapped.points;
+        if (Array.isArray(snapped.segments) && snapped.segments.length) {
+          segments = snapped.segments.filter((g: Point[]) => g.length >= 2);
+        }
       }
 
-      const center = path[0] || { lat: 30.7333, lng: 76.7794 };
+      const focus = segments.sort((a, b) => b.length - a.length)[0] || raw;
+      const center = focus[0] || punchIn || { lat: 30.7333, lng: 76.7794 };
 
       const map = new google.maps.Map(el.current, {
         center,
-        zoom: 15,
+        zoom: 16,
         mapTypeId: "roadmap",
         streetViewControl: false,
         mapTypeControl: true,
         fullscreenControl: true,
       });
 
-      if (path.length > 1) {
+      const bounds = new google.maps.LatLngBounds();
+      for (const path of segments) {
         new google.maps.Polyline({
           map,
           path,
-          strokeColor: "#1A56C4",
-          strokeOpacity: 1,
-          strokeWeight: 6,
+          strokeColor: "#8ab4f8",
+          strokeOpacity: 0.45,
+          strokeWeight: 14,
+          geodesic: false,
         });
+        new google.maps.Polyline({
+          map,
+          path,
+          strokeColor: "#1A73E8",
+          strokeOpacity: 1,
+          strokeWeight: 7,
+          geodesic: false,
+        });
+        path.forEach((p) => bounds.extend(p));
       }
 
       if (punchIn) {
@@ -121,17 +133,15 @@ export default function RouteMap({
         });
       }
 
-      const bounds = new google.maps.LatLngBounds();
-      path.forEach((p) => bounds.extend(p));
-      if (path.length) map.fitBounds(bounds, 48);
+      if (!bounds.isEmpty()) map.fitBounds(bounds, 56);
 
       const label = [durationMs != null ? formatDuration(durationMs) : null, distanceMeters != null ? formatKm(distanceMeters) : null]
         .filter(Boolean)
         .join(" · ");
-      if (label && path.length) {
+      if (label && focus.length) {
         new google.maps.InfoWindow({
           content: `<div style="font:600 13px system-ui;padding:4px 6px">${label}</div>`,
-          position: path[Math.floor(path.length / 2)],
+          position: focus[Math.floor(focus.length / 2)],
         }).open(map);
       }
     })().catch((e) => setError(e instanceof Error ? e.message : "Could not load Google Maps."));
