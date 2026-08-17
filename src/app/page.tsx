@@ -1,8 +1,10 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { LangToggle, useLang } from "@/lib/i18n";
 
 export default function HomePage() {
+  const { t } = useLang();
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
   const [step, setStep] = useState<"phone" | "otp">("phone");
@@ -52,39 +54,40 @@ export default function HomePage() {
           <div className="flex items-center gap-3">
             <div className="grid h-11 w-11 place-items-center rounded-2xl bg-teal-bright font-bold text-ink">FT</div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-teal-bright">Aam Aadmi Party</p>
-              <h1 className="text-lg font-semibold">FieldTrack</h1>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-teal-bright">{t("aap")}</p>
+              <h1 className="text-lg font-semibold">{t("app")}</h1>
             </div>
           </div>
+          <LangToggle />
         </div>
       </header>
 
       <section className="flex flex-1 items-center justify-center px-4 py-10">
         <div className="w-full max-w-md rounded-[2rem] bg-white p-6 shadow-float md:p-8">
           <p className="inline-flex rounded-full bg-sand px-3 py-1 text-xs font-semibold uppercase tracking-wider text-teal">
-            Face-secure attendance
+            {t("faceBadge")}
           </p>
-          <h3 className="mt-4 text-xl font-semibold">User login</h3>
-          <p className="mt-1 text-sm text-navy/60">Use the mobile number registered by admin.</p>
+          <h3 className="mt-4 text-xl font-semibold">{t("login")}</h3>
+          <p className="mt-1 text-sm text-navy/60">{t("loginHint")}</p>
           {step === "phone" ? (
             <form onSubmit={requestOtp} className="mt-6 space-y-4">
-              <label className="block text-sm font-medium">Mobile number</label>
+              <label className="block text-sm font-medium">{t("mobile")}</label>
               <input
                 inputMode="numeric"
                 maxLength={10}
                 value={phone}
                 onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                placeholder="10-digit number"
+                placeholder={t("mobilePh")}
                 className="w-full rounded-2xl border border-navy/10 bg-sand/50 px-4 py-3 outline-none focus:border-teal"
               />
               {error && <p className="text-sm text-red-600">{error}</p>}
               <button disabled={busy || phone.length !== 10} className="w-full rounded-2xl bg-teal py-3 font-semibold text-white disabled:opacity-40">
-                {busy ? "Sending OTP…" : "Send 4-digit OTP"}
+                {busy ? t("sending") : t("sendOtp")}
               </button>
             </form>
           ) : (
             <form onSubmit={verify} className="mt-6 space-y-4">
-              <p className="text-sm text-navy/60">OTP sent to +91 {phone}</p>
+              <p className="text-sm text-navy/60">{t("otpSent")} {phone}</p>
               <input
                 inputMode="numeric"
                 maxLength={4}
@@ -95,10 +98,10 @@ export default function HomePage() {
               />
               {error && <p className="text-sm text-red-600">{error}</p>}
               <button disabled={busy || otp.length !== 4} className="w-full rounded-2xl bg-teal py-3 font-semibold text-white disabled:opacity-40">
-                {busy ? "Verifying…" : "Verify & continue"}
+                {busy ? t("verifying") : t("verify")}
               </button>
               <button type="button" onClick={() => setStep("phone")} className="w-full text-sm text-navy/60">
-                Change number
+                {t("changeNumber")}
               </button>
             </form>
           )}

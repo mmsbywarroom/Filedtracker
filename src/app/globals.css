@@ -11,6 +11,11 @@ body {
   min-height: 100%;
 }
 
+html.lang-pa,
+html.lang-pa body {
+  font-family: var(--font-pa), var(--font-plus-jakarta), sans-serif;
+}
+
 body {
   @apply bg-sand text-ink antialiased;
 }

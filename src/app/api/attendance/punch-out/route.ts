@@ -17,7 +17,7 @@ export async function POST(req: Request) {
   }
   const open = await prisma.attendance.findFirst({
     where: { userId: s.sub, punchOutAt: null },
-    include: { points: { orderBy: { recordedAt: "asc" } } },
+    include: { points: { orderBy: { recordedAt: "desc" }, take: 1 } },
   });
   if (!open) return NextResponse.json({ error: "No active punch in." }, { status: 400 });
 
@@ -40,15 +40,15 @@ export async function POST(req: Request) {
     const attendance = await prisma.attendance.update({
       where: { id: open.id },
       data: { ...base, punchOutFace },
-      include: { points: { orderBy: { recordedAt: "asc" } } },
+      select: { id: true, punchOutAt: true, distanceMeters: true },
     });
-    return NextResponse.json({ attendance });
+    return NextResponse.json({ attendance, ok: true });
   } catch {
     const attendance = await prisma.attendance.update({
       where: { id: open.id },
       data: base,
-      include: { points: { orderBy: { recordedAt: "asc" } } },
+      select: { id: true, punchOutAt: true, distanceMeters: true },
     });
-    return NextResponse.json({ attendance });
+    return NextResponse.json({ attendance, ok: true });
   }
 }

@@ -1,0 +1,207 @@
+"use client";
+
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+
+export type Lang = "en" | "pa";
+
+const dict = {
+  en: {
+    aap: "Aam Aadmi Party",
+    app: "FieldTrack",
+    login: "User login",
+    loginHint: "Use the mobile number registered by admin.",
+    mobile: "Mobile number",
+    mobilePh: "10-digit number",
+    sendOtp: "Send 4-digit OTP",
+    sending: "Sending OTP…",
+    otpSent: "OTP sent to +91",
+    verify: "Verify & continue",
+    verifying: "Verifying…",
+    changeNumber: "Change number",
+    faceBadge: "Face-secure attendance",
+    adminLogin: "Admin login",
+    enterAdmin: "Enter admin",
+    signingIn: "Signing in…",
+    backUser: "Back to user login",
+    logout: "Logout",
+    loading: "Loading…",
+    punchIn: "Start · Punch in",
+    punchOut: "Punch out",
+    confirmIn: "Confirm punch in",
+    confirmOut: "Confirm punch out",
+    saveFace: "Save my face",
+    registerFace: "Register face",
+    cancel: "Cancel",
+    recent: "Recent footprints",
+    inProgress: "In progress",
+    live: "Live",
+    punchStart: "Punch in to start your travel footprint",
+    lookCamera: "Look at the camera like phone unlock",
+    camStarting: "Camera opening…",
+    faceLocked: "Face locked",
+    unlocking: "Unlocking…",
+    preparing: "Preparing…",
+    noFace: "Hold the phone in front of your face",
+    tooFar: "Come a little closer",
+    multiple: "Only you should be in the frame",
+    camAllow: "Allow Camera in Chrome site settings.",
+    punchedIn: "Punched in. Route tracking started.",
+    punchedOut: "Punched out. Footprint saved.",
+    faceSaved: "Face registered. You can punch in now.",
+    users: "Users",
+    incharges: "Sector incharges",
+    createUser: "Create user",
+    dailyRecords: "Daily records",
+    footprint: "Footprint",
+    edit: "Edit",
+    delete: "Delete",
+    search: "Search name or number",
+    attendance: "Attendance",
+    csv: "CSV upload",
+    menu: "Menu",
+    admin: "FieldTrack Admin",
+    firstLoad: "First time may take 2–3 seconds, then instant",
+    faceFound: "Face found…",
+    retryLook: "Look at the camera again",
+    email: "Email",
+    password: "Password",
+    outAt: "Out",
+    backDash: "Dashboard",
+    records: "records",
+    fromDate: "From date",
+    toDate: "To date",
+    status: "Status",
+    statusAll: "All",
+    completed: "Completed",
+    applyFilter: "Apply filter",
+    noFootprints: "No footprints in this date range.",
+    tapFootprint: "Tap a record to see the route",
+    userCode: "Code",
+    searchCode: "Search / code",
+    searchCodePh: "Date, code or place",
+    viewAll: "View all footprints",
+  },
+  pa: {
+    aap: "ਆਮ ਆਦਮੀ ਪਾਰਟੀ",
+    app: "ਫੀਲਡਟ੍ਰੈਕ",
+    login: "ਯੂਜ਼ਰ ਲਾਗਇਨ",
+    loginHint: "ਐਡਮਿਨ ਵੱਲੋਂ ਰਜਿਸਟਰ ਨੰਬਰ ਵਰਤੋ।",
+    mobile: "ਮੋਬਾਈਲ ਨੰਬਰ",
+    mobilePh: "10 ਅੰਕਾਂ ਦਾ ਨੰਬਰ",
+    sendOtp: "4 ਅੰਕ OTP ਭੇਜੋ",
+    sending: "OTP ਭੇਜਿਆ ਜਾ ਰਿਹਾ…",
+    otpSent: "OTP ਭੇਜਿਆ +91",
+    verify: "ਤਸਦੀਕ ਕਰੋ",
+    verifying: "ਤਸਦੀਕ ਹੋ ਰਹੀ…",
+    changeNumber: "ਨੰਬਰ ਬਦਲੋ",
+    faceBadge: "ਚਿਹਰੇ ਨਾਲ ਹਾਜ਼ਰੀ",
+    adminLogin: "ਐਡਮਿਨ ਲਾਗਇਨ",
+    enterAdmin: "ਐਡਮਿਨ ਵਿੱਚ ਜਾਓ",
+    signingIn: "ਲਾਗਇਨ…",
+    backUser: "ਯੂਜ਼ਰ ਲਾਗਇਨ ਤੇ ਵਾਪਸ",
+    logout: "ਲਾਗਆਉਟ",
+    loading: "ਲੋਡ ਹੋ ਰਿਹਾ…",
+    punchIn: "ਸ਼ੁਰੂ · ਪੰਚ ਇਨ",
+    punchOut: "ਪੰਚ ਆਉਟ",
+    confirmIn: "ਪੰਚ ਇਨ ਪੱਕਾ ਕਰੋ",
+    confirmOut: "ਪੰਚ ਆਉਟ ਪੱਕਾ ਕਰੋ",
+    saveFace: "ਚਿਹਰਾ ਸੇਵ ਕਰੋ",
+    registerFace: "ਚਿਹਰਾ ਰਜਿਸਟਰ ਕਰੋ",
+    cancel: "ਰੱਦ",
+    recent: "ਪਿਛਲੇ ਰਸਤੇ",
+    inProgress: "ਚਾਲੂ",
+    live: "ਲਾਈਵ",
+    punchStart: "ਰਸਤਾ ਸ਼ੁਰੂ ਕਰਨ ਲਈ ਪੰਚ ਇਨ ਕਰੋ",
+    lookCamera: "ਫੋਨ ਅਨਲਾਕ ਵਾਂਗ ਕੈਮਰਾ ਵੱਲ ਵੇਖੋ",
+    camStarting: "ਕੈਮਰਾ ਖੁੱਲ ਰਿਹਾ…",
+    faceLocked: "ਚਿਹਰਾ ਲਾਕ",
+    unlocking: "ਅਨਲਾਕ…",
+    preparing: "ਤਿਆਰੀ…",
+    noFace: "ਫੋਨ ਚਿਹਰੇ ਸਾਹਮਣੇ ਰੱਖੋ",
+    tooFar: "ਥੋੜ੍ਹਾ ਨੇੜੇ ਆਓ",
+    multiple: "ਫਰੇਮ ਵਿੱਚ ਸਿਰਫ ਤੁਸੀਂ ਹੋਵੋ",
+    camAllow: "Chrome ਸੈਟਿੰਗ ਵਿੱਚ Camera Allow ਕਰੋ।",
+    punchedIn: "ਪੰਚ ਇਨ ਹੋ ਗਿਆ। ਰਸਤਾ ਚਾਲੂ।",
+    punchedOut: "ਪੰਚ ਆਉਟ ਹੋ ਗਿਆ। ਰਸਤਾ ਸੇਵ।",
+    faceSaved: "ਚਿਹਰਾ ਸੇਵ। ਹੁਣ ਪੰਚ ਇਨ ਕਰੋ।",
+    users: "ਯੂਜ਼ਰ",
+    incharges: "ਸੈਕਟਰ ਇੰਚਾਰਜ",
+    createUser: "ਯੂਜ਼ਰ ਬਣਾਓ",
+    dailyRecords: "ਰੋਜ਼ਾਨਾ ਰਿਕਾਰਡ",
+    footprint: "ਰਸਤਾ",
+    edit: "ਸੋਧ",
+    delete: "ਮਿਟਾਓ",
+    search: "ਨਾਮ ਜਾਂ ਨੰਬਰ ਲੱਭੋ",
+    attendance: "ਹਾਜ਼ਰੀ",
+    csv: "CSV ਅਪਲੋਡ",
+    menu: "ਮੀਨੂ",
+    admin: "ਫੀਲਡਟ੍ਰੈਕ ਐਡਮਿਨ",
+    firstLoad: "ਪਹਿਲੀ ਵਾਰ 2–3 ਸਕਿੰਟ ਲੱਗ ਸਕਦੇ ਹਨ, ਫਿਰ ਤੁਰੰਤ",
+    faceFound: "ਚਿਹਰਾ ਮਿਲ ਗਿਆ…",
+    retryLook: "ਫਿਰ ਕੈਮਰਾ ਵੱਲ ਵੇਖੋ",
+    email: "ਈਮੇਲ",
+    password: "ਪਾਸਵਰਡ",
+    outAt: "ਆਉਟ",
+    backDash: "ਡੈਸ਼ਬੋਰਡ",
+    records: "ਰਿਕਾਰਡ",
+    fromDate: "ਤੋਂ ਤਾਰੀਖ",
+    toDate: "ਤੱਕ ਤਾਰੀਖ",
+    status: "ਸਥਿਤੀ",
+    statusAll: "ਸਾਰੇ",
+    completed: "ਪੂਰੇ",
+    applyFilter: "ਫਿਲਟਰ ਲਗਾਓ",
+    noFootprints: "ਇਸ ਤਾਰੀਖ ਵਿੱਚ ਕੋਈ ਰਸਤਾ ਨਹੀਂ।",
+    tapFootprint: "ਰਸਤਾ ਵੇਖਣ ਲਈ ਰਿਕਾਰਡ ਤੇ ਟੈਪ ਕਰੋ",
+    userCode: "ਕੋਡ",
+    searchCode: "ਲੱਭੋ / ਕੋਡ",
+    searchCodePh: "ਤਾਰੀਖ, ਕੋਡ ਜਾਂ ਥਾਂ",
+    viewAll: "ਸਾਰੇ ਰਸਤੇ ਵੇਖੋ",
+  },
+} as const;
+
+type Key = keyof typeof dict.en;
+
+const Ctx = createContext<{ lang: Lang; t: (k: Key) => string; setLang: (l: Lang) => void }>({
+  lang: "en",
+  t: (k) => dict.en[k],
+  setLang: () => {},
+});
+
+export function LangProvider({ children }: { children: ReactNode }) {
+  const [lang, setLangState] = useState<Lang>("en");
+  useEffect(() => {
+    const saved = localStorage.getItem("ft_lang");
+    if (saved === "pa" || saved === "en") setLangState(saved);
+  }, []);
+  useEffect(() => {
+    document.documentElement.lang = lang;
+    document.documentElement.classList.toggle("lang-pa", lang === "pa");
+  }, [lang]);
+  function setLang(l: Lang) {
+    setLangState(l);
+    localStorage.setItem("ft_lang", l);
+  }
+  const t = useCallback((k: Key) => dict[lang][k] || dict.en[k], [lang]);
+  return <Ctx.Provider value={{ lang, t, setLang }}>{children}</Ctx.Provider>;
+}
+
+export function useLang() {
+  return useContext(Ctx);
+}
+
+export function LangToggle({ tone = "dark" }: { tone?: "dark" | "light" }) {
+  const { lang, setLang } = useLang();
+  const wrap = tone === "dark" ? "bg-white/15" : "border border-navy/10 bg-navy/5";
+  const on = tone === "dark" ? "bg-teal-bright text-ink" : "bg-teal text-white";
+  const off = tone === "dark" ? "text-white/80" : "text-navy/55";
+  return (
+    <div className={`inline-flex rounded-full p-0.5 text-xs font-semibold ${wrap}`}>
+      <button type="button" onClick={() => setLang("en")} className={`rounded-full px-2.5 py-1 ${lang === "en" ? on : off}`}>
+        EN
+      </button>
+      <button type="button" onClick={() => setLang("pa")} className={`rounded-full px-2.5 py-1 ${lang === "pa" ? on : off}`}>
+        ਪੰ
+      </button>
+    </div>
+  );
+}

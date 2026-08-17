@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { downsample } from "@/lib/utils";
 import { sanitizeFaceImage } from "@/lib/faceImage";
 
 export async function GET() {
@@ -8,16 +9,31 @@ export async function GET() {
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const open = await prisma.attendance.findFirst({
     where: { userId: s.sub, punchOutAt: null },
-    include: { points: { orderBy: { recordedAt: "asc" } } },
+    include: { points: { orderBy: { recordedAt: "desc" }, take: 400 } },
     orderBy: { punchInAt: "desc" },
   });
   const history = await prisma.attendance.findMany({
     where: { userId: s.sub },
     orderBy: { punchInAt: "desc" },
-    take: 8,
-    include: { points: { orderBy: { recordedAt: "asc" } } },
+    take: 1,
   });
-  return NextResponse.json({ open, history });
+  const mapId = open?.id || history[0]?.id;
+  const openPts = [...(open?.points || [])].reverse();
+  let mapPoints: { lat: number; lng: number; recordedAt: Date }[] = [];
+  if (open && open.id === mapId) {
+    mapPoints = downsample(openPts, 280);
+  } else if (mapId) {
+    const pts = await prisma.trackPoint.findMany({
+      where: { attendanceId: mapId },
+      orderBy: { recordedAt: "desc" },
+      take: 400,
+    });
+    mapPoints = downsample([...pts].reverse(), 280);
+  }
+  return NextResponse.json({
+    open: open ? { ...open, points: mapPoints } : null,
+    history: history.map((h) => ({ ...h, points: h.id === mapId ? mapPoints : [] })),
+  });
 }
 
 export async function POST(req: Request) {
@@ -48,7 +64,7 @@ export async function POST(req: Request) {
         create: { lat, lng, recordedAt: new Date(), accuracy: Number(body?.accuracy) || null },
       },
     },
-    include: { points: true },
+    select: { id: true, punchInAt: true },
   });
-  return NextResponse.json({ attendance });
+  return NextResponse.json({ attendance, ok: true });
 }

@@ -3,16 +3,17 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ReactNode, useState } from "react";
-
-const nav = [
-  { href: "/admin", label: "Users", match: (p: string) => p === "/admin" || p.startsWith("/admin/users") },
-  { href: "/admin/create", label: "Create user", match: (p: string) => p.startsWith("/admin/create") },
-  { href: "/admin/records", label: "Daily records", match: (p: string) => p.startsWith("/admin/records") },
-];
+import { LangToggle, useLang } from "@/lib/i18n";
 
 export default function AdminShell({ children }: { children: ReactNode }) {
+  const { t } = useLang();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const nav = [
+    { href: "/admin", label: t("users"), match: (p: string) => p === "/admin" || p.startsWith("/admin/users") },
+    { href: "/admin/create", label: t("createUser"), match: (p: string) => p.startsWith("/admin/create") },
+    { href: "/admin/records", label: t("dailyRecords"), match: (p: string) => p.startsWith("/admin/records") },
+  ];
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -21,19 +22,25 @@ export default function AdminShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen bg-[#f3f6fb] md:flex">
-      <header className="sticky top-0 z-30 flex items-center justify-between bg-ink px-4 py-3 text-white md:hidden">
-        <p className="font-semibold">AAP FieldTrack</p>
-        <button type="button" onClick={() => setOpen((v) => !v)} className="rounded-lg border border-white/20 px-3 py-1 text-sm">
-          Menu
-        </button>
+      <header className="sticky top-0 z-30 flex items-center justify-between gap-2 bg-ink px-4 py-3 text-white md:hidden">
+        <p className="font-semibold">AAP {t("app")}</p>
+        <div className="flex items-center gap-2">
+          <LangToggle />
+          <button type="button" onClick={() => setOpen((v) => !v)} className="rounded-lg border border-white/20 px-3 py-1 text-sm">
+            {t("menu")}
+          </button>
+        </div>
       </header>
 
       <aside
         className={`${open ? "flex" : "hidden"} z-20 w-full flex-col bg-ink text-white md:sticky md:top-0 md:flex md:h-screen md:w-60 md:shrink-0`}
       >
         <div className="hidden border-b border-white/10 px-5 py-6 md:block">
-          <p className="text-xs uppercase tracking-[0.18em] text-teal-bright">Aam Aadmi Party</p>
-          <h1 className="mt-1 text-lg font-semibold">FieldTrack Admin</h1>
+          <p className="text-xs uppercase tracking-[0.18em] text-teal-bright">{t("aap")}</p>
+          <h1 className="mt-1 text-lg font-semibold">{t("admin")}</h1>
+          <div className="mt-3">
+            <LangToggle />
+          </div>
         </div>
         <nav className="flex flex-col gap-1 p-3">
           {nav.map((item) => {
@@ -54,7 +61,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
         </nav>
         <div className="mt-auto p-4">
           <button type="button" onClick={logout} className="w-full rounded-xl border border-white/15 px-3 py-2 text-sm text-white/70">
-            Logout
+            {t("logout")}
           </button>
         </div>
       </aside>

@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { FaceCapture } from "@/components/FaceCapture";
 import RouteMap from "@/components/RouteMapDynamic";
 import { formatDuration, formatKm, isPlausibleStep } from "@/lib/utils";
 import { loadFaceModels } from "@/lib/face";
+import { LangToggle, useLang } from "@/lib/i18n";
 
 type User = {
   id: string;
@@ -57,12 +59,14 @@ function getPosition(): Promise<GeolocationPosition> {
 }
 
 export default function DashboardPage() {
+  const { t } = useLang();
   const [user, setUser] = useState<User | null>(null);
   const [open, setOpen] = useState<Attendance | null>(null);
   const [history, setHistory] = useState<Attendance[]>([]);
   const [mode, setMode] = useState<"idle" | "register" | "in" | "out">("idle");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
+  const [okMsg, setOkMsg] = useState(false);
   const buffer = useRef<Point[]>([]);
   const lastFix = useRef<{ lat: number; lng: number } | null>(null);
   const mapTick = useRef(0);
@@ -86,7 +90,7 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    if (mode === "in" || mode === "out") {
+    if (mode === "in") {
       pendingGps.current = getPosition().catch(() => null);
     }
   }, [mode]);
@@ -105,6 +109,7 @@ export default function DashboardPage() {
       await fetch("/api/attendance/track", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        keepalive: true,
         body: JSON.stringify({
           points: batch.map((p) => ({ ...p, accuracy: 20 })),
         }),
@@ -169,30 +174,45 @@ export default function DashboardPage() {
       return;
     }
     setMode("idle");
-    setMsg("Face registered. You can punch in now.");
+    setOkMsg(true);
+    setMsg(t("faceSaved"));
     refresh();
   }
 
   async function punch(kind: "in" | "out", descriptor: number[], image: string) {
     setBusy(true);
     setMsg("");
+    setOkMsg(false);
     try {
       await verifyFace(descriptor);
       let lat: number;
       let lng: number;
       let accuracy: number | null = null;
-      try {
-        const cached = pendingGps.current ? await pendingGps.current : null;
-        const pos = cached || (await getPosition());
-        lat = pos.coords.latitude;
-        lng = pos.coords.longitude;
-        accuracy = pos.coords.accuracy;
-      } catch (locErr) {
-        if (kind === "out" && open?.points?.length) {
-          const last = open.points[open.points.length - 1];
-          lat = last.lat;
-          lng = last.lng;
-        } else {
+      if (kind === "out") {
+        if (buffer.current.length) {
+          const batch = buffer.current.splice(0, buffer.current.length);
+          fetch("/api/attendance/track", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            keepalive: true,
+            body: JSON.stringify({ points: batch.map((p) => ({ ...p, accuracy: 20 })) }),
+          }).catch(() => {});
+        }
+        const last =
+          lastFix.current ||
+          open?.points?.[open.points.length - 1] ||
+          (open ? { lat: open.punchInLat, lng: open.punchInLng } : null);
+        if (!last) throw new Error("Location nahi mili. GPS on karke dubara Confirm karo.");
+        lat = last.lat;
+        lng = last.lng;
+      } else {
+        try {
+          const cached = pendingGps.current ? await pendingGps.current : null;
+          const pos = cached || (await getPosition());
+          lat = pos.coords.latitude;
+          lng = pos.coords.longitude;
+          accuracy = pos.coords.accuracy;
+        } catch (locErr) {
           throw locErr;
         }
       }
@@ -206,8 +226,11 @@ export default function DashboardPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Server ne punch save nahi kiya.");
       setMode("idle");
-      setMsg(kind === "in" ? "Punched in. Route tracking started." : "Punched out. Footprint saved.");
-      await refresh();
+      setOkMsg(true);
+      setMsg(kind === "in" ? t("punchedIn") : t("punchedOut"));
+      setBusy(false);
+      refresh();
+      return;
     } catch (e) {
       const text =
         e instanceof Error
@@ -235,28 +258,31 @@ export default function DashboardPage() {
     window.location.href = "/";
   }
 
-  if (!user) return <div className="grid min-h-screen place-items-center">Loading…</div>;
+  if (!user) return <div className="grid min-h-screen place-items-center">{t("loading")}</div>;
 
   return (
     <main className="min-h-screen bg-sand">
       <div className="mx-auto max-w-6xl px-4 py-5">
-        <header className="mb-4 flex items-center justify-between rounded-3xl bg-white px-4 py-3 shadow-card">
+        <header className="mb-4 flex items-center justify-between gap-3 rounded-3xl bg-white px-4 py-3 shadow-card">
           <div>
-            <p className="text-xs uppercase tracking-wider text-navy/50">Aam Aadmi Party</p>
+            <p className="text-xs uppercase tracking-wider text-navy/50">{t("aap")}</p>
             <h1 className="font-semibold">{user.name}</h1>
             <p className="text-sm text-navy/60">
               {user.sectorAllotted} · {user.assemblyName}
             </p>
           </div>
-          <button onClick={logout} className="text-sm text-navy/50">
-            Logout
-          </button>
+          <div className="flex items-center gap-3">
+            <LangToggle tone="light" />
+            <button onClick={logout} className="text-sm text-navy/50">
+              {t("logout")}
+            </button>
+          </div>
         </header>
 
         {msg && (
           <p
             className={`mb-3 rounded-2xl px-4 py-2 text-sm ${
-              /punched|registered|footprint saved/i.test(msg) ? "bg-white text-teal" : "bg-red-50 text-red-700"
+              okMsg ? "bg-white text-teal" : "bg-red-50 text-red-700"
             }`}
           >
             {msg}
@@ -267,11 +293,11 @@ export default function DashboardPage() {
           <div className="mb-4 rounded-[2rem] bg-white p-6 shadow-card">
             <FaceCapture
               busy={busy}
-              actionLabel={mode === "register" ? "Save my face" : mode === "in" ? "Confirm punch in" : "Confirm punch out"}
+              actionLabel={mode === "register" ? t("saveFace") : mode === "in" ? t("confirmIn") : t("confirmOut")}
               onCapture={(d, image) => (mode === "register" ? onRegister(d, image) : punch(mode, d, image))}
             />
             <button className="mt-3 w-full text-sm text-navy/50" onClick={() => setMode("idle")}>
-              Cancel
+              {t("cancel")}
             </button>
           </div>
         )}
@@ -305,46 +331,43 @@ export default function DashboardPage() {
               />
             </div>
           ) : (
-            <div className="grid h-64 place-items-center text-navy/50">Punch in to start your travel footprint</div>
+            <div className="grid h-64 place-items-center text-navy/50">{t("punchStart")}</div>
           )}
 
           <div className="flex flex-wrap gap-2 p-4">
             {!user.faceRegisteredAt && (
               <button onClick={() => setMode("register")} className="rounded-full bg-navy px-5 py-3 text-white font-semibold">
-                Register face
+                {t("registerFace")}
               </button>
             )}
             {user.faceRegisteredAt && !open && (
               <button onClick={() => setMode("in")} className="flex items-center gap-2 rounded-full bg-teal px-6 py-3 font-semibold text-white">
-                Start · Punch in
+                {t("punchIn")}
               </button>
             )}
             {open && (
               <button onClick={() => setMode("out")} className="rounded-full bg-ink px-6 py-3 font-semibold text-white">
-                Punch out
+                {t("punchOut")}
               </button>
             )}
             {open && (
               <span className="self-center text-sm text-navy/60">
-                Live · {formatDuration(live?.durationMs || 0)} · {formatKm(open.distanceMeters)}
+                {t("live")} · {formatDuration(live?.durationMs || 0)} · {formatKm(open.distanceMeters)}
               </span>
             )}
           </div>
         </div>
 
-        <section className="mt-6">
-          <h2 className="mb-3 font-semibold">Recent footprints</h2>
-          <div className="space-y-2">
-            {history.map((h) => (
-              <div key={h.id} className="rounded-2xl bg-white px-4 py-3 shadow-card">
-                <p className="font-medium">{new Date(h.punchInAt).toLocaleString()}</p>
-                <p className="text-sm text-navy/60">
-                  {h.punchOutAt ? `Out ${new Date(h.punchOutAt).toLocaleTimeString()}` : "In progress"} · {formatKm(h.distanceMeters)}
-                </p>
-              </div>
-            ))}
+        <Link
+          href="/dashboard/footprints"
+          className="mt-5 flex items-center justify-between rounded-2xl bg-white px-4 py-3 shadow-card"
+        >
+          <div>
+            <p className="font-semibold">{t("recent")}</p>
+            <p className="text-sm text-navy/55">{t("viewAll")}</p>
           </div>
-        </section>
+          <span className="text-navy/40">→</span>
+        </Link>
       </div>
     </main>
   );

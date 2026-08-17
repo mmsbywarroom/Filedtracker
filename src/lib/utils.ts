@@ -53,6 +53,15 @@ export function splitTrack<T extends LatLng>(points: T[], maxGapMeters = 280): T
   return segs;
 }
 
+export function downsample<T>(items: T[], max = 320): T[] {
+  if (items.length <= max) return items;
+  const step = items.length / max;
+  const out: T[] = [];
+  for (let i = 0; i < max - 1; i++) out.push(items[Math.floor(i * step)]);
+  out.push(items[items.length - 1]);
+  return out;
+}
+
 export function isPlausibleStep(from: LatLng, to: LatLng, accuracy?: number | null) {
   if (accuracy != null && accuracy > 80) return false;
   const gap = haversineMeters(from, to);

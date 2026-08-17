@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { loadFaceModels, scanFace, type FaceScan } from "@/lib/face";
+import { useLang } from "@/lib/i18n";
+import { jpegQuality, jpegSize } from "@/lib/network";
 
 type Props = {
   actionLabel: string;
@@ -9,16 +11,11 @@ type Props = {
   busy?: boolean;
 };
 
-const hints = {
-  no_face: "Phone ko chehre ke saamne rakho",
-  too_far: "Thoda kareeb aao",
-  multiple: "Frame mein sirf aap hon",
-};
-
 function snapshot(video: HTMLVideoElement, box?: { x: number; y: number; width: number; height: number }) {
+  const size = jpegSize();
   const canvas = document.createElement("canvas");
-  canvas.width = 240;
-  canvas.height = 240;
+  canvas.width = size;
+  canvas.height = size;
   const ctx = canvas.getContext("2d");
   if (!ctx) return "";
   if (box) {
@@ -27,17 +24,18 @@ function snapshot(video: HTMLVideoElement, box?: { x: number; y: number; width: 
     const y = Math.max(0, box.y - box.height * pad);
     const w = Math.min(video.videoWidth - x, box.width * (1 + pad * 2));
     const h = Math.min(video.videoHeight - y, box.height * (1 + pad * 2));
-    ctx.drawImage(video, x, y, w, h, 0, 0, 240, 240);
+    ctx.drawImage(video, x, y, w, h, 0, 0, size, size);
   } else {
-    const size = Math.min(video.videoWidth, video.videoHeight);
-    const sx = (video.videoWidth - size) / 2;
-    const sy = (video.videoHeight - size) / 2;
-    ctx.drawImage(video, sx, sy, size, size, 0, 0, 240, 240);
+    const side = Math.min(video.videoWidth, video.videoHeight);
+    const sx = (video.videoWidth - side) / 2;
+    const sy = (video.videoHeight - side) / 2;
+    ctx.drawImage(video, sx, sy, side, side, 0, 0, size, size);
   }
-  return canvas.toDataURL("image/jpeg", 0.7);
+  return canvas.toDataURL("image/jpeg", jpegQuality());
 }
 
 export function FaceCapture({ actionLabel, onCapture, busy }: Props) {
+  const { t } = useLang();
   const videoRef = useRef<HTMLVideoElement>(null);
   const lastGood = useRef<FaceScan | null>(null);
   const firing = useRef(false);
@@ -46,7 +44,11 @@ export function FaceCapture({ actionLabel, onCapture, busy }: Props) {
   const [modelsReady, setModelsReady] = useState(false);
   const [locked, setLocked] = useState(false);
   const [error, setError] = useState("");
-  const [hint, setHint] = useState("Camera khul raha hai…");
+  const [hint, setHint] = useState("");
+
+  useEffect(() => {
+    setHint(t("camStarting"));
+  }, [t]);
 
   useEffect(() => {
     let stream: MediaStream | null = null;
@@ -66,18 +68,18 @@ export function FaceCapture({ actionLabel, onCapture, busy }: Props) {
         await videoRef.current.play();
         setCamReady(true);
         setError("");
-        setHint("Face unlock taiyar ho raha hai…");
+        setHint(t("preparing"));
       } catch {
-        setError("Camera Allow karo: Chrome site settings → Camera → Allow.");
+        setError(t("camAllow"));
         return;
       }
       try {
         await loadFaceModels();
         if (cancelled) return;
         setModelsReady(true);
-        setHint("Phone unlock ki tarah camera dekho");
+        setHint(t("lookCamera"));
       } catch {
-        if (!cancelled) setHint("Face scan load nahi hua. Page refresh karo.");
+        if (!cancelled) setHint(t("retryLook"));
       }
     })();
     return () => {
@@ -90,7 +92,7 @@ export function FaceCapture({ actionLabel, onCapture, busy }: Props) {
     if (!result.ok || !videoRef.current || firing.current || busy) return;
     firing.current = true;
     setLocked(true);
-    setHint("Face locked");
+    setHint(t("faceLocked"));
     const image = snapshot(videoRef.current, result.box);
     try {
       await onCapture(result.descriptor, image);
@@ -98,7 +100,7 @@ export function FaceCapture({ actionLabel, onCapture, busy }: Props) {
       firing.current = false;
       setLocked(false);
       hits.current = 0;
-      setHint(e instanceof Error ? e.message : "Dobara camera dekho");
+      setHint(e instanceof Error ? e.message : t("retryLook"));
     }
   }
 
@@ -113,12 +115,12 @@ export function FaceCapture({ actionLabel, onCapture, busy }: Props) {
       if (result.ok) {
         lastGood.current = result;
         hits.current += 1;
-        setHint("Face mil gaya…");
+        setHint(t("faceFound"));
         if (hits.current >= 2) await submit(result);
       } else {
         hits.current = 0;
         lastGood.current = null;
-        setHint(hints[result.error]);
+        setHint(result.error === "too_far" ? t("tooFar") : result.error === "multiple" ? t("multiple") : t("noFace"));
       }
       running = false;
     };
@@ -139,18 +141,18 @@ export function FaceCapture({ actionLabel, onCapture, busy }: Props) {
           <div className={`h-40 w-40 rounded-full border-4 ${locked ? "border-emerald-400" : "border-white/80"}`} />
         </div>
         {!camReady && (
-          <div className="absolute inset-0 grid place-items-center bg-navy/80 text-white text-sm">Starting camera…</div>
+          <div className="absolute inset-0 grid place-items-center bg-navy/80 text-white text-sm">{t("camStarting")}</div>
         )}
       </div>
       <p className="text-center text-sm font-medium text-navy/80">{error || hint}</p>
-      {!modelsReady && camReady && <p className="text-xs text-navy/50">Pehli baar 2–3 sec lag sakte hain, phir instant</p>}
+      {!modelsReady && camReady && <p className="text-xs text-navy/50">{t("firstLoad")}</p>}
       <button
         type="button"
         disabled={!camReady || !modelsReady || busy || firing.current}
         onClick={() => lastGood.current?.ok && submit(lastGood.current)}
         className="rounded-full bg-teal px-8 py-3 text-white font-semibold shadow-card disabled:opacity-50"
       >
-        {busy || firing.current ? "Unlocking…" : !modelsReady ? "Preparing…" : actionLabel}
+        {busy || firing.current ? t("unlocking") : !modelsReady ? t("preparing") : actionLabel}
       </button>
     </div>
   );

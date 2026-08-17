@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { formatDuration, formatKm, splitTrack } from "@/lib/utils";
+import { isSlowNetwork } from "@/lib/network";
 
 type Point = { lat: number; lng: number; recordedAt?: string };
 
@@ -47,10 +48,14 @@ export default function RouteMap({
   distanceMeters,
 }: Props) {
   const el = useRef<HTMLDivElement>(null);
+  const first = useRef(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
+    const delay = first.current ? 0 : punchOut ? 80 : 2500;
+    first.current = false;
+    const timer = window.setTimeout(() => {
     (async () => {
       const cfg = await fetch("/api/maps/config").then((r) => r.json());
       if (!cfg.hasKey && !cfg.key) {
@@ -72,7 +77,8 @@ export default function RouteMap({
         .map((p) => ({ lat: p.lat, lng: p.lng }));
 
       let segments = splitTrack(raw, 280).filter((g) => g.length >= 2);
-      if (raw.length > 1) {
+      const canSnap = punchOut && raw.length > 1 && !isSlowNetwork();
+      if (canSnap) {
         const snapped = await fetch("/api/maps/snap", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -145,10 +151,12 @@ export default function RouteMap({
         }).open(map);
       }
     })().catch((e) => setError(e instanceof Error ? e.message : "Could not load Google Maps."));
+    }, delay);
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
-  }, [points, punchIn, punchOut, startLabel, endLabel, durationMs, distanceMeters]);
+  }, [points.length, punchIn, punchOut, startLabel, endLabel, durationMs, distanceMeters]);
 
   return (
     <div className="relative h-full min-h-[420px] w-full overflow-hidden rounded-3xl">
