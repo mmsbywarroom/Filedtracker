@@ -5,8 +5,6 @@ import type { AdminScope } from "@/lib/hierarchy";
 
 const COOKIE = "ft_session";
 
-const COOKIE = "ft_session";
-
 function secret() {
   const s = process.env.JWT_SECRET;
   if (!s || s.length < 16) throw new Error("JWT_SECRET is not configured");
