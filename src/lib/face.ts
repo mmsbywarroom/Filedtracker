@@ -3,19 +3,24 @@
 import * as faceapi from "face-api.js";
 
 let loaded = false;
+let loading: Promise<void> | null = null;
 
 export async function loadFaceModels() {
   if (loaded) return;
-  const url = "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.2/weights";
-  await Promise.all([
+  if (loading) return loading;
+  const url = "https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/weights";
+  loading = Promise.all([
     faceapi.nets.tinyFaceDetector.loadFromUri(url),
     faceapi.nets.faceLandmark68Net.loadFromUri(url),
     faceapi.nets.faceRecognitionNet.loadFromUri(url),
-  ]);
-  loaded = true;
+  ]).then(() => {
+    loaded = true;
+    loading = null;
+  });
+  return loading;
 }
 
-const detector = () => new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.38 });
+const detector = () => new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.4 });
 
 export type FaceScanError = "no_face" | "too_far" | "multiple";
 

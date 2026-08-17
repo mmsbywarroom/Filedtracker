@@ -40,26 +40,36 @@ function snapshot(video: HTMLVideoElement, box?: { x: number; y: number; width: 
 export function FaceCapture({ actionLabel, onCapture, busy }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const lastGood = useRef<FaceScan | null>(null);
-  const [ready, setReady] = useState(false);
+  const [camReady, setCamReady] = useState(false);
+  const [modelsReady, setModelsReady] = useState(false);
   const [error, setError] = useState("");
-  const [hint, setHint] = useState("Camera ke saamne natural distance pe ruko");
+  const [hint, setHint] = useState("Camera khul raha hai…");
 
   useEffect(() => {
     let stream: MediaStream | null = null;
     let cancelled = false;
     (async () => {
       try {
-        await loadFaceModels();
+        const models = loadFaceModels().then(() => {
+          if (!cancelled) setModelsReady(true);
+        });
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
+          video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } },
           audio: false,
         });
-        if (cancelled || !videoRef.current) return;
+        if (cancelled || !videoRef.current) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
         videoRef.current.srcObject = stream;
+        videoRef.current.setAttribute("playsinline", "true");
         await videoRef.current.play();
-        setReady(true);
+        setCamReady(true);
+        setHint("Face models load ho rahe hain…");
+        await models;
+        if (!cancelled) setHint("Camera ke saamne natural distance pe ruko");
       } catch {
-        setError("Camera permission is required for face punch.");
+        setError("Camera permission chahiye. Chrome site settings mein Camera Allow karo.");
       }
     })();
     return () => {
@@ -69,8 +79,7 @@ export function FaceCapture({ actionLabel, onCapture, busy }: Props) {
   }, []);
 
   useEffect(() => {
-    if (!ready || busy) return;
-    let timer = 0;
+    if (!camReady || !modelsReady || busy) return;
     let running = false;
     const tick = async () => {
       if (running || !videoRef.current) return;
@@ -81,15 +90,15 @@ export function FaceCapture({ actionLabel, onCapture, busy }: Props) {
       else setHint(hints[result.error]);
       running = false;
     };
-    timer = window.setInterval(tick, 280);
+    const timer = window.setInterval(tick, 500);
     tick();
     return () => clearInterval(timer);
-  }, [ready, busy]);
+  }, [camReady, modelsReady, busy]);
 
   async function capture() {
-    if (!videoRef.current) return;
+    if (!videoRef.current || !modelsReady) return;
     setHint("Scanning face…");
-    let result = lastGood.current?.ok ? lastGood.current : await scanFace(videoRef.current);
+    const result = lastGood.current?.ok ? lastGood.current : await scanFace(videoRef.current);
     if (!result.ok) {
       setHint(hints[result.error]);
       return;
@@ -105,8 +114,8 @@ export function FaceCapture({ actionLabel, onCapture, busy }: Props) {
   return (
     <div className="flex flex-col items-center gap-4">
       <div className="relative aspect-[3/4] w-full max-w-xs overflow-hidden rounded-[1.75rem] border-4 border-white shadow-float ring-4 ring-teal/30">
-        <video ref={videoRef} className="h-full w-full object-cover scale-x-[-1]" playsInline muted />
-        {!ready && (
+        <video ref={videoRef} className="h-full w-full object-cover scale-x-[-1]" playsInline muted autoPlay />
+        {!camReady && (
           <div className="absolute inset-0 grid place-items-center bg-navy/80 text-white text-sm">
             Starting camera…
           </div>
@@ -115,11 +124,11 @@ export function FaceCapture({ actionLabel, onCapture, busy }: Props) {
       <p className="text-center text-sm text-navy/70">{error || hint}</p>
       <button
         type="button"
-        disabled={!ready || busy}
+        disabled={!camReady || !modelsReady || busy}
         onClick={capture}
         className="rounded-full bg-teal px-8 py-3 text-white font-semibold shadow-card disabled:opacity-50"
       >
-        {busy ? "Please wait…" : actionLabel}
+        {busy ? "Please wait…" : !modelsReady ? "Preparing face scan…" : actionLabel}
       </button>
     </div>
   );
