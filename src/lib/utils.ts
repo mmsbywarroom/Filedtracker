@@ -63,10 +63,10 @@ export function downsample<T>(items: T[], max = 320): T[] {
 }
 
 export function isPlausibleStep(from: LatLng, to: LatLng, accuracy?: number | null) {
-  if (accuracy != null && accuracy > 80) return false;
+  if (accuracy != null && accuracy > 200) return false;
   const gap = haversineMeters(from, to);
-  if (gap < 6) return false;
-  if (gap > 280) return false;
+  if (gap < 2) return false;
+  if (gap > 500) return false;
   return true;
 }
 

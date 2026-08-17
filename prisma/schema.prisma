@@ -8,20 +8,30 @@ datasource db {
 }
 
 model Admin {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  passwordHash String
-  createdAt    DateTime @default(now())
+  id             String   @id @default(cuid())
+  email          String   @unique
+  name           String   @default("")
+  passwordHash   String
+  accessLevel    String   @default("State")
+  isSuper        Boolean  @default(false)
+  designations   String[] @default([])
+  zone           String   @default("")
+  district       String   @default("")
+  assemblyName   String   @default("")
+  cluster        String   @default("")
+  createdAt      DateTime @default(now())
 }
 
 model User {
   id                  String   @id @default(cuid())
   name                String
   phone               String   @unique
+  designation         String   @default("Sector Incharge")
   assemblyName        String
   sectorAllotted      String
   zone                String
   district            String
+  cluster             String   @default("")
   faceDescriptorJson  String?
   faceImage           String?
   faceRegisteredAt    DateTime?

@@ -7,10 +7,12 @@ import { Suspense } from "react";
 const empty = {
   name: "",
   phone: "",
+  designation: "Sector Incharge",
   assemblyName: "",
   sectorAllotted: "",
   zone: "",
   district: "",
+  cluster: "",
 };
 
 function CreateUserForm() {
@@ -38,10 +40,12 @@ function CreateUserForm() {
         setForm({
           name: u.name,
           phone: u.phone,
+          designation: u.designation || "Sector Incharge",
           assemblyName: u.assemblyName,
           sectorAllotted: u.sectorAllotted,
           zone: u.zone,
           district: u.district,
+          cluster: u.cluster || "",
         });
       }
     })();
@@ -61,7 +65,7 @@ function CreateUserForm() {
       setError(data.error || "Save failed");
       return;
     }
-    router.push("/admin");
+    router.push("/admin/users");
   }
 
   async function uploadCsv(file: File) {
@@ -86,22 +90,36 @@ function CreateUserForm() {
           <h2 className="font-semibold">{editId ? "Update details" : "Manual create"}</h2>
           {(
             [
-              ["name", "Sector Incharge Name"],
-              ["phone", "Sector Incharge Number"],
+              ["name", "Name"],
+              ["phone", "Mobile number"],
+              ["designation", "Designation"],
               ["assemblyName", "Assembly Name"],
               ["sectorAllotted", "Sector Allotted"],
+              ["cluster", "Cluster"],
               ["zone", "Zone"],
               ["district", "District"],
             ] as const
           ).map(([key, label]) => (
             <label key={key} className="mt-3 block text-xs font-medium text-navy/60">
               {label}
-              <input
-                value={form[key]}
-                onChange={(e) => setForm({ ...form, [key]: e.target.value })}
-                className="mt-1 w-full rounded-xl border border-navy/10 bg-sand/40 px-3 py-2 text-sm"
-                required
-              />
+              {key === "designation" ? (
+                <select
+                  value={form.designation}
+                  onChange={(e) => setForm({ ...form, designation: e.target.value })}
+                  className="mt-1 w-full rounded-xl border border-navy/10 bg-sand/40 px-3 py-2 text-sm"
+                >
+                  {["State", "ZLC", "DLC", "Cluster", "ALC", "Sector Incharge"].map((d) => (
+                    <option key={d}>{d}</option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  value={form[key]}
+                  onChange={(e) => setForm({ ...form, [key]: e.target.value })}
+                  className="mt-1 w-full rounded-xl border border-navy/10 bg-sand/40 px-3 py-2 text-sm"
+                  required={key !== "cluster"}
+                />
+              )}
             </label>
           ))}
           {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
@@ -113,7 +131,7 @@ function CreateUserForm() {
         <div className="rounded-[1.75rem] bg-white p-5 shadow-card">
           <h2 className="font-semibold">CSV upload</h2>
           <p className="mt-1 text-xs text-navy/50">
-            Columns: Sector Incharge Name, Sector Incharge Number, Assembly Name, Sector Allotted, Zone, District
+            Columns: Sector Incharge Name, Sector Incharge Number, Assembly Name, Sector Allotted, Zone, District, Designation, Cluster
           </p>
           <input
             type="file"

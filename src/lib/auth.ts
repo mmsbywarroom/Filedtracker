@@ -1,5 +1,9 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
+import { prisma } from "@/lib/prisma";
+import type { AdminScope } from "@/lib/hierarchy";
+
+const COOKIE = "ft_session";
 
 const COOKIE = "ft_session";
 
@@ -65,5 +69,19 @@ export async function requireUser() {
 export async function requireAdmin() {
   const s = await getSession();
   if (!s || s.role !== "admin") return null;
-  return s;
+  const admin = await prisma.admin.findUnique({ where: { id: s.sub } });
+  if (!admin) return null;
+  const scope: AdminScope = {
+    id: admin.id,
+    email: admin.email,
+    name: admin.name,
+    accessLevel: admin.accessLevel,
+    isSuper: admin.isSuper,
+    designations: admin.designations,
+    zone: admin.zone,
+    district: admin.district,
+    assemblyName: admin.assemblyName,
+    cluster: admin.cluster,
+  };
+  return { ...s, admin: scope };
 }

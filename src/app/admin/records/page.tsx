@@ -10,6 +10,7 @@ type Row = {
   name: string;
   phone: string;
   assemblyName: string;
+  designation: string;
   sectorAllotted: string;
   zone: string;
   district: string;
@@ -51,7 +52,7 @@ export default function DailyRecordsPage() {
 
   const filtered = useMemo(() => {
     return rows.filter((r) => {
-      const text = [r.name, r.phone, r.assemblyName, r.sectorAllotted, r.zone, r.district].join(" ").toLowerCase();
+      const text = [r.name, r.phone, r.assemblyName, r.sectorAllotted, r.zone, r.district, r.designation].join(" ").toLowerCase();
       if (q && !text.includes(q.toLowerCase())) return false;
       if (status && r.status !== status) return false;
       return true;
@@ -86,6 +87,7 @@ export default function DailyRecordsPage() {
               <tr>
                 <th className="px-3 py-3">Name</th>
                 <th className="px-3 py-3">Number</th>
+                <th className="px-3 py-3">Designation</th>
                 <th className="px-3 py-3">Sector</th>
                 <th className="px-3 py-3">Registered</th>
                 <th className="px-3 py-3">Punch in</th>
@@ -103,6 +105,7 @@ export default function DailyRecordsPage() {
                 <tr key={r.id} className="border-t border-navy/5 align-top">
                   <td className="px-3 py-3 font-medium">{r.name}</td>
                   <td className="px-3 py-3">{r.phone}</td>
+                  <td className="px-3 py-3">{r.designation}</td>
                   <td className="px-3 py-3">{r.sectorAllotted}</td>
                   <td className="px-3 py-3">
                     <FacePhoto src={r.faceImage} label={`${r.name} registered`} />

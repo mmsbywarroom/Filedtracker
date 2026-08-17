@@ -80,6 +80,9 @@ const dict = {
     searchCode: "Search / code",
     searchCodePh: "Date, code or place",
     viewAll: "View all footprints",
+    dashboard: "Dashboard",
+    admins: "Admins",
+    designation: "Designation",
   },
   pa: {
     aap: "ਆਮ ਆਦਮੀ ਪਾਰਟੀ",
@@ -156,6 +159,9 @@ const dict = {
     searchCode: "ਲੱਭੋ / ਕੋਡ",
     searchCodePh: "ਤਾਰੀਖ, ਕੋਡ ਜਾਂ ਥਾਂ",
     viewAll: "ਸਾਰੇ ਰਸਤੇ ਵੇਖੋ",
+    dashboard: "ਡੈਸ਼ਬੋਰਡ",
+    admins: "ਐਡਮਿਨ",
+    designation: "ਅਹੁਦਾ",
   },
 } as const;
 

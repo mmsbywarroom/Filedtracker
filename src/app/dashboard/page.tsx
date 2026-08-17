@@ -19,7 +19,7 @@ type User = {
   faceRegisteredAt: string | null;
 };
 
-type Point = { lat: number; lng: number; recordedAt: string };
+type Point = { lat: number; lng: number; recordedAt: string; accuracy?: number };
 type Attendance = {
   id: string;
   punchInAt: string;
@@ -44,16 +44,10 @@ function getPosition(): Promise<GeolocationPosition> {
       else if (code === 3) reject(new Error("GPS timeout. Bahar / khuli jagah try karo, phir Confirm dabao."));
       else reject(new Error("Location nahi mili. GPS on karke dubara Confirm karo."));
     };
-    navigator.geolocation.getCurrentPosition(resolve, () => {
-      navigator.geolocation.getCurrentPosition(resolve, fail, {
-        enableHighAccuracy: false,
-        timeout: 12000,
-        maximumAge: 60000,
-      });
-    }, {
+    navigator.geolocation.getCurrentPosition(resolve, fail, {
       enableHighAccuracy: true,
-      timeout: 8000,
-      maximumAge: 15000,
+      timeout: 15000,
+      maximumAge: 0,
     });
   });
 }
@@ -69,7 +63,6 @@ export default function DashboardPage() {
   const [okMsg, setOkMsg] = useState(false);
   const buffer = useRef<Point[]>([]);
   const lastFix = useRef<{ lat: number; lng: number } | null>(null);
-  const mapTick = useRef(0);
   const pendingGps = useRef<Promise<GeolocationPosition | null> | null>(null);
 
   async function refresh() {
@@ -111,26 +104,23 @@ export default function DashboardPage() {
         headers: { "Content-Type": "application/json" },
         keepalive: true,
         body: JSON.stringify({
-          points: batch.map((p) => ({ ...p, accuracy: 20 })),
+          points: batch,
         }),
       });
     };
 
     const watch = navigator.geolocation.watchPosition(
       (pos) => {
-        if (pos.coords.accuracy > 80) return;
+        if (pos.coords.accuracy > 200) return;
         const next = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         if (lastFix.current && !isPlausibleStep(lastFix.current, next, pos.coords.accuracy)) return;
         lastFix.current = next;
-        const point = { ...next, recordedAt: new Date().toISOString() };
+        const point = { ...next, recordedAt: new Date().toISOString(), accuracy: pos.coords.accuracy };
         buffer.current.push(point);
-        mapTick.current += 1;
-        if (mapTick.current % 4 === 0) {
-          setOpen((cur) => (cur ? { ...cur, points: [...cur.points, point] } : cur));
-        }
+        setOpen((cur) => (cur ? { ...cur, points: [...cur.points, point] } : cur));
       },
       () => {},
-      { enableHighAccuracy: true, maximumAge: 2000, timeout: 15000 }
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
     );
     const t = setInterval(flush, 8000);
     const onHide = () => {
@@ -195,7 +185,7 @@ export default function DashboardPage() {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             keepalive: true,
-            body: JSON.stringify({ points: batch.map((p) => ({ ...p, accuracy: 20 })) }),
+            body: JSON.stringify({ points: batch }),
           }).catch(() => {});
         }
         const last =

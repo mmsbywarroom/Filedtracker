@@ -1,3 +1,3 @@
-Sector Incharge Name,Sector Incharge Number,Assembly Name,Sector Allotted,Zone,District
-Rahul Sharma,9876543210,Sohna,C-Block,South,Gurugram
-Priya Verma,9123456780,Badshahpur,Sector 24,East,Gurugram
+Sector Incharge Name,Sector Incharge Number,Assembly Name,Sector Allotted,Zone,District,Designation,Cluster
+Rahul Sharma,9876543210,Sohna,C-Block,South,Gurugram,Sector Incharge,Cluster 1
+Priya Verma,9123456780,Badshahpur,Sector 24,East,Gurugram,ALC,Cluster 1

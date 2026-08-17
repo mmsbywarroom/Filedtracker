@@ -7,8 +7,20 @@ async function main() {
   const passwordHash = await bcrypt.hash(password, 12);
   await prisma.admin.upsert({
     where: { email },
-    update: { passwordHash },
-    create: { email, passwordHash },
+    update: {
+      passwordHash,
+      isSuper: true,
+      accessLevel: "State",
+      designations: ["State", "ZLC", "DLC", "Cluster", "ALC", "Sector Incharge"],
+    },
+    create: {
+      email,
+      passwordHash,
+      name: "State Admin",
+      isSuper: true,
+      accessLevel: "State",
+      designations: ["State", "ZLC", "DLC", "Cluster", "ALC", "Sector Incharge"],
+    },
   });
   console.log("Admin ready:", email);
 }

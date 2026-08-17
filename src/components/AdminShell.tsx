@@ -2,17 +2,28 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ReactNode, useState } from "react";
+import { ReactNode, useEffect, useState } from "react";
 import { LangToggle, useLang } from "@/lib/i18n";
 
 export default function AdminShell({ children }: { children: ReactNode }) {
   const { t } = useLang();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [canAdmins, setCanAdmins] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/admin/me")
+      .then((r) => r.json())
+      .then((d) => setCanAdmins(Boolean(d.admin?.canManageAdmins)))
+      .catch(() => {});
+  }, []);
+
   const nav = [
-    { href: "/admin", label: t("users"), match: (p: string) => p === "/admin" || p.startsWith("/admin/users") },
+    { href: "/admin", label: t("dashboard"), match: (p: string) => p === "/admin" },
+    { href: "/admin/users", label: t("users"), match: (p: string) => p.startsWith("/admin/users") },
     { href: "/admin/create", label: t("createUser"), match: (p: string) => p.startsWith("/admin/create") },
     { href: "/admin/records", label: t("dailyRecords"), match: (p: string) => p.startsWith("/admin/records") },
+    ...(canAdmins ? [{ href: "/admin/admins", label: t("admins"), match: (p: string) => p.startsWith("/admin/admins") }] : []),
   ];
 
   async function logout() {

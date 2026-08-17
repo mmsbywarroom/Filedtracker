@@ -11,7 +11,8 @@ function pick(row: Record<string, string>, key: string) {
 }
 
 export async function POST(req: Request) {
-  if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const s = await requireAdmin();
+  if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const form = await req.formData();
   const file = form.get("file");
   if (!(file instanceof File)) return NextResponse.json({ error: "CSV file required." }, { status: 400 });
@@ -36,13 +37,15 @@ export async function POST(req: Request) {
     const sectorAllotted = pick(row, CSV_COLUMNS[3]);
     const zone = pick(row, CSV_COLUMNS[4]);
     const district = pick(row, CSV_COLUMNS[5]);
+    const designation = pick(row, "Designation") || "Sector Incharge";
+    const cluster = pick(row, "Cluster");
     const phone = normalizePhone(phoneRaw);
     if (!name || !phone || !assemblyName || !sectorAllotted || !zone || !district) {
       errors.push({ row: i + 2, error: "Missing or invalid fields" });
       continue;
     }
     const existing = await prisma.user.findUnique({ where: { phone } });
-    const data = { name, phone, assemblyName, sectorAllotted, zone, district };
+    const data = { name, phone, assemblyName, sectorAllotted, zone, district, designation, cluster };
     if (existing) {
       await prisma.user.update({ where: { id: existing.id }, data });
       updated.push(phone);

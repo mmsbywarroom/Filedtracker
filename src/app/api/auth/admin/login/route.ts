@@ -21,6 +21,6 @@ export async function POST(req: Request) {
   const match = await bcrypt.compare(password, admin.passwordHash);
   if (!match) return NextResponse.json({ error: "Invalid credentials." }, { status: 401 });
 
-  await setSessionCookie({ sub: admin.id, role: "admin", name: "Admin" });
+  await setSessionCookie({ sub: admin.id, role: "admin", name: admin.name || "Admin" });
   return NextResponse.json({ ok: true });
 }

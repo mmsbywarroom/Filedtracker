@@ -2,14 +2,26 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { downsample } from "@/lib/utils";
+import { canSeeUser } from "@/lib/hierarchy";
 
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
-  if (!(await requireAdmin())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const s = await requireAdmin();
+  if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const user = await prisma.user.findUnique({
     where: { id: params.id },
-    select: { id: true, name: true, phone: true, assemblyName: true, sectorAllotted: true, zone: true, district: true },
+    select: {
+      id: true,
+      name: true,
+      phone: true,
+      designation: true,
+      assemblyName: true,
+      sectorAllotted: true,
+      zone: true,
+      district: true,
+      cluster: true,
+    },
   });
-  if (!user) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (!user || !canSeeUser(s.admin, user)) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const attendances = await prisma.attendance.findMany({
     where: { userId: params.id },
     orderBy: { punchInAt: "desc" },
