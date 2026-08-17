@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { FacePhoto } from "@/components/FacePhoto";
+import { formatKm } from "@/lib/utils";
 
 type Row = {
   id: string;
@@ -35,6 +36,7 @@ export default function DailyRecordsPage() {
   const [rows, setRows] = useState<Row[]>([]);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
+  const [zone, setZone] = useState("");
 
   async function load(d: string) {
     const res = await fetch(`/api/admin/attendance?date=${d}`);
@@ -55,9 +57,10 @@ export default function DailyRecordsPage() {
       const text = [r.name, r.phone, r.assemblyName, r.sectorAllotted, r.zone, r.district, r.designation].join(" ").toLowerCase();
       if (q && !text.includes(q.toLowerCase())) return false;
       if (status && r.status !== status) return false;
+      if (zone && r.zone !== zone) return false;
       return true;
     });
-  }, [rows, q, status]);
+  }, [rows, q, status, zone]);
 
   const live = rows.filter((r) => r.status === "Live").length;
   const done = rows.filter((r) => r.status === "Completed").length;
@@ -73,6 +76,12 @@ export default function DailyRecordsPage() {
       <div className="mt-4 mb-4 flex flex-wrap gap-3">
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="rounded-xl border border-navy/10 bg-white px-3 py-2 text-sm" />
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search user…" className="rounded-xl border border-navy/10 bg-white px-3 py-2 text-sm" />
+        <select value={zone} onChange={(e) => setZone(e.target.value)} className="rounded-xl border border-navy/10 bg-white px-3 py-2 text-sm">
+          <option value="">All zones</option>
+          {Array.from(new Set(rows.map((r) => r.zone).filter(Boolean))).sort().map((z) => (
+            <option key={z}>{z}</option>
+          ))}
+        </select>
         <select value={status} onChange={(e) => setStatus(e.target.value)} className="rounded-xl border border-navy/10 bg-white px-3 py-2 text-sm">
           <option value="">All status</option>
           <option value="Live">Live</option>
@@ -87,6 +96,7 @@ export default function DailyRecordsPage() {
               <tr>
                 <th className="px-3 py-3">Name</th>
                 <th className="px-3 py-3">Number</th>
+                <th className="px-3 py-3">Zone</th>
                 <th className="px-3 py-3">Designation</th>
                 <th className="px-3 py-3">Sector</th>
                 <th className="px-3 py-3">Registered</th>
@@ -105,6 +115,7 @@ export default function DailyRecordsPage() {
                 <tr key={r.id} className="border-t border-navy/5 align-top">
                   <td className="px-3 py-3 font-medium">{r.name}</td>
                   <td className="px-3 py-3">{r.phone}</td>
+                  <td className="px-3 py-3">{r.zone}</td>
                   <td className="px-3 py-3">{r.designation}</td>
                   <td className="px-3 py-3">{r.sectorAllotted}</td>
                   <td className="px-3 py-3">
@@ -126,7 +137,7 @@ export default function DailyRecordsPage() {
                   <td className="px-3 py-3">
                     <FacePhoto src={r.punchOutFace} label={`${r.name} punch out`} />
                   </td>
-                  <td className="px-3 py-3">{(r.distanceMeters / 1000).toFixed(2)} km</td>
+                  <td className="px-3 py-3">{formatKm(r.distanceMeters || 0)}</td>
                   <td className="px-3 py-3">{r.marks}</td>
                   <td className="px-3 py-3">{r.status}</td>
                   <td className="px-3 py-3">

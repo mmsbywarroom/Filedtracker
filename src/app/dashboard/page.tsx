@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { FaceCapture } from "@/components/FaceCapture";
 import RouteMap from "@/components/RouteMapDynamic";
-import { formatDuration, formatKm, isPlausibleStep } from "@/lib/utils";
+import { formatDuration, formatKm, isPlausibleStep, pathDistance } from "@/lib/utils";
 import { loadFaceModels } from "@/lib/face";
 import { LangToggle, useLang } from "@/lib/i18n";
 
@@ -342,7 +342,7 @@ export default function DashboardPage() {
             )}
             {open && (
               <span className="self-center text-sm text-navy/60">
-                {t("live")} · {formatDuration(live?.durationMs || 0)} · {formatKm(open.distanceMeters)}
+                {t("live")} · {formatDuration(live?.durationMs || 0)} · {formatKm(Math.max(open.distanceMeters, pathDistance([{ lat: open.punchInLat, lng: open.punchInLng }, ...open.points])))}
               </span>
             )}
           </div>

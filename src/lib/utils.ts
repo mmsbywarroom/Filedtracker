@@ -42,6 +42,12 @@ export function formatKm(meters: number) {
 
 export type LatLng = { lat: number; lng: number };
 
+export function pathDistance(points: LatLng[]) {
+  let d = 0;
+  for (let i = 1; i < points.length; i++) d += haversineMeters(points[i - 1], points[i]);
+  return d;
+}
+
 export function splitTrack<T extends LatLng>(points: T[], maxGapMeters = 280): T[][] {
   if (!points.length) return [];
   const segs: T[][] = [[points[0]]];

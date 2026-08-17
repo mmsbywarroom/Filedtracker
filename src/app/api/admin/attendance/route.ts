@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canSeeUser, userScopeWhere } from "@/lib/hierarchy";
+import { haversineMeters } from "@/lib/utils";
 
 export async function GET(req: Request) {
   const s = await requireAdmin();
@@ -59,7 +60,15 @@ export async function GET(req: Request) {
       punchOutAt: r.punchOutAt,
       punchInAddress: r.punchInAddress,
       punchOutAddress: r.punchOutAddress,
-      distanceMeters: r.distanceMeters,
+      distanceMeters:
+        r.distanceMeters > 1
+          ? r.distanceMeters
+          : r.punchOutLat != null && r.punchOutLng != null
+            ? haversineMeters(
+                { lat: r.punchInLat, lng: r.punchInLng },
+                { lat: r.punchOutLat, lng: r.punchOutLng }
+              )
+            : r.distanceMeters,
       marks: r._count.points,
       status: r.punchOutAt ? "Completed" : "Live",
     })),

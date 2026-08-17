@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { DESIGNATIONS } from "@/lib/hierarchy";
+import { formatKm } from "@/lib/utils";
 
-type Group = { name: string; users: number; active: number; live: number };
+type Group = { name: string; users: number; active: number; live: number; distance: number };
 
 type Dash = {
   date: string;
@@ -11,6 +12,7 @@ type Dash = {
   activeToday: number;
   liveNow: number;
   punches: number;
+  totalDistance: number;
   byDesignation: Group[];
   byZone: Group[];
   byDistrict: Group[];
@@ -22,19 +24,30 @@ function todayIst() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 }
 
-function Stat({ label, value }: { label: string; value: number }) {
+function Stat({
+  label,
+  value,
+  hint,
+  className,
+}: {
+  label: string;
+  value: string | number;
+  hint: string;
+  className: string;
+}) {
   return (
-    <div className="rounded-2xl bg-white px-5 py-4 shadow-card">
-      <p className="text-xs font-semibold uppercase tracking-wider text-navy/45">{label}</p>
-      <p className="mt-1 text-3xl font-semibold text-ink">{value}</p>
+    <div className={`rounded-2xl px-5 py-4 text-white shadow-card ${className}`}>
+      <p className="text-xs font-semibold uppercase tracking-wider text-white/75">{label}</p>
+      <p className="mt-1 text-3xl font-semibold">{value}</p>
+      <p className="mt-1 text-xs text-white/70">{hint}</p>
     </div>
   );
 }
 
-function GroupTable({ title, rows }: { title: string; rows: Group[] }) {
+function GroupTable({ title, accent, rows }: { title: string; accent: string; rows: Group[] }) {
   return (
     <section className="overflow-hidden rounded-2xl border border-navy/5 bg-white shadow-card">
-      <div className="border-b border-navy/5 px-4 py-3">
+      <div className={`border-b border-navy/5 px-4 py-3 ${accent}`}>
         <h2 className="font-semibold">{title}</h2>
       </div>
       <div className="max-h-[360px] overflow-auto">
@@ -45,15 +58,17 @@ function GroupTable({ title, rows }: { title: string; rows: Group[] }) {
               <th className="px-4 py-2">Users</th>
               <th className="px-4 py-2">Active</th>
               <th className="px-4 py-2">Live</th>
+              <th className="px-4 py-2">Distance</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
-              <tr key={r.name} className="border-t border-navy/5">
+            {rows.map((r, i) => (
+              <tr key={r.name} className={`border-t border-navy/5 ${i % 2 ? "bg-sand/40" : "bg-white"}`}>
                 <td className="px-4 py-2 font-medium">{r.name}</td>
                 <td className="px-4 py-2">{r.users}</td>
-                <td className="px-4 py-2">{r.active}</td>
-                <td className="px-4 py-2">{r.live}</td>
+                <td className="px-4 py-2 text-teal">{r.active}</td>
+                <td className="px-4 py-2 text-emerald-600">{r.live}</td>
+                <td className="px-4 py-2 font-semibold text-ink">{formatKm(r.distance || 0)}</td>
               </tr>
             ))}
           </tbody>
@@ -88,12 +103,12 @@ export default function AdminDashboardPage() {
   }, [date, designation]);
 
   return (
-    <main className="px-4 py-6 md:px-8">
+    <main className="min-h-screen bg-gradient-to-b from-[#fff6d4] via-[#f3f6fb] to-[#e8eef8] px-4 py-6 md:px-8">
       <p className="text-xs uppercase tracking-[0.2em] text-teal">Dashboard</p>
       <h1 className="text-2xl font-semibold">Hierarchy overview</h1>
       <p className="mt-1 text-sm text-navy/55">
-        Login level: <span className="font-semibold text-ink">{level}</span>
-        {level === "State" ? " · full organisation" : ` · ${level} ke neeche ka data`}
+        Login: <span className="rounded-full bg-teal px-2 py-0.5 text-xs font-semibold text-white">{level}</span>
+        {level === "State" ? " · poori organisation" : ` · ${level} ke neeche ka data`}
       </p>
 
       <div className="mt-4 mb-5 flex flex-wrap gap-3">
@@ -121,18 +136,19 @@ export default function AdminDashboardPage() {
         </label>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat label="Total users" value={data?.totalUsers || 0} />
-        <Stat label="Active today" value={data?.activeToday || 0} />
-        <Stat label="Live now" value={data?.liveNow || 0} />
-        <Stat label="Punches today" value={data?.punches || 0} />
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <Stat className="bg-ink" label="Total users" value={data?.totalUsers || 0} hint="Aapke access ke users" />
+        <Stat className="bg-teal" label="Active today" value={data?.activeToday || 0} hint="Aaj punch in kiya" />
+        <Stat className="bg-emerald-600" label="Live now" value={data?.liveNow || 0} hint="Abhi field par" />
+        <Stat className="bg-[#c45c12]" label="Punches" value={data?.punches || 0} hint="Aaj ke punch records" />
+        <Stat className="bg-[#0f766e]" label="Distance" value={formatKm(data?.totalDistance || 0)} hint="Aaj ka total travel" />
       </div>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-2">
-        <GroupTable title="Hierarchy · Designation wise" rows={data?.byDesignation || []} />
-        <GroupTable title="Zone wise" rows={data?.byZone || []} />
-        <GroupTable title="District wise" rows={data?.byDistrict || []} />
-        <GroupTable title="Assembly wise" rows={data?.byAssembly || []} />
+        <GroupTable title="Hierarchy · Designation wise" accent="bg-[#12305A] text-white" rows={data?.byDesignation || []} />
+        <GroupTable title="Zone wise" accent="bg-teal text-white" rows={data?.byZone || []} />
+        <GroupTable title="District wise" accent="bg-emerald-700 text-white" rows={data?.byDistrict || []} />
+        <GroupTable title="Assembly wise" accent="bg-[#1A56C4] text-white" rows={data?.byAssembly || []} />
       </div>
     </main>
   );

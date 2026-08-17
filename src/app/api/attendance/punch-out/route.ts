@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { haversineMeters } from "@/lib/utils";
+import { pathDistance } from "@/lib/utils";
 import { sanitizeFaceImage } from "@/lib/faceImage";
 
 export async function POST(req: Request) {
@@ -17,13 +17,15 @@ export async function POST(req: Request) {
   }
   const open = await prisma.attendance.findFirst({
     where: { userId: s.sub, punchOutAt: null },
-    include: { points: { orderBy: { recordedAt: "desc" }, take: 1 } },
+    include: { points: { orderBy: { recordedAt: "asc" } } },
   });
   if (!open) return NextResponse.json({ error: "No active punch in." }, { status: 400 });
 
-  const last = open.points[open.points.length - 1];
-  let distance = open.distanceMeters;
-  if (last) distance += haversineMeters({ lat: last.lat, lng: last.lng }, { lat, lng });
+  const distance = pathDistance([
+    { lat: open.punchInLat, lng: open.punchInLng },
+    ...open.points.map((p) => ({ lat: p.lat, lng: p.lng })),
+    { lat, lng },
+  ]);
 
   const base = {
     punchOutAt: new Date(),

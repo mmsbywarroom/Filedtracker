@@ -6,15 +6,17 @@ import { userScopeWhere } from "@/lib/hierarchy";
 function groupCounts(
   users: { id: string; key: string }[],
   activeIds: Set<string>,
-  liveIds: Set<string>
+  liveIds: Set<string>,
+  distByUser: Map<string, number>
 ) {
-  const map = new Map<string, { name: string; users: number; active: number; live: number }>();
+  const map = new Map<string, { name: string; users: number; active: number; live: number; distance: number }>();
   for (const u of users) {
     const name = u.key || "—";
-    const row = map.get(name) || { name, users: 0, active: 0, live: 0 };
+    const row = map.get(name) || { name, users: 0, active: 0, live: 0, distance: 0 };
     row.users += 1;
     if (activeIds.has(u.id)) row.active += 1;
     if (liveIds.has(u.id)) row.live += 1;
+    row.distance += distByUser.get(u.id) || 0;
     map.set(name, row);
   }
   return Array.from(map.values()).sort((a, b) => b.users - a.users);
@@ -53,12 +55,19 @@ export async function GET(req: Request) {
           userId: { in: users.map((u) => u.id) },
           punchInAt: { gte: start, lte: end },
         },
-        select: { userId: true, punchOutAt: true },
+        select: { userId: true, punchOutAt: true, distanceMeters: true },
       })
     : [];
 
   const activeIds = new Set(punches.map((p) => p.userId));
   const liveIds = new Set(punches.filter((p) => !p.punchOutAt).map((p) => p.userId));
+  const distByUser = new Map<string, number>();
+  let totalDistance = 0;
+  for (const p of punches) {
+    const add = p.distanceMeters || 0;
+    totalDistance += add;
+    distByUser.set(p.userId, (distByUser.get(p.userId) || 0) + add);
+  }
 
   return NextResponse.json({
     date,
@@ -66,30 +75,36 @@ export async function GET(req: Request) {
     activeToday: activeIds.size,
     liveNow: liveIds.size,
     punches: punches.length,
+    totalDistance,
     byDesignation: groupCounts(
       users.map((u) => ({ id: u.id, key: u.designation })),
       activeIds,
-      liveIds
+      liveIds,
+      distByUser
     ),
     byZone: groupCounts(
       users.map((u) => ({ id: u.id, key: u.zone })),
       activeIds,
-      liveIds
+      liveIds,
+      distByUser
     ),
     byDistrict: groupCounts(
       users.map((u) => ({ id: u.id, key: u.district })),
       activeIds,
-      liveIds
+      liveIds,
+      distByUser
     ),
     byAssembly: groupCounts(
       users.map((u) => ({ id: u.id, key: u.assemblyName })),
       activeIds,
-      liveIds
+      liveIds,
+      distByUser
     ),
     byCluster: groupCounts(
       users.map((u) => ({ id: u.id, key: u.cluster })),
       activeIds,
-      liveIds
+      liveIds,
+      distByUser
     ),
   });
 }
