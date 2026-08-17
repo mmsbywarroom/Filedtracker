@@ -36,10 +36,10 @@ export async function scanFace(video: HTMLVideoElement): Promise<FaceScan> {
   const faceSide = Math.min(best.box.width, best.box.height);
 
   // Allow ~1.5–2m on a phone selfie cam; reject tiny background faces.
-  if (faceSide < minSide * 0.11) return { ok: false, error: "too_far" };
+  if (faceSide < minSide * 0.08) return { ok: false, error: "too_far" };
 
   const second = detections[1];
-  if (second && Math.min(second.box.width, second.box.height) > minSide * 0.11) {
+  if (second && Math.min(second.box.width, second.box.height) > minSide * 0.14) {
     return { ok: false, error: "multiple" };
   }
 

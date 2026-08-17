@@ -32,9 +32,26 @@ type Attendance = {
 
 function getPosition(): Promise<GeolocationPosition> {
   return new Promise((resolve, reject) => {
-    navigator.geolocation.getCurrentPosition(resolve, reject, {
+    if (!navigator.geolocation) {
+      reject(new Error("Location off hai. Phone settings mein Location on karo."));
+      return;
+    }
+    const fail = (err: GeolocationPositionError | Error) => {
+      const code = "code" in err ? err.code : 0;
+      if (code === 1) reject(new Error("Location permission band hai. Chrome site settings mein Allow karo."));
+      else if (code === 3) reject(new Error("GPS timeout. Bahar / khuli jagah try karo, phir Confirm dabao."));
+      else reject(new Error("Location nahi mili. GPS on karke dubara Confirm karo."));
+    };
+    navigator.geolocation.getCurrentPosition(resolve, () => {
+      navigator.geolocation.getCurrentPosition(resolve, fail, {
+        enableHighAccuracy: false,
+        timeout: 12000,
+        maximumAge: 60000,
+      });
+    }, {
       enableHighAccuracy: true,
-      timeout: 15000,
+      timeout: 8000,
+      maximumAge: 15000,
     });
   });
 }
@@ -112,7 +129,10 @@ export default function DashboardPage() {
       body: JSON.stringify({ descriptor }),
     });
     const data = await res.json();
-    if (!res.ok || !data.matched) throw new Error("Face did not match the registered user.");
+    if (!res.ok) throw new Error(data.error || "Face check failed.");
+    if (!data.matched) {
+      throw new Error("Face registered user se match nahi hua. Seedha camera dekho, light theek rakho, phir Confirm.");
+    }
   }
 
   async function onRegister(descriptor: number[], image: string) {
@@ -138,13 +158,24 @@ export default function DashboardPage() {
     setMsg("");
     try {
       await verifyFace(descriptor);
-      const pos = await getPosition();
-      const payload = {
-        lat: pos.coords.latitude,
-        lng: pos.coords.longitude,
-        accuracy: pos.coords.accuracy,
-        image,
-      };
+      let lat: number;
+      let lng: number;
+      let accuracy: number | null = null;
+      try {
+        const pos = await getPosition();
+        lat = pos.coords.latitude;
+        lng = pos.coords.longitude;
+        accuracy = pos.coords.accuracy;
+      } catch (locErr) {
+        if (kind === "out" && open?.points?.length) {
+          const last = open.points[open.points.length - 1];
+          lat = last.lat;
+          lng = last.lng;
+        } else {
+          throw locErr;
+        }
+      }
+      const payload = { lat, lng, accuracy, image };
       const url = kind === "in" ? "/api/attendance" : "/api/attendance/punch-out";
       const res = await fetch(url, {
         method: "POST",
@@ -152,12 +183,18 @@ export default function DashboardPage() {
         body: JSON.stringify(payload),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!res.ok) throw new Error(data.error || "Server ne punch save nahi kiya.");
       setMode("idle");
       setMsg(kind === "in" ? "Punched in. Route tracking started." : "Punched out. Footprint saved.");
       await refresh();
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : "Failed");
+      const text =
+        e instanceof Error
+          ? e.message
+          : typeof e === "object" && e && "message" in e
+            ? String((e as { message: string }).message)
+            : "Punch fail. Face aur location dono try karke Confirm dabao.";
+      setMsg(text);
     } finally {
       setBusy(false);
     }
@@ -195,7 +232,15 @@ export default function DashboardPage() {
           </button>
         </header>
 
-        {msg && <p className="mb-3 rounded-2xl bg-white px-4 py-2 text-sm text-teal">{msg}</p>}
+        {msg && (
+          <p
+            className={`mb-3 rounded-2xl px-4 py-2 text-sm ${
+              /punched|registered|footprint saved/i.test(msg) ? "bg-white text-teal" : "bg-red-50 text-red-700"
+            }`}
+          >
+            {msg}
+          </p>
+        )}
 
         {mode !== "idle" && (
           <div className="mb-4 rounded-[2rem] bg-white p-6 shadow-card">

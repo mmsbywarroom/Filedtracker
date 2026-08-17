@@ -95,7 +95,11 @@ export function FaceCapture({ actionLabel, onCapture, busy }: Props) {
       return;
     }
     const image = snapshot(videoRef.current, result.box);
-    await onCapture(result.descriptor, image);
+    try {
+      await onCapture(result.descriptor, image);
+    } catch (e) {
+      setHint(e instanceof Error ? e.message : "Punch fail. Dobara Confirm dabao.");
+    }
   }
 
   return (

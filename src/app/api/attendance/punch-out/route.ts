@@ -25,20 +25,30 @@ export async function POST(req: Request) {
   let distance = open.distanceMeters;
   if (last) distance += haversineMeters({ lat: last.lat, lng: last.lng }, { lat, lng });
 
-  const attendance = await prisma.attendance.update({
-    where: { id: open.id },
-    data: {
-      punchOutAt: new Date(),
-      punchOutLat: lat,
-      punchOutLng: lng,
-      punchOutAddress: address,
-      punchOutFace,
-      distanceMeters: distance,
-      points: {
-        create: { lat, lng, recordedAt: new Date(), accuracy: Number(body?.accuracy) || null },
-      },
+  const base = {
+    punchOutAt: new Date(),
+    punchOutLat: lat,
+    punchOutLng: lng,
+    punchOutAddress: address,
+    distanceMeters: distance,
+    points: {
+      create: { lat, lng, recordedAt: new Date(), accuracy: Number(body?.accuracy) || null },
     },
-    include: { points: { orderBy: { recordedAt: "asc" } } },
-  });
-  return NextResponse.json({ attendance });
+  };
+
+  try {
+    const attendance = await prisma.attendance.update({
+      where: { id: open.id },
+      data: { ...base, punchOutFace },
+      include: { points: { orderBy: { recordedAt: "asc" } } },
+    });
+    return NextResponse.json({ attendance });
+  } catch {
+    const attendance = await prisma.attendance.update({
+      where: { id: open.id },
+      data: base,
+      include: { points: { orderBy: { recordedAt: "asc" } } },
+    });
+    return NextResponse.json({ attendance });
+  }
 }
