@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { normalizePhone } from "@/lib/security";
-import { DESIGNATIONS, userScopeWhere } from "@/lib/hierarchy";
+import { DESIGNATIONS, isSuperAdmin, userScopeWhere } from "@/lib/hierarchy";
 
 const userSchema = z.object({
   name: z.string().min(2).max(80),
@@ -54,6 +54,7 @@ export async function GET() {
 export async function POST(req: Request) {
   const s = await requireAdmin();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!isSuperAdmin(s.admin)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const parsed = userSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid details." }, { status: 400 });
   const phone = normalizePhone(parsed.data.phone);

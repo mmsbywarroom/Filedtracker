@@ -4,17 +4,22 @@ import { prisma } from "@/lib/prisma";
 import { userScopeWhere } from "@/lib/hierarchy";
 
 function groupCounts(
-  users: { id: string; key: string }[],
-  activeIds: Set<string>,
+  users: { id: string; key: string; isActive: boolean }[],
+  punchedIds: Set<string>,
   liveIds: Set<string>,
   distByUser: Map<string, number>
 ) {
-  const map = new Map<string, { name: string; users: number; active: number; live: number; distance: number }>();
+  const map = new Map<
+    string,
+    { name: string; users: number; active: number; inactive: number; punched: number; live: number; distance: number }
+  >();
   for (const u of users) {
     const name = u.key || "—";
-    const row = map.get(name) || { name, users: 0, active: 0, live: 0, distance: 0 };
+    const row = map.get(name) || { name, users: 0, active: 0, inactive: 0, punched: 0, live: 0, distance: 0 };
     row.users += 1;
-    if (activeIds.has(u.id)) row.active += 1;
+    if (u.isActive) row.active += 1;
+    else row.inactive += 1;
+    if (punchedIds.has(u.id)) row.punched += 1;
     if (liveIds.has(u.id)) row.live += 1;
     row.distance += distByUser.get(u.id) || 0;
     map.set(name, row);
@@ -46,6 +51,7 @@ export async function GET(req: Request) {
       district: true,
       assemblyName: true,
       cluster: true,
+      isActive: true,
     },
   });
 
@@ -59,7 +65,7 @@ export async function GET(req: Request) {
       })
     : [];
 
-  const activeIds = new Set(punches.map((p) => p.userId));
+  const punchedIds = new Set(punches.map((p) => p.userId));
   const liveIds = new Set(punches.filter((p) => !p.punchOutAt).map((p) => p.userId));
   const distByUser = new Map<string, number>();
   let totalDistance = 0;
@@ -68,43 +74,29 @@ export async function GET(req: Request) {
     totalDistance += add;
     distByUser.set(p.userId, (distByUser.get(p.userId) || 0) + add);
   }
+  const activeUsers = users.filter((u) => u.isActive).length;
+
+  const grouped = (key: "designation" | "zone" | "district" | "assemblyName" | "cluster") =>
+    groupCounts(
+      users.map((u) => ({ id: u.id, key: u[key] || "", isActive: u.isActive })),
+      punchedIds,
+      liveIds,
+      distByUser
+    );
 
   return NextResponse.json({
     date,
     totalUsers: users.length,
-    activeToday: activeIds.size,
+    activeUsers,
+    inactiveUsers: users.length - activeUsers,
+    activeToday: punchedIds.size,
     liveNow: liveIds.size,
     punches: punches.length,
     totalDistance,
-    byDesignation: groupCounts(
-      users.map((u) => ({ id: u.id, key: u.designation })),
-      activeIds,
-      liveIds,
-      distByUser
-    ),
-    byZone: groupCounts(
-      users.map((u) => ({ id: u.id, key: u.zone })),
-      activeIds,
-      liveIds,
-      distByUser
-    ),
-    byDistrict: groupCounts(
-      users.map((u) => ({ id: u.id, key: u.district })),
-      activeIds,
-      liveIds,
-      distByUser
-    ),
-    byAssembly: groupCounts(
-      users.map((u) => ({ id: u.id, key: u.assemblyName })),
-      activeIds,
-      liveIds,
-      distByUser
-    ),
-    byCluster: groupCounts(
-      users.map((u) => ({ id: u.id, key: u.cluster })),
-      activeIds,
-      liveIds,
-      distByUser
-    ),
+    byDesignation: grouped("designation"),
+    byZone: grouped("zone"),
+    byDistrict: grouped("district"),
+    byAssembly: grouped("assemblyName"),
+    byCluster: grouped("cluster"),
   });
 }

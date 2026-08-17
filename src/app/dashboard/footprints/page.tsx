@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import RouteMap from "@/components/RouteMapDynamic";
+import { BrandMark } from "@/components/BrandMark";
 import { LangToggle, useLang } from "@/lib/i18n";
 import { formatDuration, formatKm } from "@/lib/utils";
 
@@ -89,14 +90,17 @@ export default function FootprintsPage() {
     <main className="min-h-screen bg-sand">
       <div className="mx-auto max-w-6xl px-4 py-5">
         <header className="mb-4 flex items-center justify-between gap-3 rounded-3xl bg-white px-4 py-3 shadow-card">
-          <div>
-            <Link href="/dashboard" className="text-xs text-navy/50">
-              ← {t("backDash")}
-            </Link>
-            <h1 className="font-semibold">{t("recent")}</h1>
-            <p className="text-sm text-navy/55">
-              {filtered.length} {t("records")}
-            </p>
+          <div className="flex items-center gap-3">
+            <BrandMark size={40} className="shadow-sm" />
+            <div>
+              <Link href="/dashboard" className="text-xs text-navy/50">
+                ← {t("backDash")}
+              </Link>
+              <h1 className="font-semibold">{t("recent")}</h1>
+              <p className="text-sm text-navy/55">
+                {filtered.length} {t("records")}
+              </p>
+            </div>
           </div>
           <LangToggle tone="light" />
         </header>

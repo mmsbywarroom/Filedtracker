@@ -106,7 +106,19 @@ export default function AdminsPage() {
     e.preventDefault();
     setError("");
     if (form.accessLevel !== "State" && !form.zone) {
-      setError("Zone select karo.");
+      setError("Select a zone.");
+      return;
+    }
+    if ((form.accessLevel === "DLC" || form.accessLevel === "Cluster" || form.accessLevel === "ALC") && !form.district) {
+      setError("Select a district.");
+      return;
+    }
+    if (form.accessLevel === "Cluster" && !form.cluster) {
+      setError("Select a cluster.");
+      return;
+    }
+    if (form.accessLevel === "ALC" && !form.assemblyName) {
+      setError("Select an assembly. ALC can only see users in that assembly.");
       return;
     }
     const res = await fetch("/api/admin/admins", {
@@ -144,7 +156,7 @@ export default function AdminsPage() {
       <p className="text-xs uppercase tracking-[0.2em] text-teal">Access</p>
       <h1 className="text-2xl font-semibold">Admin users</h1>
       <p className="mt-1 max-w-3xl text-sm text-navy/60">
-        Naya admin login banao. Har box ka matlab form ke andar likha hai. State poora dekhega; ZLC sirf apni zone; DLC sirf apna district.
+        Create an admin login. State sees the full organisation. ZLC sees one zone, DLC one district, Cluster one cluster, and ALC one assembly.
       </p>
 
       <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
@@ -152,18 +164,18 @@ export default function AdminsPage() {
           <h2 className="font-semibold">Create admin</h2>
           <label className="mt-3 block text-xs font-medium text-navy/60">
             Name
-            <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Jaise: Gurpreet Singh" className={field} />
-            <span className="mt-1 block text-[11px] font-normal text-navy/45">Is admin ka naam. List me yahi dikhega.</span>
+            <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Gurpreet Singh" className={field} />
+            <span className="mt-1 block text-[11px] font-normal text-navy/45">Display name shown in the admin list.</span>
           </label>
           <label className="mt-3 block text-xs font-medium text-navy/60">
             Admin ID
             <input required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="zlc.majha" className={field} />
-            <span className="mt-1 block text-[11px] font-normal text-navy/45">Login ID. Isse admin login page par username ki tarah use hoga.</span>
+            <span className="mt-1 block text-[11px] font-normal text-navy/45">Used as the username on the admin login page.</span>
           </label>
           <label className="mt-3 block text-xs font-medium text-navy/60">
             Password
             <input required type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className={field} />
-            <span className="mt-1 block text-[11px] font-normal text-navy/45">Is ID se login karne ka password. Kam se kam 6 letters.</span>
+            <span className="mt-1 block text-[11px] font-normal text-navy/45">Password for this login. At least 6 characters.</span>
           </label>
           <label className="mt-3 block text-xs font-medium text-navy/60">
             Admin level
@@ -173,16 +185,16 @@ export default function AdminsPage() {
               ))}
             </select>
             <span className="mt-1 block text-[11px] font-normal text-navy/45">
-              {form.accessLevel === "State" && "State = poori organisation. Saare zones / users dikhenge."}
-              {form.accessLevel === "ZLC" && "ZLC = Zone leader. Sirf selected zone ke DLC aur uske neeche dikhenge."}
-              {form.accessLevel === "DLC" && "DLC = District leader. Sirf selected district ke Cluster aur neeche dikhenge."}
-              {form.accessLevel === "Cluster" && "Cluster = cluster incharge. Sirf us cluster ke ALC aur Sector Incharge dikhenge."}
-              {form.accessLevel === "ALC" && "ALC = assembly leader. Sirf us assembly ke Sector Incharge dikhenge."}
+              {form.accessLevel === "State" && "State sees all zones and users."}
+              {form.accessLevel === "ZLC" && "ZLC sees only the selected zone and levels below it."}
+              {form.accessLevel === "DLC" && "DLC sees only the selected district and levels below it."}
+              {form.accessLevel === "Cluster" && "Cluster sees only that cluster’s ALCs and Sector Incharges."}
+              {form.accessLevel === "ALC" && "ALC sees only Sector Incharges in the selected assembly."}
             </span>
           </label>
 
           <p className="mt-4 text-xs font-semibold uppercase tracking-wider text-navy/45">Can see these designations</p>
-          <p className="mt-1 text-[11px] text-navy/45">Tick = ye admin un field users ko dekh sakta hai. Example: sirf Sector Incharge tick ho to DLC/ALC list nahi dikhegi.</p>
+          <p className="mt-1 text-[11px] text-navy/45">Tick the designations this admin can see. Example: Sector Incharge only hides DLC/ALC users.</p>
           <div className="mt-2 grid grid-cols-2 gap-2">
             {DESIGNATIONS.map((d) => (
               <label key={d} className="flex items-center gap-2 rounded-xl border border-navy/10 px-3 py-2 text-sm">
@@ -207,12 +219,13 @@ export default function AdminsPage() {
                     <option key={z}>{z}</option>
                   ))}
                 </select>
-                <span className="mt-1 block text-[11px] font-normal text-navy/45">Kaunsi zone ka data dikhe. Majha / Malwa jaise list se choose karo.</span>
+                <span className="mt-1 block text-[11px] font-normal text-navy/45">Which zone this admin can see, such as Majha or Malwa.</span>
               </label>
               {(form.accessLevel === "DLC" || form.accessLevel === "Cluster" || form.accessLevel === "ALC") && (
                 <label className="block text-xs font-medium text-navy/60">
                   District
                   <select
+                    required
                     value={form.district}
                     onChange={(e) => setForm({ ...form, district: e.target.value, cluster: "", assemblyName: "" })}
                     className={field}
@@ -227,7 +240,12 @@ export default function AdminsPage() {
               {(form.accessLevel === "Cluster" || form.accessLevel === "ALC") && (
                 <label className="block text-xs font-medium text-navy/60">
                   Cluster
-                  <select value={form.cluster} onChange={(e) => setForm({ ...form, cluster: e.target.value })} className={field}>
+                  <select
+                    required={form.accessLevel === "Cluster"}
+                    value={form.cluster}
+                    onChange={(e) => setForm({ ...form, cluster: e.target.value })}
+                    className={field}
+                  >
                     <option value="">Select cluster</option>
                     {clusters.map((c) => (
                       <option key={c}>{c}</option>
@@ -238,7 +256,7 @@ export default function AdminsPage() {
               {form.accessLevel === "ALC" && (
                 <label className="block text-xs font-medium text-navy/60">
                   Assembly
-                  <select value={form.assemblyName} onChange={(e) => setForm({ ...form, assemblyName: e.target.value })} className={field}>
+                  <select required value={form.assemblyName} onChange={(e) => setForm({ ...form, assemblyName: e.target.value })} className={field}>
                     <option value="">Select assembly</option>
                     {assemblies.map((a) => (
                       <option key={a}>{a}</option>
@@ -267,8 +285,10 @@ export default function AdminsPage() {
                       {a.isSuper ? " · Super" : ""}
                       {a.zone ? ` · ${a.zone}` : ""}
                       {a.district ? ` · ${a.district}` : ""}
+                      {a.cluster ? ` · ${a.cluster}` : ""}
+                      {a.assemblyName ? ` · ${a.assemblyName}` : ""}
                     </p>
-                    <p className="mt-1 text-xs text-navy/50">{a.designations.join(", ") || "Default below-level"}</p>
+                    <p className="mt-1 text-xs text-navy/50">{a.designations.join(", ") || "Default: levels below this admin"}</p>
                   </div>
                   {!a.isSuper && (
                     <button onClick={() => remove(a.id)} className="text-xs font-semibold text-red-600">

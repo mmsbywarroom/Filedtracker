@@ -17,6 +17,10 @@ const gurmukhi = Noto_Sans_Gurmukhi({
 export const metadata: Metadata = {
   title: "FieldTrack — Aam Aadmi Party",
   description: "Aam Aadmi Party field attendance with OTP, face punch, and travel footprint.",
+  icons: {
+    icon: "/aap-logo.png",
+    apple: "/aap-logo.png",
+  },
 };
 
 export const viewport: Viewport = {

@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
-import { canManageAdmins, userScopeWhere, visibleDesignationsFor } from "@/lib/hierarchy";
+import { canManageAdmins, isSuperAdmin, visibleDesignationsFor } from "@/lib/hierarchy";
 
 export async function GET() {
   const s = await requireAdmin();
@@ -9,6 +8,7 @@ export async function GET() {
   return NextResponse.json({
     admin: {
       ...s.admin,
+      isSuper: isSuperAdmin(s.admin),
       canManageAdmins: canManageAdmins(s.admin),
       visibleDesignations: visibleDesignationsFor(s.admin),
     },

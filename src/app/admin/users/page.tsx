@@ -32,6 +32,8 @@ export default function AdminUsersPage() {
   const [zone, setZone] = useState("");
   const [district, setDistrict] = useState("");
   const [face, setFace] = useState("");
+  const [status, setStatus] = useState("");
+  const [isSuper, setIsSuper] = useState(false);
 
   async function load() {
     const res = await fetch("/api/admin/users");
@@ -45,12 +47,27 @@ export default function AdminUsersPage() {
 
   useEffect(() => {
     load();
+    fetch("/api/admin/me")
+      .then((r) => r.json())
+      .then((d) => setIsSuper(Boolean(d.admin?.isSuper)))
+      .catch(() => {});
   }, []);
 
   async function remove(id: string) {
     if (!confirm("Delete this user and all footprints?")) return;
     await fetch(`/api/admin/users/${id}`, { method: "DELETE" });
     load();
+  }
+
+  async function toggleActive(u: UserRow) {
+    const res = await fetch(`/api/admin/users/${u.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isActive: !u.isActive }),
+    });
+    if (res.ok) {
+      setUsers((prev) => prev.map((row) => (row.id === u.id ? { ...row, isActive: !u.isActive } : row)));
+    }
   }
 
   const filtered = useMemo(() => {
@@ -63,9 +80,11 @@ export default function AdminUsersPage() {
       if (district && u.district !== district) return false;
       if (face === "yes" && !u.faceRegistered) return false;
       if (face === "no" && u.faceRegistered) return false;
+      if (status === "active" && !u.isActive) return false;
+      if (status === "inactive" && u.isActive) return false;
       return true;
     });
-  }, [users, q, assembly, designation, zone, district, face]);
+  }, [users, q, assembly, designation, zone, district, face, status]);
 
   const selectClass = "h-11 rounded-xl border border-navy/10 bg-white px-3 text-sm outline-none focus:border-teal";
 
@@ -79,12 +98,14 @@ export default function AdminUsersPage() {
             {filtered.length} of {users.length} users
           </p>
         </div>
-        <Link href="/admin/create" className="rounded-xl bg-teal px-4 py-2.5 text-sm font-semibold text-white shadow-card">
-          Create user
-        </Link>
+        {isSuper && (
+          <Link href="/admin/create" className="rounded-xl bg-teal px-4 py-2.5 text-sm font-semibold text-white shadow-card">
+            Create user
+          </Link>
+        )}
       </div>
 
-      <div className="mb-4 grid gap-3 rounded-2xl bg-white p-4 shadow-card md:grid-cols-3 lg:grid-cols-6">
+      <div className="mb-4 grid gap-3 rounded-2xl bg-white p-4 shadow-card md:grid-cols-3 lg:grid-cols-7">
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name or number" className={`${selectClass} lg:col-span-2`} />
         <select value={assembly} onChange={(e) => setAssembly(e.target.value)} className={selectClass}>
           <option value="">All assemblies</option>
@@ -115,6 +136,11 @@ export default function AdminUsersPage() {
           <option value="yes">Face registered</option>
           <option value="no">Face pending</option>
         </select>
+        <select value={status} onChange={(e) => setStatus(e.target.value)} className={selectClass}>
+          <option value="">Status: all</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+        </select>
       </div>
 
       <section className="overflow-hidden rounded-2xl border border-navy/5 bg-white shadow-card">
@@ -128,12 +154,13 @@ export default function AdminUsersPage() {
                 <th className="px-4 py-3">Zone</th>
                 <th className="px-4 py-3">District</th>
                 <th className="px-4 py-3">Face</th>
+                <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((u) => (
-                <tr key={u.id} className="border-t border-navy/5 hover:bg-[#f7f9fd]">
+                <tr key={u.id} className={`border-t border-navy/5 hover:bg-[#f7f9fd] ${u.isActive ? "" : "opacity-70"}`}>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
                       <FacePhoto src={u.faceImage} label={u.name} />
@@ -156,23 +183,42 @@ export default function AdminUsersPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3">
+                    <button
+                      type="button"
+                      onClick={() => toggleActive(u)}
+                      className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                        u.isActive ? "bg-emerald-50 text-emerald-700" : "bg-navy/10 text-navy/60"
+                      }`}
+                    >
+                      {u.isActive ? "Active" : "Inactive"}
+                    </button>
+                  </td>
+                  <td className="px-4 py-3">
                     <div className="flex justify-end gap-2">
                       <Link href={`/admin/users/${u.id}`} className="rounded-lg bg-teal/10 px-2.5 py-1 text-xs font-semibold text-teal">
                         Footprint
                       </Link>
-                      <Link href={`/admin/create?edit=${u.id}`} className="rounded-lg bg-navy/5 px-2.5 py-1 text-xs font-semibold text-navy/70">
-                        Edit
-                      </Link>
-                      <button onClick={() => remove(u.id)} className="rounded-lg bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-600">
-                        Delete
-                      </button>
+                      {isSuper && (
+                        <>
+                          <Link href={`/admin/create?edit=${u.id}`} className="rounded-lg bg-navy/5 px-2.5 py-1 text-xs font-semibold text-navy/70">
+                            Edit
+                          </Link>
+                          <button onClick={() => remove(u.id)} className="rounded-lg bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-600">
+                            Delete
+                          </button>
+                        </>
+                      )}
                     </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-          {!filtered.length && <p className="p-8 text-center text-sm text-navy/50">No matching users. Create a user or upload CSV.</p>}
+          {!filtered.length && (
+            <p className="p-8 text-center text-sm text-navy/50">
+              {users.length ? "No matching users." : "No users in your assignment."}
+            </p>
+          )}
         </div>
       </section>
     </main>

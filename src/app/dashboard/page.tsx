@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { FaceCapture } from "@/components/FaceCapture";
+import { BrandMark } from "@/components/BrandMark";
 import RouteMap from "@/components/RouteMapDynamic";
 import { formatDuration, formatKm, isPlausibleStep, pathDistance } from "@/lib/utils";
 import { loadFaceModels } from "@/lib/face";
@@ -35,14 +36,14 @@ type Attendance = {
 function getPosition(): Promise<GeolocationPosition> {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) {
-      reject(new Error("Location off hai. Phone settings mein Location on karo."));
+      reject(new Error("Location is off. Turn on Location in phone settings."));
       return;
     }
     const fail = (err: GeolocationPositionError | Error) => {
       const code = "code" in err ? err.code : 0;
-      if (code === 1) reject(new Error("Location permission band hai. Chrome site settings mein Allow karo."));
-      else if (code === 3) reject(new Error("GPS timeout. Bahar / khuli jagah try karo, phir Confirm dabao."));
-      else reject(new Error("Location nahi mili. GPS on karke dubara Confirm karo."));
+      if (code === 1) reject(new Error("Location permission is blocked. Allow it in Chrome site settings."));
+      else if (code === 3) reject(new Error("GPS timed out. Try outdoors, then tap Confirm."));
+      else reject(new Error("Location not found. Turn on GPS and tap Confirm again."));
     };
     navigator.geolocation.getCurrentPosition(resolve, fail, {
       enableHighAccuracy: true,
@@ -146,7 +147,7 @@ export default function DashboardPage() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Face check failed.");
     if (!data.matched) {
-      throw new Error("Face match nahi hua. Seedha camera dekho.");
+      throw new Error("Face did not match. Look straight at the camera.");
     }
   }
 
@@ -192,7 +193,7 @@ export default function DashboardPage() {
           lastFix.current ||
           open?.points?.[open.points.length - 1] ||
           (open ? { lat: open.punchInLat, lng: open.punchInLng } : null);
-        if (!last) throw new Error("Location nahi mili. GPS on karke dubara Confirm karo.");
+        if (!last) throw new Error("Location not found. Turn on GPS and tap Confirm again.");
         lat = last.lat;
         lng = last.lng;
       } else {
@@ -214,7 +215,7 @@ export default function DashboardPage() {
         body: JSON.stringify(payload),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Server ne punch save nahi kiya.");
+      if (!res.ok) throw new Error(data.error || "Could not save punch.");
       setMode("idle");
       setOkMsg(true);
       setMsg(kind === "in" ? t("punchedIn") : t("punchedOut"));
@@ -227,7 +228,7 @@ export default function DashboardPage() {
           ? e.message
           : typeof e === "object" && e && "message" in e
             ? String((e as { message: string }).message)
-            : "Punch fail. Face aur location dono try karke Confirm dabao.";
+            : "Punch failed. Try face and location again, then tap Confirm.";
       setMsg(text);
     } finally {
       setBusy(false);
@@ -248,18 +249,28 @@ export default function DashboardPage() {
     window.location.href = "/";
   }
 
-  if (!user) return <div className="grid min-h-screen place-items-center">{t("loading")}</div>;
+  if (!user) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3">
+        <BrandMark size={64} className="shadow-card" />
+        <p>{t("loading")}</p>
+      </div>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-sand">
       <div className="mx-auto max-w-6xl px-4 py-5">
         <header className="mb-4 flex items-center justify-between gap-3 rounded-3xl bg-white px-4 py-3 shadow-card">
-          <div>
-            <p className="text-xs uppercase tracking-wider text-navy/50">{t("aap")}</p>
-            <h1 className="font-semibold">{user.name}</h1>
-            <p className="text-sm text-navy/60">
-              {user.sectorAllotted} · {user.assemblyName}
-            </p>
+          <div className="flex items-center gap-3">
+            <BrandMark size={44} className="shadow-sm" />
+            <div>
+              <p className="text-xs uppercase tracking-wider text-navy/50">{t("aap")}</p>
+              <h1 className="font-semibold">{user.name}</h1>
+              <p className="text-sm text-navy/60">
+                {user.sectorAllotted} · {user.assemblyName}
+              </p>
+            </div>
           </div>
           <div className="flex items-center gap-3">
             <LangToggle tone="light" />

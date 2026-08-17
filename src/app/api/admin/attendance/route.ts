@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { canSeeUser, userScopeWhere } from "@/lib/hierarchy";
+import { canSeeUser, isSuperAdmin, userScopeWhere } from "@/lib/hierarchy";
 import { haversineMeters } from "@/lib/utils";
 
 export async function GET(req: Request) {
   const s = await requireAdmin();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!isSuperAdmin(s.admin)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const { searchParams } = new URL(req.url);
   const date = searchParams.get("date") || new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
   const start = new Date(`${date}T00:00:00+05:30`);

@@ -3,27 +3,40 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
+import { BrandMark } from "@/components/BrandMark";
 import { LangToggle, useLang } from "@/lib/i18n";
+
+const SUPER_ONLY = ["/admin/create", "/admin/records", "/admin/admins"];
 
 export default function AdminShell({ children }: { children: ReactNode }) {
   const { t } = useLang();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const [canAdmins, setCanAdmins] = useState(false);
+  const [isSuper, setIsSuper] = useState(false);
 
   useEffect(() => {
     fetch("/api/admin/me")
       .then((r) => r.json())
-      .then((d) => setCanAdmins(Boolean(d.admin?.canManageAdmins)))
+      .then((d) => {
+        const superAdmin = Boolean(d.admin?.isSuper);
+        setIsSuper(superAdmin);
+        if (!superAdmin && SUPER_ONLY.some((p) => pathname.startsWith(p))) {
+          window.location.replace("/admin");
+        }
+      })
       .catch(() => {});
-  }, []);
+  }, [pathname]);
 
   const nav = [
     { href: "/admin", label: t("dashboard"), match: (p: string) => p === "/admin" },
     { href: "/admin/users", label: t("users"), match: (p: string) => p.startsWith("/admin/users") },
-    { href: "/admin/create", label: t("createUser"), match: (p: string) => p.startsWith("/admin/create") },
-    { href: "/admin/records", label: t("dailyRecords"), match: (p: string) => p.startsWith("/admin/records") },
-    ...(canAdmins ? [{ href: "/admin/admins", label: t("admins"), match: (p: string) => p.startsWith("/admin/admins") }] : []),
+    ...(isSuper
+      ? [
+          { href: "/admin/create", label: t("createUser"), match: (p: string) => p.startsWith("/admin/create") },
+          { href: "/admin/records", label: t("dailyRecords"), match: (p: string) => p.startsWith("/admin/records") },
+          { href: "/admin/admins", label: t("admins"), match: (p: string) => p.startsWith("/admin/admins") },
+        ]
+      : []),
   ];
 
   async function logout() {
@@ -34,7 +47,10 @@ export default function AdminShell({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-[#f3f6fb] md:flex">
       <header className="sticky top-0 z-30 flex items-center justify-between gap-2 bg-ink px-4 py-3 text-white md:hidden">
-        <p className="font-semibold">AAP {t("app")}</p>
+        <div className="flex items-center gap-2">
+          <BrandMark size={32} className="rounded-xl" />
+          <p className="font-semibold">{t("app")}</p>
+        </div>
         <div className="flex items-center gap-2">
           <LangToggle />
           <button type="button" onClick={() => setOpen((v) => !v)} className="rounded-lg border border-white/20 px-3 py-1 text-sm">
@@ -47,8 +63,15 @@ export default function AdminShell({ children }: { children: ReactNode }) {
         className={`${open ? "flex" : "hidden"} z-20 w-full flex-col bg-ink text-white md:sticky md:top-0 md:flex md:h-screen md:w-60 md:shrink-0`}
       >
         <div className="hidden border-b border-white/10 px-5 py-6 md:block">
-          <p className="text-xs uppercase tracking-[0.18em] text-teal-bright">{t("aap")}</p>
-          <h1 className="mt-1 text-lg font-semibold">{t("admin")}</h1>
+          <div className="flex items-center gap-3">
+            <Link href="/admin" onClick={() => setOpen(false)}>
+              <BrandMark size={48} />
+            </Link>
+            <div>
+              <p className="text-xs uppercase tracking-[0.18em] text-teal-bright">{t("aap")}</p>
+              <h1 className="mt-0.5 text-lg font-semibold">{t("admin")}</h1>
+            </div>
+          </div>
           <div className="mt-3">
             <LangToggle />
           </div>

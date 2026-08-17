@@ -47,7 +47,24 @@ export async function POST(req: Request) {
   const parsed = schema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid admin details." }, { status: 400 });
   const email = parsed.data.email.trim().toLowerCase();
-  const designations = (parsed.data.designations || defaultVisibleDesignations(parsed.data.accessLevel)).filter((d) =>
+  const accessLevel = parsed.data.accessLevel;
+  const zone = parsed.data.zone?.trim() || "";
+  const district = parsed.data.district?.trim() || "";
+  const assemblyName = parsed.data.assemblyName?.trim() || "";
+  const cluster = parsed.data.cluster?.trim() || "";
+  if (accessLevel !== "State" && !zone) {
+    return NextResponse.json({ error: "Zone is required." }, { status: 400 });
+  }
+  if ((accessLevel === "DLC" || accessLevel === "Cluster" || accessLevel === "ALC") && !district) {
+    return NextResponse.json({ error: "District is required." }, { status: 400 });
+  }
+  if (accessLevel === "Cluster" && !cluster) {
+    return NextResponse.json({ error: "Cluster is required." }, { status: 400 });
+  }
+  if (accessLevel === "ALC" && !assemblyName) {
+    return NextResponse.json({ error: "Assembly is required for ALC." }, { status: 400 });
+  }
+  const designations = (parsed.data.designations || defaultVisibleDesignations(accessLevel)).filter((d) =>
     DESIGNATIONS.includes(d as (typeof DESIGNATIONS)[number])
   );
   try {
@@ -56,13 +73,13 @@ export async function POST(req: Request) {
         email,
         name: parsed.data.name.trim(),
         passwordHash: await bcrypt.hash(parsed.data.password, 12),
-        accessLevel: parsed.data.accessLevel,
+        accessLevel,
         isSuper: false,
         designations,
-        zone: parsed.data.zone?.trim() || "",
-        district: parsed.data.district?.trim() || "",
-        assemblyName: parsed.data.assemblyName?.trim() || "",
-        cluster: parsed.data.cluster?.trim() || "",
+        zone,
+        district,
+        assemblyName,
+        cluster,
       },
       select: { id: true, email: true, name: true, accessLevel: true },
     });

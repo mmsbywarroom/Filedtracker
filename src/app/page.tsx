@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { BrandMark } from "@/components/BrandMark";
 import { LangToggle, useLang } from "@/lib/i18n";
 
 export default function HomePage() {
@@ -52,7 +53,7 @@ export default function HomePage() {
       <header className="bg-ink text-white">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
           <div className="flex items-center gap-3">
-            <div className="grid h-11 w-11 place-items-center rounded-2xl bg-teal-bright font-bold text-ink">FT</div>
+            <BrandMark size={44} />
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-teal-bright">{t("aap")}</p>
               <h1 className="text-lg font-semibold">{t("app")}</h1>
@@ -64,6 +65,7 @@ export default function HomePage() {
 
       <section className="flex flex-1 items-center justify-center px-4 py-10">
         <div className="w-full max-w-md rounded-[2rem] bg-white p-6 shadow-float md:p-8">
+          <BrandMark size={72} className="mb-4 shadow-sm" />
           <p className="inline-flex rounded-full bg-sand px-3 py-1 text-xs font-semibold uppercase tracking-wider text-teal">
             {t("faceBadge")}
           </p>

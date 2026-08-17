@@ -1,14 +1,25 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { BrandMark } from "@/components/BrandMark";
 import { DESIGNATIONS } from "@/lib/hierarchy";
 import { formatKm } from "@/lib/utils";
 
-type Group = { name: string; users: number; active: number; live: number; distance: number };
+type Group = {
+  name: string;
+  users: number;
+  active: number;
+  inactive: number;
+  punched: number;
+  live: number;
+  distance: number;
+};
 
 type Dash = {
   date: string;
   totalUsers: number;
+  activeUsers: number;
+  inactiveUsers: number;
   activeToday: number;
   liveNow: number;
   punches: number;
@@ -57,6 +68,8 @@ function GroupTable({ title, accent, rows }: { title: string; accent: string; ro
               <th className="px-4 py-2">Name</th>
               <th className="px-4 py-2">Users</th>
               <th className="px-4 py-2">Active</th>
+              <th className="px-4 py-2">Inactive</th>
+              <th className="px-4 py-2">Punched</th>
               <th className="px-4 py-2">Live</th>
               <th className="px-4 py-2">Distance</th>
             </tr>
@@ -67,6 +80,8 @@ function GroupTable({ title, accent, rows }: { title: string; accent: string; ro
                 <td className="px-4 py-2 font-medium">{r.name}</td>
                 <td className="px-4 py-2">{r.users}</td>
                 <td className="px-4 py-2 text-teal">{r.active}</td>
+                <td className="px-4 py-2 text-navy/50">{r.inactive}</td>
+                <td className="px-4 py-2 text-[#c45c12]">{r.punched}</td>
                 <td className="px-4 py-2 text-emerald-600">{r.live}</td>
                 <td className="px-4 py-2 font-semibold text-ink">{formatKm(r.distance || 0)}</td>
               </tr>
@@ -84,6 +99,8 @@ export default function AdminDashboardPage() {
   const [designation, setDesignation] = useState("");
   const [data, setData] = useState<Dash | null>(null);
   const [level, setLevel] = useState("State");
+  const [isSuper, setIsSuper] = useState(false);
+  const [scope, setScope] = useState({ zone: "", district: "", assemblyName: "", cluster: "" });
 
   async function load(d: string, des: string) {
     const params = new URLSearchParams({ date: d });
@@ -96,19 +113,52 @@ export default function AdminDashboardPage() {
     setData(await res.json());
     const me = await fetch("/api/admin/me").then((r) => r.json());
     if (me.admin?.accessLevel) setLevel(me.admin.accessLevel);
+    setIsSuper(Boolean(me.admin?.isSuper));
+    setScope({
+      zone: me.admin?.zone || "",
+      district: me.admin?.district || "",
+      assemblyName: me.admin?.assemblyName || "",
+      cluster: me.admin?.cluster || "",
+    });
   }
 
   useEffect(() => {
     load(date, designation);
   }, [date, designation]);
 
+  const scopeText = isSuper
+    ? "Full organisation"
+    : level === "ALC" && !scope.assemblyName
+      ? "No assembly assigned — no users visible"
+      : level === "ZLC" && !scope.zone
+        ? "No zone assigned — no users visible"
+        : level === "DLC" && !scope.district
+          ? "No district assigned — no users visible"
+          : level === "Cluster" && !scope.cluster
+            ? "No cluster assigned — no users visible"
+            : [
+                "Users below this level",
+                scope.zone,
+                scope.district,
+                scope.cluster,
+                scope.assemblyName,
+              ]
+                .filter(Boolean)
+                .join(" · ");
+
   return (
     <main className="min-h-screen bg-gradient-to-b from-[#fff6d4] via-[#f3f6fb] to-[#e8eef8] px-4 py-6 md:px-8">
-      <p className="text-xs uppercase tracking-[0.2em] text-teal">Dashboard</p>
-      <h1 className="text-2xl font-semibold">Hierarchy overview</h1>
+      <div className="mb-2 flex items-center gap-3">
+        <BrandMark size={48} className="shadow-sm" />
+        <div>
+          <p className="text-xs uppercase tracking-[0.2em] text-teal">Dashboard</p>
+          <h1 className="text-2xl font-semibold">Hierarchy overview</h1>
+        </div>
+      </div>
       <p className="mt-1 text-sm text-navy/55">
         Login: <span className="rounded-full bg-teal px-2 py-0.5 text-xs font-semibold text-white">{level}</span>
-        {level === "State" ? " · poori organisation" : ` · ${level} ke neeche ka data`}
+        {" · "}
+        {scopeText}
       </p>
 
       <div className="mt-4 mb-5 flex flex-wrap gap-3">
@@ -136,12 +186,13 @@ export default function AdminDashboardPage() {
         </label>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <Stat className="bg-ink" label="Total users" value={data?.totalUsers || 0} hint="Aapke access ke users" />
-        <Stat className="bg-teal" label="Active today" value={data?.activeToday || 0} hint="Aaj punch in kiya" />
-        <Stat className="bg-emerald-600" label="Live now" value={data?.liveNow || 0} hint="Abhi field par" />
-        <Stat className="bg-[#c45c12]" label="Punches" value={data?.punches || 0} hint="Aaj ke punch records" />
-        <Stat className="bg-[#0f766e]" label="Distance" value={formatKm(data?.totalDistance || 0)} hint="Aaj ka total travel" />
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        <Stat className="bg-ink" label="Total users" value={data?.totalUsers || 0} hint="Users in your assigned area" />
+        <Stat className="bg-teal" label="Active" value={data?.activeUsers || 0} hint="Account enabled" />
+        <Stat className="bg-navy/70" label="Inactive" value={data?.inactiveUsers || 0} hint="Account disabled" />
+        <Stat className="bg-emerald-600" label="Live now" value={data?.liveNow || 0} hint="Currently in the field" />
+        <Stat className="bg-[#c45c12]" label="Punched today" value={data?.activeToday || 0} hint="Punched in today" />
+        <Stat className="bg-[#0f766e]" label="Distance" value={formatKm(data?.totalDistance || 0)} hint="Total travel today" />
       </div>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-2">

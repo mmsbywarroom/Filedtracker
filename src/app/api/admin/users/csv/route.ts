@@ -4,6 +4,7 @@ import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { normalizePhone } from "@/lib/security";
 import { CSV_COLUMNS } from "@/lib/utils";
+import { isSuperAdmin } from "@/lib/hierarchy";
 
 function pick(row: Record<string, string>, key: string) {
   const found = Object.keys(row).find((k) => k.trim().toLowerCase() === key.toLowerCase());
@@ -13,6 +14,7 @@ function pick(row: Record<string, string>, key: string) {
 export async function POST(req: Request) {
   const s = await requireAdmin();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!isSuperAdmin(s.admin)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const form = await req.formData();
   const file = form.get("file");
   if (!(file instanceof File)) return NextResponse.json({ error: "CSV file required." }, { status: 400 });

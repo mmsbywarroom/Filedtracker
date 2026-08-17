@@ -24,6 +24,8 @@ export type AdminScope = {
   cluster: string;
 };
 
+const NO_USERS = { id: "__none__" };
+
 export function designationsBelow(level: string): string[] {
   const rank = DESIGNATION_RANK[level] ?? 99;
   return DESIGNATIONS.filter((d) => DESIGNATION_RANK[d] > rank);
@@ -40,19 +42,43 @@ export function visibleDesignationsFor(admin: Pick<AdminScope, "isSuper" | "acce
   return defaultVisibleDesignations(admin.accessLevel);
 }
 
-export function canManageAdmins(admin: Pick<AdminScope, "isSuper" | "accessLevel">) {
-  return admin.isSuper || admin.accessLevel === "State";
+export function isSuperAdmin(admin: Pick<AdminScope, "isSuper">) {
+  return Boolean(admin.isSuper);
+}
+
+export function canManageAdmins(admin: Pick<AdminScope, "isSuper">) {
+  return isSuperAdmin(admin);
 }
 
 export function userScopeWhere(admin: AdminScope) {
   if (admin.isSuper) return {};
+  const dens = visibleDesignationsFor(admin);
   const where: Record<string, unknown> = {
-    designation: { in: visibleDesignationsFor(admin) },
+    designation: { in: dens.length ? dens : ["__none__"] },
   };
-  if (admin.zone) where.zone = admin.zone;
-  if (admin.district) where.district = admin.district;
-  if (admin.assemblyName) where.assemblyName = admin.assemblyName;
-  if (admin.cluster) where.cluster = admin.cluster;
+  if (admin.accessLevel === "ZLC") {
+    if (!admin.zone) return NO_USERS;
+    where.zone = admin.zone;
+  } else if (admin.accessLevel === "DLC") {
+    if (!admin.district) return NO_USERS;
+    if (admin.zone) where.zone = admin.zone;
+    where.district = admin.district;
+  } else if (admin.accessLevel === "Cluster") {
+    if (!admin.cluster) return NO_USERS;
+    if (admin.zone) where.zone = admin.zone;
+    if (admin.district) where.district = admin.district;
+    where.cluster = admin.cluster;
+  } else if (admin.accessLevel === "ALC") {
+    if (!admin.assemblyName) return NO_USERS;
+    if (admin.zone) where.zone = admin.zone;
+    if (admin.district) where.district = admin.district;
+    where.assemblyName = admin.assemblyName;
+  } else {
+    if (admin.zone) where.zone = admin.zone;
+    if (admin.district) where.district = admin.district;
+    if (admin.assemblyName) where.assemblyName = admin.assemblyName;
+    if (admin.cluster) where.cluster = admin.cluster;
+  }
   return where;
 }
 
@@ -63,6 +89,14 @@ export function canSeeUser(
   if (admin.isSuper) return true;
   const dens = visibleDesignationsFor(admin);
   if (user.designation && !dens.includes(user.designation)) return false;
+  if (admin.accessLevel === "ZLC") return Boolean(admin.zone) && user.zone === admin.zone;
+  if (admin.accessLevel === "DLC") return Boolean(admin.district) && user.district === admin.district && (!admin.zone || user.zone === admin.zone);
+  if (admin.accessLevel === "Cluster") {
+    return Boolean(admin.cluster) && (user.cluster || "") === admin.cluster;
+  }
+  if (admin.accessLevel === "ALC") {
+    return Boolean(admin.assemblyName) && user.assemblyName === admin.assemblyName;
+  }
   if (admin.zone && user.zone !== admin.zone) return false;
   if (admin.district && user.district !== admin.district) return false;
   if (admin.assemblyName && user.assemblyName !== admin.assemblyName) return false;

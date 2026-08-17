@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import Link from "next/link";
+import { BrandMark } from "@/components/BrandMark";
 import { LangToggle, useLang } from "@/lib/i18n";
 
 export default function AdminLoginPage() {
@@ -32,7 +33,8 @@ export default function AdminLoginPage() {
   return (
     <main className="grid min-h-screen place-items-center bg-ink px-4">
       <div className="w-full max-w-md rounded-[2rem] bg-white p-8 shadow-float">
-        <div className="mb-4 flex justify-end">
+        <div className="mb-5 flex items-center justify-between gap-3">
+          <BrandMark size={56} className="shadow-sm" />
           <LangToggle tone="light" />
         </div>
         <p className="text-xs font-semibold uppercase tracking-[0.2em] text-teal">{t("aap")}</p>
