@@ -2,10 +2,20 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { haversineMeters, isPlausibleStep } from "@/lib/utils";
+import { autoPunchOutIfStale } from "@/lib/punchOut";
 
 export async function POST(req: Request) {
   const s = await requireUser();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const closed = await autoPunchOutIfStale(s.sub);
+  if (closed) {
+    return NextResponse.json(
+      { error: "Session auto punched out after 12 hours.", code: "AUTO_12H", attendance: closed },
+      { status: 409 }
+    );
+  }
+
   const body = await req.json().catch(() => null);
   const points = Array.isArray(body?.points) ? body.points : [];
   const open = await prisma.attendance.findFirst({

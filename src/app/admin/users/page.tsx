@@ -17,6 +17,7 @@ type UserRow = {
   district: string;
   cluster: string;
   isActive: boolean;
+  onLeaveToday?: boolean;
   faceRegistered: boolean;
   faceImage: string | null;
 };
@@ -362,15 +363,22 @@ export default function AdminUsersPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <button
-                      type="button"
-                      onClick={() => toggleActive(u)}
-                      className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                        u.isActive ? "bg-emerald-50 text-emerald-700" : "bg-navy/10 text-navy/60"
-                      }`}
-                    >
-                      {u.isActive ? "Active" : "Inactive"}
-                    </button>
+                    <div className="flex flex-col items-start gap-1">
+                      <button
+                        type="button"
+                        onClick={() => toggleActive(u)}
+                        className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                          u.isActive ? "bg-emerald-50 text-emerald-700" : "bg-navy/10 text-navy/60"
+                        }`}
+                      >
+                        {u.isActive ? "Active" : "Inactive"}
+                      </button>
+                      {u.onLeaveToday && (
+                        <span className="rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-800">
+                          This user is on leave today
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-2">

@@ -31,6 +31,11 @@ export default function AdminShell({ children }: { children: ReactNode }) {
     { href: "/admin", label: t("dashboard"), match: (p: string) => p === "/admin" },
     { href: "/admin/users", label: t("users"), match: (p: string) => p.startsWith("/admin/users") },
     { href: "/admin/gps-off", label: t("gpsOffLogs"), match: (p: string) => p.startsWith("/admin/gps-off") },
+    {
+      href: "/admin/auto-punch-out",
+      label: t("autoPunchOutLogs"),
+      match: (p: string) => p.startsWith("/admin/auto-punch-out"),
+    },
     { href: "/admin/leaves", label: t("leaveModule"), match: (p: string) => p.startsWith("/admin/leaves") },
     ...(isSuper
       ? [

@@ -4,10 +4,23 @@ import { prisma } from "@/lib/prisma";
 import { downsample } from "@/lib/utils";
 import { sanitizeFaceImage } from "@/lib/faceImage";
 import { assertInsideAssignedAssembly } from "@/lib/assemblyGeofence";
+import { autoPunchOutIfStale } from "@/lib/punchOut";
+
+function istDayBounds(d = new Date()) {
+  const ymd = d.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  return {
+    start: new Date(`${ymd}T00:00:00+05:30`),
+    end: new Date(`${ymd}T23:59:59.999+05:30`),
+  };
+}
 
 export async function GET() {
   const s = await requireUser();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  // Close session if punch-in is older than 12 hours
+  await autoPunchOutIfStale(s.sub);
+
   const open = await prisma.attendance.findFirst({
     where: { userId: s.sub, punchOutAt: null },
     include: { points: { orderBy: { recordedAt: "desc" }, take: 400 } },
@@ -40,6 +53,8 @@ export async function GET() {
 export async function POST(req: Request) {
   const s = await requireUser();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  await autoPunchOutIfStale(s.sub);
+
   const body = await req.json().catch(() => null);
   const lat = Number(body?.lat);
   const lng = Number(body?.lng);
@@ -60,6 +75,24 @@ export async function POST(req: Request) {
   if (!user || !user.isActive) {
     return NextResponse.json({ error: "Account not found or inactive." }, { status: 403 });
   }
+
+  const { start, end } = istDayBounds();
+  const onLeave = await prisma.leaveRequest.findFirst({
+    where: {
+      userId: s.sub,
+      status: "approved",
+      fromDate: { lte: end },
+      toDate: { gte: start },
+    },
+    select: { id: true },
+  });
+  if (onLeave) {
+    return NextResponse.json(
+      { error: "You are on approved leave today. Punch in is not allowed." },
+      { status: 403 }
+    );
+  }
+
   const geo = assertInsideAssignedAssembly({
     assemblyName: user.assemblyName,
     designation: user.designation,

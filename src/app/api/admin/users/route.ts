@@ -31,6 +31,25 @@ export async function GET() {
       },
     },
   });
+
+  const ymd = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  const dayStart = new Date(`${ymd}T00:00:00+05:30`);
+  const dayEnd = new Date(`${ymd}T23:59:59.999+05:30`);
+  const ids = users.map((u) => u.id);
+  const onLeaveRows =
+    ids.length === 0
+      ? []
+      : await prisma.leaveRequest.findMany({
+          where: {
+            userId: { in: ids },
+            status: "approved",
+            fromDate: { lte: dayEnd },
+            toDate: { gte: dayStart },
+          },
+          select: { userId: true },
+        });
+  const onLeaveToday = new Set(onLeaveRows.map((r) => r.userId));
+
   return NextResponse.json({
     users: users.map((u) => ({
       id: u.id,
@@ -43,6 +62,7 @@ export async function GET() {
       district: u.district,
       cluster: u.cluster,
       isActive: u.isActive,
+      onLeaveToday: onLeaveToday.has(u.id),
       faceRegistered: Boolean(u.faceRegisteredAt),
       faceImage: u.faceImage,
       lastPunchIn: u.attendances[0]?.punchInAt ?? null,
