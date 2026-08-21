@@ -413,9 +413,54 @@ export default function DashboardPage() {
           </div>
         )}
 
+        {/* Punch actions ABOVE the map so they never get covered on any phone */}
+        {mode === "idle" && (
+          <div className="mb-3 rounded-[1.75rem] bg-white p-4 shadow-card">
+            {!user.faceRegisteredAt ? (
+              <button
+                type="button"
+                onClick={() => setMode("register")}
+                className="w-full rounded-2xl bg-navy px-5 py-4 text-base font-semibold text-white"
+              >
+                {t("registerFace")}
+              </button>
+            ) : open ? (
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <button
+                  type="button"
+                  onClick={() => setMode("out")}
+                  className="w-full rounded-2xl bg-ink px-5 py-4 text-base font-semibold text-white sm:w-auto sm:min-w-[200px]"
+                >
+                  {t("punchOut")}
+                </button>
+                <span className="text-sm text-navy/60">
+                  {t("live")} · {formatDuration(live?.durationMs || 0)} ·{" "}
+                  {formatKm(
+                    Math.max(
+                      open.distanceMeters,
+                      pathDistance([{ lat: open.punchInLat, lng: open.punchInLng }, ...open.points])
+                    )
+                  )}
+                </span>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                <button
+                  type="button"
+                  onClick={() => setMode("in")}
+                  className="w-full rounded-2xl bg-teal px-5 py-4 text-base font-semibold text-white"
+                >
+                  {t("punchIn")}
+                </button>
+                <p className="text-center text-xs text-navy/45 sm:text-left">{t("punchStart")}</p>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="overflow-hidden rounded-[2rem] bg-white shadow-float">
           {open ? (
-            <div className="h-[min(52vh,420px)] min-h-[280px] overflow-hidden">
+            <div className="h-[min(48vh,400px)] min-h-[240px] overflow-hidden">
               <RouteMap
                 points={open.points}
                 punchIn={{ lat: open.punchInLat, lng: open.punchInLng }}
@@ -425,36 +470,10 @@ export default function DashboardPage() {
               />
             </div>
           ) : (
-            <div className="h-[min(42vh,380px)] min-h-[260px] overflow-hidden">
+            <div className="h-[min(40vh,360px)] min-h-[220px] overflow-hidden">
               <RouteMap points={[]} liveLocation={livePos} />
             </div>
           )}
-
-          <div className="relative z-10 flex flex-wrap items-center gap-2 border-t border-navy/5 bg-white p-4">
-            {!user.faceRegisteredAt && (
-              <button onClick={() => setMode("register")} className="rounded-full bg-navy px-5 py-3 font-semibold text-white">
-                {t("registerFace")}
-              </button>
-            )}
-            {user.faceRegisteredAt && !open && (
-              <button onClick={() => setMode("in")} className="flex items-center gap-2 rounded-full bg-teal px-6 py-3 font-semibold text-white">
-                {t("punchIn")}
-              </button>
-            )}
-            {open && (
-              <button onClick={() => setMode("out")} className="rounded-full bg-ink px-6 py-3 font-semibold text-white">
-                {t("punchOut")}
-              </button>
-            )}
-            {open && (
-              <span className="self-center text-sm text-navy/60">
-                {t("live")} · {formatDuration(live?.durationMs || 0)} · {formatKm(Math.max(open.distanceMeters, pathDistance([{ lat: open.punchInLat, lng: open.punchInLng }, ...open.points])))}
-              </span>
-            )}
-            {user.faceRegisteredAt && !open && (
-              <p className="w-full text-xs text-navy/45 md:w-auto md:flex-1">{t("punchStart")}</p>
-            )}
-          </div>
         </div>
 
         <Link
