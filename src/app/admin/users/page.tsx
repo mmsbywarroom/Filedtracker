@@ -233,7 +233,9 @@ export default function AdminUsersPage() {
         <select value={designation} onChange={(e) => setDesignation(e.target.value)} className={selectClass}>
           <option value="">All designations</option>
           {DESIGNATIONS.map((v) => (
-            <option key={v}>{v}</option>
+            <option key={v} value={v}>
+              {v}
+            </option>
           ))}
         </select>
         <select value={assembly} onChange={(e) => setAssembly(e.target.value)} className={selectClass}>

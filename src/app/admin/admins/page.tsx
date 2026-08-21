@@ -500,7 +500,9 @@ export default function AdminsPage() {
               >
                 <option value="">All designations</option>
                 {DESIGNATIONS.map((d) => (
-                  <option key={d}>{d}</option>
+                  <option key={d} value={d}>
+                    {d}
+                  </option>
                 ))}
               </select>
             </div>

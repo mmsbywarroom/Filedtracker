@@ -116,7 +116,12 @@ export default function AdminDashboardPage() {
       window.location.href = "/admin/login";
       return;
     }
-    setData(await res.json());
+    const json = await res.json().catch(() => null);
+    if (!res.ok || !json || json.error) {
+      setData(null);
+      return;
+    }
+    setData(json);
     const me = await fetch("/api/admin/me").then((r) => r.json());
     if (me.admin?.accessLevel) setLevel(me.admin.accessLevel);
     setIsSuper(Boolean(me.admin?.isSuper));
@@ -195,7 +200,9 @@ export default function AdminDashboardPage() {
           >
             <option value="">All designations</option>
             {DESIGNATIONS.map((d) => (
-              <option key={d}>{d}</option>
+              <option key={d} value={d}>
+                {d}
+              </option>
             ))}
           </select>
         </label>

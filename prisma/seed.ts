@@ -11,7 +11,7 @@ async function main() {
       passwordHash,
       isSuper: true,
       accessLevel: "State",
-      designations: ["State", "ZLC", "DLC", "Cluster", "ALC", "Sector Incharge"],
+      designations: ["State", "Zone Coordinator", "ZLC", "DLC", "Cluster", "ALC", "Sector Incharge"],
     },
     create: {
       email,
@@ -19,7 +19,7 @@ async function main() {
       name: "State Admin",
       isSuper: true,
       accessLevel: "State",
-      designations: ["State", "ZLC", "DLC", "Cluster", "ALC", "Sector Incharge"],
+      designations: ["State", "Zone Coordinator", "ZLC", "DLC", "Cluster", "ALC", "Sector Incharge"],
     },
   });
   console.log("Admin ready:", email);

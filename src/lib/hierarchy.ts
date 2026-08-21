@@ -1,4 +1,12 @@
-export const DESIGNATIONS = ["State", "ZLC", "DLC", "Cluster", "ALC", "Sector Incharge"] as const;
+export const DESIGNATIONS = [
+  "State",
+  "Zone Coordinator",
+  "ZLC",
+  "DLC",
+  "Cluster",
+  "ALC",
+  "Sector Incharge",
+] as const;
 
 export type Designation = (typeof DESIGNATIONS)[number];
 
@@ -20,8 +28,11 @@ export const DESIGNATION_RANK: Record<string, number> = {
 /** Field users a DLC/Cluster admin sees under mapped assemblies (ALC/SI only) */
 export const ASSEMBLY_SCOPED_DESIGNATIONS = ["ALC", "Sector Incharge"] as const;
 
-/** What Zone Coordinator / ZLC admins see on Users + Dashboard */
+/** What Zone Coordinator / ZLC admins see on Users + Dashboard (zone juniors, not peer ZC/ZLC) */
 export const ZONE_SCOPED_DESIGNATIONS = ["DLC", "Cluster", "ALC", "Sector Incharge"] as const;
+
+/** State reviews both zone-level field designations */
+export const ZONE_LEVEL_DESIGNATIONS = ["Zone Coordinator", "ZLC"] as const;
 
 export type AdminScope = {
   id: string;
@@ -269,22 +280,33 @@ export function canSeeUser(
   return false;
 }
 
-/** Immediate junior designation chain:
- * State→ZLC/Zone Coordinator→DLC→Cluster→ALC→Sector Incharge
+/** Immediate junior designation(s):
+ * State→Zone Coordinator/ZLC→DLC→Cluster→ALC→Sector Incharge
  */
-export function leaveReviewDesignation(level: string): string | null {
-  if (isZoneScopedAdmin(level)) return "DLC";
+export function leaveReviewDesignations(level: string): string[] {
+  if (level === "State") return [...ZONE_LEVEL_DESIGNATIONS];
+  if (isZoneScopedAdmin(level)) return ["DLC"];
   const rank = DESIGNATION_RANK[level];
-  if (rank == null) return null;
-  return DESIGNATIONS.find((d) => DESIGNATION_RANK[d] === rank + 1) || null;
+  if (rank == null) return [];
+  const next = DESIGNATIONS.find((d) => DESIGNATION_RANK[d] === rank + 1);
+  return next ? [next] : [];
+}
+
+export function leaveReviewDesignation(level: string): string | null {
+  return leaveReviewDesignations(level)[0] || null;
+}
+
+function designationFilter(next: string[]) {
+  if (next.length === 1) return { designation: next[0] };
+  return { designation: { in: next } };
 }
 
 /** Same geography as users, but only the next designation down (leave + GPS-off). */
 export function nextLevelScopeWhere(admin: AdminScope) {
   if (admin.isSuper) return {};
-  const next = leaveReviewDesignation(admin.accessLevel);
-  if (!next) return NO_USERS;
-  const where: Record<string, unknown> = { designation: next };
+  const next = leaveReviewDesignations(admin.accessLevel);
+  if (!next.length) return NO_USERS;
+  const where: Record<string, unknown> = { ...designationFilter(next) };
   if (isZoneScopedAdmin(admin.accessLevel)) {
     const zone = cleanScope(admin.zone);
     if (!zone) return NO_USERS;
@@ -301,7 +323,7 @@ export function nextLevelScopeWhere(admin: AdminScope) {
     const assemblies = adminAssemblies(admin);
     if (assemblies.length) {
       return {
-        designation: next,
+        ...designationFilter(next),
         OR: assemblies.map((name) => ({
           assemblyName: { equals: name, mode: "insensitive" as const },
         })),
@@ -309,29 +331,29 @@ export function nextLevelScopeWhere(admin: AdminScope) {
     }
     const cluster = cleanScope(admin.cluster);
     if (!cluster) return NO_USERS;
-    const where: Record<string, unknown> = {
-      designation: next,
+    const scoped: Record<string, unknown> = {
+      ...designationFilter(next),
       cluster: { equals: cluster, mode: "insensitive" as const },
     };
     const zone = cleanScope(admin.zone);
     const district = cleanScope(admin.district);
-    if (zone) where.zone = { equals: zone, mode: "insensitive" as const };
-    if (district) where.district = { equals: district, mode: "insensitive" as const };
-    return where;
+    if (zone) scoped.zone = { equals: zone, mode: "insensitive" as const };
+    if (district) scoped.district = { equals: district, mode: "insensitive" as const };
+    return scoped;
   } else if (admin.accessLevel === "ALC") {
     const assembly = cleanScope(admin.assemblyName);
     if (!assembly) return NO_USERS;
-    const where: Record<string, unknown> = {
-      designation: next,
+    const scoped: Record<string, unknown> = {
+      ...designationFilter(next),
       assemblyName: { equals: assembly, mode: "insensitive" as const },
     };
     const zone = cleanScope(admin.zone);
     const district = cleanScope(admin.district);
-    if (zone) where.zone = { equals: zone, mode: "insensitive" as const };
-    if (district) where.district = { equals: district, mode: "insensitive" as const };
-    return where;
+    if (zone) scoped.zone = { equals: zone, mode: "insensitive" as const };
+    if (district) scoped.district = { equals: district, mode: "insensitive" as const };
+    return scoped;
   } else if (admin.accessLevel === "State") {
-    // statewide — all next-level (ZLC) users
+    // statewide — Zone Coordinator + ZLC
   } else {
     return NO_USERS;
   }
@@ -346,8 +368,8 @@ export function canReviewLeave(
   user: { designation?: string | null; zone: string; district: string; assemblyName: string; cluster?: string | null }
 ) {
   if (admin.isSuper) return true;
-  const next = leaveReviewDesignation(admin.accessLevel);
-  if (!next || user.designation !== next) return false;
+  const next = leaveReviewDesignations(admin.accessLevel);
+  if (!next.length || !next.includes(user.designation || "")) return false;
   if (admin.accessLevel === "State") return true;
   if (isZoneScopedAdmin(admin.accessLevel)) {
     const zone = cleanScope(admin.zone);

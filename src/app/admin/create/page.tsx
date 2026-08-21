@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
+import { DESIGNATIONS } from "@/lib/hierarchy";
 
 const empty = {
   name: "",
@@ -108,8 +109,10 @@ function CreateUserForm() {
                   onChange={(e) => setForm({ ...form, designation: e.target.value })}
                   className="mt-1 w-full rounded-xl border border-navy/10 bg-sand/40 px-3 py-2 text-sm"
                 >
-                  {["State", "ZLC", "DLC", "Cluster", "ALC", "Sector Incharge"].map((d) => (
-                    <option key={d}>{d}</option>
+                  {DESIGNATIONS.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
                   ))}
                 </select>
               ) : (

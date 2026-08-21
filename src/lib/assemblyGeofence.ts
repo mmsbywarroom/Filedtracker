@@ -28,7 +28,7 @@ export type GeofenceResult =
   | { ok: false; error: string; code: "NO_ASSEMBLY" | "UNKNOWN_ASSEMBLY" | "OUTSIDE" };
 
 /** These designations may punch anywhere inside Punjab + Chandigarh (not other states). */
-export const STATEWIDE_PUNCH_DESIGNATIONS = new Set(["State", "ZLC", "DLC", "Cluster"]);
+export const STATEWIDE_PUNCH_DESIGNATIONS = new Set(["State", "Zone Coordinator", "ZLC", "DLC", "Cluster"]);
 
 let regionCache: { geometries: Geometry[] } | null = null;
 
