@@ -17,10 +17,10 @@ export const DESIGNATION_RANK: Record<string, number> = {
   "Sector Incharge": 5,
 };
 
-/** Field users a DLC/Cluster admin sees under mapped assemblies */
+/** Field users a DLC/Cluster admin sees under mapped assemblies (ALC/SI only) */
 export const ASSEMBLY_SCOPED_DESIGNATIONS = ["ALC", "Sector Incharge"] as const;
 
-/** What Zone Coordinator / ZLC admins see by default */
+/** What Zone Coordinator / ZLC admins see on Users + Dashboard */
 export const ZONE_SCOPED_DESIGNATIONS = ["DLC", "Cluster", "ALC", "Sector Incharge"] as const;
 
 export type AdminScope = {
@@ -48,36 +48,23 @@ export function designationsBelow(level: string): string[] {
   return DESIGNATIONS.filter((d) => DESIGNATION_RANK[d] > rank);
 }
 
+/**
+ * Designations each admin level sees on Users + Dashboard (hierarchy, not checkboxes).
+ * State → all | ZLC/Zone Coord → DLC..SI | DLC → Cluster..SI | Cluster → ALC,SI | ALC → SI
+ */
 export function defaultVisibleDesignations(level: string): string[] {
   if (level === "State") return [...DESIGNATIONS];
   if (isZoneScopedAdmin(level)) return [...ZONE_SCOPED_DESIGNATIONS];
-  if (level === "DLC" || level === "Cluster") return [...ASSEMBLY_SCOPED_DESIGNATIONS];
+  if (level === "DLC") return designationsBelow("DLC"); // Cluster, ALC, Sector Incharge
+  if (level === "Cluster") return [...ASSEMBLY_SCOPED_DESIGNATIONS];
+  if (level === "ALC") return ["Sector Incharge"];
   return designationsBelow(level);
 }
 
+/** Users/Dashboard scope always follows accessLevel hierarchy (ignores stale checkbox lists). */
 export function visibleDesignationsFor(admin: Pick<AdminScope, "isSuper" | "accessLevel" | "designations">): string[] {
   if (admin.isSuper) return [...DESIGNATIONS];
-  // State admins always see every designation of users (leave/GPS still use next-level scope)
   if (admin.accessLevel === "State") return [...DESIGNATIONS];
-  if (isZoneScopedAdmin(admin.accessLevel)) {
-    if (admin.designations.length) {
-      const scoped = admin.designations.filter((d) =>
-        (ZONE_SCOPED_DESIGNATIONS as readonly string[]).includes(d)
-      );
-      return scoped.length ? scoped : [...ZONE_SCOPED_DESIGNATIONS];
-    }
-    return [...ZONE_SCOPED_DESIGNATIONS];
-  }
-  if (admin.accessLevel === "DLC" || admin.accessLevel === "Cluster") {
-    if (admin.designations.length) {
-      const scoped = admin.designations.filter((d) =>
-        (ASSEMBLY_SCOPED_DESIGNATIONS as readonly string[]).includes(d)
-      );
-      return scoped.length ? scoped : [...ASSEMBLY_SCOPED_DESIGNATIONS];
-    }
-    return [...ASSEMBLY_SCOPED_DESIGNATIONS];
-  }
-  if (admin.designations.length) return admin.designations;
   return defaultVisibleDesignations(admin.accessLevel);
 }
 
@@ -112,35 +99,89 @@ export function parseAssembliesInput(raw: unknown): string[] {
   return [];
 }
 
+/**
+ * Users + Dashboard filter by hierarchy.
+ * State = whole state
+ * ZLC / Zone Coordinator = DLC+Cluster+ALC+SI in their zone
+ * DLC = Cluster+ALC+SI in district (ALC/SI limited to mapped assemblies when set)
+ * Cluster = ALC+SI in mapped assemblies or cluster
+ * ALC = Sector Incharge in assembly
+ */
 export function userScopeWhere(admin: AdminScope) {
   if (admin.isSuper) return {};
-  // State: all designations statewide — no designation filter
   if (admin.accessLevel === "State") return {};
+
   const dens = visibleDesignationsFor(admin);
-  const where: Record<string, unknown> = {
-    designation: { in: dens.length ? dens : ["__none__"] },
-  };
+  if (!dens.length) return NO_USERS;
+
   if (isZoneScopedAdmin(admin.accessLevel)) {
-    if (!admin.zone) return NO_USERS;
-    where.zone = admin.zone;
-  } else if (admin.accessLevel === "DLC" || admin.accessLevel === "Cluster") {
-    const assemblies = adminAssemblies(admin);
-    if (!assemblies.length) return NO_USERS;
-    where.assemblyName = { in: assemblies };
-    if (admin.zone) where.zone = admin.zone;
-    if (admin.district) where.district = admin.district;
-  } else if (admin.accessLevel === "ALC") {
-    if (!admin.assemblyName) return NO_USERS;
-    if (admin.zone) where.zone = admin.zone;
-    if (admin.district) where.district = admin.district;
-    where.assemblyName = admin.assemblyName;
-  } else {
-    if (admin.zone) where.zone = admin.zone;
-    if (admin.district) where.district = admin.district;
-    if (admin.assemblyName) where.assemblyName = admin.assemblyName;
-    if (admin.cluster) where.cluster = admin.cluster;
+    if (!admin.zone?.trim()) return NO_USERS;
+    return {
+      designation: { in: dens },
+      zone: admin.zone.trim(),
+    };
   }
-  return where;
+
+  if (admin.accessLevel === "DLC") {
+    if (!admin.district?.trim()) return NO_USERS;
+    const assemblies = adminAssemblies(admin);
+    const base: Record<string, unknown> = {
+      district: admin.district.trim(),
+    };
+    if (admin.zone?.trim()) base.zone = admin.zone.trim();
+
+    if (assemblies.length) {
+      // Cluster anywhere in district + ALC/SI only in mapped assemblies
+      return {
+        ...base,
+        OR: [
+          { designation: "Cluster" },
+          {
+            designation: { in: ["ALC", "Sector Incharge"] },
+            assemblyName: { in: assemblies },
+          },
+        ],
+      };
+    }
+    return {
+      ...base,
+      designation: { in: dens },
+    };
+  }
+
+  if (admin.accessLevel === "Cluster") {
+    const assemblies = adminAssemblies(admin);
+    if (assemblies.length) {
+      const where: Record<string, unknown> = {
+        designation: { in: dens },
+        assemblyName: { in: assemblies },
+      };
+      if (admin.zone?.trim()) where.zone = admin.zone.trim();
+      if (admin.district?.trim()) where.district = admin.district.trim();
+      return where;
+    }
+    if (!admin.cluster?.trim()) return NO_USERS;
+    const where: Record<string, unknown> = {
+      designation: { in: dens },
+      cluster: admin.cluster.trim(),
+    };
+    if (admin.zone?.trim()) where.zone = admin.zone.trim();
+    if (admin.district?.trim()) where.district = admin.district.trim();
+    return where;
+  }
+
+  if (admin.accessLevel === "ALC") {
+    if (!admin.assemblyName?.trim()) return NO_USERS;
+    const where: Record<string, unknown> = {
+      designation: { in: dens },
+      assemblyName: admin.assemblyName.trim(),
+    };
+    if (admin.zone?.trim()) where.zone = admin.zone.trim();
+    if (admin.district?.trim()) where.district = admin.district.trim();
+    return where;
+  }
+
+  return NO_USERS;
 }
 
 export function canSeeUser(
@@ -149,25 +190,35 @@ export function canSeeUser(
 ) {
   if (admin.isSuper) return true;
   if (admin.accessLevel === "State") return true;
+
   const dens = visibleDesignationsFor(admin);
-  if (user.designation && !dens.includes(user.designation)) return false;
-  if (isZoneScopedAdmin(admin.accessLevel)) return Boolean(admin.zone) && user.zone === admin.zone;
-  if (admin.accessLevel === "DLC" || admin.accessLevel === "Cluster") {
+  const des = user.designation || "";
+  if (!dens.includes(des)) return false;
+
+  if (isZoneScopedAdmin(admin.accessLevel)) {
+    return Boolean(admin.zone?.trim()) && user.zone.trim() === admin.zone.trim();
+  }
+
+  if (admin.accessLevel === "DLC") {
+    if (!admin.district?.trim() || user.district.trim() !== admin.district.trim()) return false;
+    if (admin.zone?.trim() && user.zone.trim() !== admin.zone.trim()) return false;
     const assemblies = adminAssemblies(admin);
-    if (!assemblies.length) return false;
-    if (!assemblies.includes(user.assemblyName)) return false;
-    if (admin.zone && user.zone !== admin.zone) return false;
-    if (admin.district && user.district !== admin.district) return false;
-    return true;
+    if (!assemblies.length) return true;
+    if (des === "Cluster") return true;
+    return assemblies.includes(user.assemblyName);
   }
+
+  if (admin.accessLevel === "Cluster") {
+    const assemblies = adminAssemblies(admin);
+    if (assemblies.length) return assemblies.includes(user.assemblyName);
+    return Boolean(admin.cluster?.trim()) && (user.cluster || "").trim() === admin.cluster.trim();
+  }
+
   if (admin.accessLevel === "ALC") {
-    return Boolean(admin.assemblyName) && user.assemblyName === admin.assemblyName;
+    return Boolean(admin.assemblyName?.trim()) && user.assemblyName.trim() === admin.assemblyName.trim();
   }
-  if (admin.zone && user.zone !== admin.zone) return false;
-  if (admin.district && user.district !== admin.district) return false;
-  if (admin.assemblyName && user.assemblyName !== admin.assemblyName) return false;
-  if (admin.cluster && (user.cluster || "") !== admin.cluster) return false;
-  return true;
+
+  return false;
 }
 
 /** Immediate junior designation chain:

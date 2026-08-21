@@ -191,12 +191,15 @@ export default function AdminsPage() {
       setError("Select a district.");
       return;
     }
-    if (form.accessLevel === "Cluster" && !form.cluster) {
-      setError("Select a cluster.");
+    if (form.accessLevel === "Cluster" && !form.cluster && !form.assemblies.length) {
+      setError("Select a cluster or map at least one assembly.");
       return;
     }
     if ((form.accessLevel === "DLC" || form.accessLevel === "Cluster") && !form.assemblies.length) {
-      setError("Select at least one assembly for this DLC / Cluster.");
+      // Assemblies optional for DLC (district covers users); Cluster needs cluster or assemblies (checked above)
+    }
+    if (form.accessLevel === "DLC" && !form.district) {
+      setError("Select a district.");
       return;
     }
     if (form.accessLevel === "ALC" && !form.assemblyName) {
@@ -441,8 +444,8 @@ export default function AdminsPage() {
                 Mapped assemblies ({form.assemblies.length} selected)
               </p>
               <p className="mt-1 text-xs text-navy/50">
-                Tick every assembly under this {form.accessLevel}. Users list will show ALC + Sector Incharge in these
-                assemblies only.
+                Optional for DLC (district already scopes users). For Cluster, map assemblies or set cluster name.
+                When mapped, ALC / Sector Incharge are limited to these assemblies.
               </p>
               <div className="mt-2 max-h-48 overflow-auto rounded-xl border border-navy/10 bg-sand/30 p-2">
                 {assemblies.length ? (

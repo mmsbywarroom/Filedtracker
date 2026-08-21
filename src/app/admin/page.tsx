@@ -147,10 +147,10 @@ export default function AdminDashboardPage() {
       ? "No assembly assigned — no users visible"
       : (level === "ZLC" || level === "Zone Coordinator") && !scope.zone
         ? "No zone assigned — no users visible"
-        : (level === "DLC" || level === "Cluster") && !mappedAssemblies.length
-          ? "No assemblies mapped — map assemblies on this admin to see ALC / Sector Incharge users"
-          : level === "Cluster" && !scope.cluster && !mappedAssemblies.length
-            ? "No cluster assigned — no users visible"
+        : level === "DLC" && !scope.district
+          ? "No district assigned — no users visible"
+          : level === "Cluster" && !mappedAssemblies.length && !scope.cluster
+            ? "No cluster / assemblies assigned — no users visible"
             : [
                 "Users in scope",
                 scope.zone,

@@ -70,8 +70,8 @@ export async function POST(req: Request) {
       errors.push({ row: i + 2, error: "District is required for this level." });
       continue;
     }
-    if (accessLevel === "Cluster" && !cluster) {
-      errors.push({ row: i + 2, error: "Cluster is required for Cluster level." });
+    if (accessLevel === "Cluster" && !cluster && !parseAssembliesInput(assemblyRaw).length) {
+      errors.push({ row: i + 2, error: "Cluster name or Assemblies required for Cluster level." });
       continue;
     }
 
@@ -79,13 +79,17 @@ export async function POST(req: Request) {
     let assemblyName = "";
     if (accessLevel === "DLC" || accessLevel === "Cluster") {
       if (!assemblies.length) {
-        errors.push({
-          row: i + 2,
-          error: "DLC/Cluster need Assemblies column with one or more names, e.g. Bhoa|Sujanpur|Pathankot",
-        });
-        continue;
+        if (accessLevel === "Cluster" && !cluster) {
+          errors.push({
+            row: i + 2,
+            error: "Cluster needs Cluster name or Assemblies (e.g. Bhoa|Sujanpur)",
+          });
+          continue;
+        }
+        // DLC can rely on district alone
+      } else {
+        assemblyName = assemblies.join("|");
       }
-      assemblyName = assemblies.join("|");
     } else if (accessLevel === "ALC") {
       if (!assemblies.length) {
         errors.push({ row: i + 2, error: "Assembly is required for ALC." });

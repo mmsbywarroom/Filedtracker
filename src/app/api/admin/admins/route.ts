@@ -67,18 +67,15 @@ export async function POST(req: Request) {
   if ((accessLevel === "DLC" || accessLevel === "Cluster" || accessLevel === "ALC") && !district) {
     return NextResponse.json({ error: "District is required." }, { status: 400 });
   }
-  if (accessLevel === "Cluster" && !cluster) {
-    return NextResponse.json({ error: "Cluster is required." }, { status: 400 });
-  }
   if (accessLevel === "DLC" || accessLevel === "Cluster") {
     if (!assemblies.length && assemblyName) assemblies = parseAssembliesInput(assemblyName);
-    if (!assemblies.length) {
+    if (accessLevel === "Cluster" && !assemblies.length && !cluster) {
       return NextResponse.json(
-        { error: "Map at least one assembly for DLC / Cluster (pipe-separated in CSV, or multi-select)." },
+        { error: "Cluster needs a cluster name or at least one mapped assembly." },
         { status: 400 }
       );
     }
-    assemblyName = assemblies.join("|");
+    if (assemblies.length) assemblyName = assemblies.join("|");
   }
   if (accessLevel === "ALC") {
     if (!assemblyName) return NextResponse.json({ error: "Assembly is required for ALC." }, { status: 400 });
