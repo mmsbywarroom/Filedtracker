@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { BrandMark } from "@/components/BrandMark";
-import { DESIGNATIONS } from "@/lib/hierarchy";
+import { DESIGNATIONS, cleanScope } from "@/lib/hierarchy";
 import { formatKm } from "@/lib/utils";
 
 type Group = {
@@ -136,27 +136,27 @@ export default function AdminDashboardPage() {
 
   const mappedAssemblies =
     scope.assemblies.length > 0
-      ? scope.assemblies
-      : scope.assemblyName
-        ? scope.assemblyName.split(/[|;,]/).map((a) => a.trim()).filter(Boolean)
+      ? scope.assemblies.map(cleanScope).filter(Boolean)
+      : cleanScope(scope.assemblyName)
+        ? cleanScope(scope.assemblyName).split(/[|;,]/).map((a) => cleanScope(a)).filter(Boolean)
         : [];
 
   const scopeText = isSuper
     ? "Full organisation"
-    : level === "ALC" && !scope.assemblyName
+    : level === "ALC" && !cleanScope(scope.assemblyName)
       ? "No assembly assigned — no users visible"
-      : (level === "ZLC" || level === "Zone Coordinator") && !scope.zone
+      : (level === "ZLC" || level === "Zone Coordinator") && !cleanScope(scope.zone)
         ? "No zone assigned — no users visible"
-        : level === "DLC" && !scope.district
+        : level === "DLC" && !cleanScope(scope.district) && !mappedAssemblies.length
           ? "No district assigned — no users visible"
-          : level === "Cluster" && !mappedAssemblies.length && !scope.cluster
+          : level === "Cluster" && !mappedAssemblies.length && !cleanScope(scope.cluster)
             ? "No cluster / assemblies assigned — no users visible"
             : [
                 "Users in scope",
-                scope.zone,
-                scope.district,
-                scope.cluster,
-                mappedAssemblies.length ? `${mappedAssemblies.length} assemblies` : scope.assemblyName,
+                cleanScope(scope.zone),
+                cleanScope(scope.district),
+                cleanScope(scope.cluster),
+                mappedAssemblies.length ? `${mappedAssemblies.length} assemblies` : cleanScope(scope.assemblyName),
               ]
                 .filter(Boolean)
                 .join(" · ");

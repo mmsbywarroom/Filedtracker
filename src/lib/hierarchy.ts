@@ -37,7 +37,19 @@ export type AdminScope = {
   cluster: string;
 };
 
-const NO_USERS = { id: "__none__" };
+/** Matches zero rows; uses AND so it never clashes with a top-level `id` filter. */
+const NO_USERS = { AND: [{ id: "__none__" }] };
+
+/** Treat placeholder values like NA as empty so they don't break filters */
+export function cleanScope(v?: string | null): string {
+  const s = String(v ?? "").trim();
+  if (!s) return "";
+  const lower = s.toLowerCase();
+  if (["na", "n/a", "n.a.", "n.a", "-", "--", "none", "null", "nil", "undefined"].includes(lower)) {
+    return "";
+  }
+  return s;
+}
 
 export function isZoneScopedAdmin(level: string) {
   return level === "ZLC" || level === "Zone Coordinator";
@@ -78,25 +90,43 @@ export function canManageAdmins(admin: Pick<AdminScope, "isSuper">) {
 
 /** Parse assemblies list from admin record (array or pipe-separated assemblyName). */
 export function adminAssemblies(admin: Pick<AdminScope, "assemblies" | "assemblyName" | "accessLevel">): string[] {
-  const fromArr = (admin.assemblies || []).map((a) => a.trim()).filter(Boolean);
+  const fromArr = (admin.assemblies || []).map((a) => cleanScope(a)).filter(Boolean);
   if (fromArr.length) return Array.from(new Set(fromArr));
-  const raw = String(admin.assemblyName || "").trim();
+  const raw = cleanScope(admin.assemblyName);
   if (!raw) return [];
-  if (/[|;,]/.test(raw)) {
-    return Array.from(new Set(raw.split(/[|;,]/).map((a) => a.trim()).filter(Boolean)));
+  if (/[|;,]/.test(String(admin.assemblyName || ""))) {
+    return Array.from(
+      new Set(
+        String(admin.assemblyName || "")
+          .split(/[|;,]/)
+          .map((a) => cleanScope(a))
+          .filter(Boolean)
+      )
+    );
   }
-  if (admin.accessLevel === "ALC") return [raw];
+  if (admin.accessLevel === "ALC" && raw) return [raw];
   return [];
 }
 
 export function parseAssembliesInput(raw: unknown): string[] {
   if (Array.isArray(raw)) {
-    return Array.from(new Set(raw.map((a) => String(a || "").trim()).filter(Boolean)));
+    return Array.from(new Set(raw.map((a) => cleanScope(String(a || ""))).filter(Boolean)));
   }
   if (typeof raw === "string") {
-    return Array.from(new Set(raw.split(/[|;,]/).map((a) => a.trim()).filter(Boolean)));
+    return Array.from(new Set(raw.split(/[|;,]/).map((a) => cleanScope(a)).filter(Boolean)));
   }
   return [];
+}
+
+function assemblyNameFilter(assemblies: string[]) {
+  if (assemblies.length === 1) {
+    return { assemblyName: { equals: assemblies[0], mode: "insensitive" as const } };
+  }
+  return {
+    OR: assemblies.map((name) => ({
+      assemblyName: { equals: name, mode: "insensitive" as const },
+    })),
+  };
 }
 
 /**
@@ -114,31 +144,43 @@ export function userScopeWhere(admin: AdminScope) {
   const dens = visibleDesignationsFor(admin);
   if (!dens.length) return NO_USERS;
 
+  const zone = cleanScope(admin.zone);
+  const district = cleanScope(admin.district);
+  const cluster = cleanScope(admin.cluster);
+  const assembly = cleanScope(admin.assemblyName);
+  const assemblies = adminAssemblies(admin);
+
   if (isZoneScopedAdmin(admin.accessLevel)) {
-    if (!admin.zone?.trim()) return NO_USERS;
+    if (!zone) return NO_USERS;
     return {
       designation: { in: dens },
-      zone: admin.zone.trim(),
+      zone: { equals: zone, mode: "insensitive" as const },
     };
   }
 
   if (admin.accessLevel === "DLC") {
-    if (!admin.district?.trim()) return NO_USERS;
-    const assemblies = adminAssemblies(admin);
+    if (!district && !assemblies.length) return NO_USERS;
+
+    if (assemblies.length && !district) {
+      // District missing/NA but assemblies mapped — use assemblies only
+      return {
+        designation: { in: dens },
+        ...assemblyNameFilter(assemblies),
+      };
+    }
+
     const base: Record<string, unknown> = {
-      district: admin.district.trim(),
+      district: { equals: district, mode: "insensitive" as const },
     };
-    if (admin.zone?.trim()) base.zone = admin.zone.trim();
+    if (zone) base.zone = { equals: zone, mode: "insensitive" as const };
 
     if (assemblies.length) {
-      // Cluster anywhere in district + ALC/SI only in mapped assemblies
       return {
         ...base,
         OR: [
           { designation: "Cluster" },
           {
-            designation: { in: ["ALC", "Sector Incharge"] },
-            assemblyName: { in: assemblies },
+            AND: [{ designation: { in: ["ALC", "Sector Incharge"] } }, assemblyNameFilter(assemblies)],
           },
         ],
       };
@@ -150,34 +192,32 @@ export function userScopeWhere(admin: AdminScope) {
   }
 
   if (admin.accessLevel === "Cluster") {
-    const assemblies = adminAssemblies(admin);
     if (assemblies.length) {
-      const where: Record<string, unknown> = {
+      // Mapped assemblies are the source of truth — do NOT also require zone/district
+      // (many Cluster admins have placeholder NA in those fields)
+      return {
         designation: { in: dens },
-        assemblyName: { in: assemblies },
+        ...assemblyNameFilter(assemblies),
       };
-      if (admin.zone?.trim()) where.zone = admin.zone.trim();
-      if (admin.district?.trim()) where.district = admin.district.trim();
-      return where;
     }
-    if (!admin.cluster?.trim()) return NO_USERS;
+    if (!cluster) return NO_USERS;
     const where: Record<string, unknown> = {
       designation: { in: dens },
-      cluster: admin.cluster.trim(),
+      cluster: { equals: cluster, mode: "insensitive" as const },
     };
-    if (admin.zone?.trim()) where.zone = admin.zone.trim();
-    if (admin.district?.trim()) where.district = admin.district.trim();
+    if (zone) where.zone = { equals: zone, mode: "insensitive" as const };
+    if (district) where.district = { equals: district, mode: "insensitive" as const };
     return where;
   }
 
   if (admin.accessLevel === "ALC") {
-    if (!admin.assemblyName?.trim()) return NO_USERS;
+    if (!assembly) return NO_USERS;
     const where: Record<string, unknown> = {
       designation: { in: dens },
-      assemblyName: admin.assemblyName.trim(),
+      assemblyName: { equals: assembly, mode: "insensitive" as const },
     };
-    if (admin.zone?.trim()) where.zone = admin.zone.trim();
-    if (admin.district?.trim()) where.district = admin.district.trim();
+    if (zone) where.zone = { equals: zone, mode: "insensitive" as const };
+    if (district) where.district = { equals: district, mode: "insensitive" as const };
     return where;
   }
 
@@ -195,27 +235,35 @@ export function canSeeUser(
   const des = user.designation || "";
   if (!dens.includes(des)) return false;
 
+  const zone = cleanScope(admin.zone);
+  const district = cleanScope(admin.district);
+  const cluster = cleanScope(admin.cluster);
+  const assembly = cleanScope(admin.assemblyName);
+  const assemblies = adminAssemblies(admin);
+  const userAssembly = (user.assemblyName || "").trim().toLowerCase();
+
   if (isZoneScopedAdmin(admin.accessLevel)) {
-    return Boolean(admin.zone?.trim()) && user.zone.trim() === admin.zone.trim();
+    return Boolean(zone) && user.zone.trim().toLowerCase() === zone.toLowerCase();
   }
 
   if (admin.accessLevel === "DLC") {
-    if (!admin.district?.trim() || user.district.trim() !== admin.district.trim()) return false;
-    if (admin.zone?.trim() && user.zone.trim() !== admin.zone.trim()) return false;
-    const assemblies = adminAssemblies(admin);
+    if (assemblies.length && !district) {
+      return assemblies.some((a) => a.toLowerCase() === userAssembly);
+    }
+    if (!district || user.district.trim().toLowerCase() !== district.toLowerCase()) return false;
+    if (zone && user.zone.trim().toLowerCase() !== zone.toLowerCase()) return false;
     if (!assemblies.length) return true;
     if (des === "Cluster") return true;
-    return assemblies.includes(user.assemblyName);
+    return assemblies.some((a) => a.toLowerCase() === userAssembly);
   }
 
   if (admin.accessLevel === "Cluster") {
-    const assemblies = adminAssemblies(admin);
-    if (assemblies.length) return assemblies.includes(user.assemblyName);
-    return Boolean(admin.cluster?.trim()) && (user.cluster || "").trim() === admin.cluster.trim();
+    if (assemblies.length) return assemblies.some((a) => a.toLowerCase() === userAssembly);
+    return Boolean(cluster) && (user.cluster || "").trim().toLowerCase() === cluster.toLowerCase();
   }
 
   if (admin.accessLevel === "ALC") {
-    return Boolean(admin.assemblyName?.trim()) && user.assemblyName.trim() === admin.assemblyName.trim();
+    return Boolean(assembly) && userAssembly === assembly.toLowerCase();
   }
 
   return false;
@@ -238,31 +286,50 @@ export function nextLevelScopeWhere(admin: AdminScope) {
   if (!next) return NO_USERS;
   const where: Record<string, unknown> = { designation: next };
   if (isZoneScopedAdmin(admin.accessLevel)) {
-    if (!admin.zone) return NO_USERS;
-    where.zone = admin.zone;
+    const zone = cleanScope(admin.zone);
+    if (!zone) return NO_USERS;
+    where.zone = { equals: zone, mode: "insensitive" as const };
   } else if (admin.accessLevel === "DLC") {
     // Leave/GPS: next level is Cluster — keep district scope
-    if (!admin.district) return NO_USERS;
-    if (admin.zone) where.zone = admin.zone;
-    where.district = admin.district;
+    const district = cleanScope(admin.district);
+    if (!district) return NO_USERS;
+    where.district = { equals: district, mode: "insensitive" as const };
+    const zone = cleanScope(admin.zone);
+    if (zone) where.zone = { equals: zone, mode: "insensitive" as const };
   } else if (admin.accessLevel === "Cluster") {
     // Leave/GPS: next level is ALC — use mapped assemblies when set
     const assemblies = adminAssemblies(admin);
     if (assemblies.length) {
-      where.assemblyName = { in: assemblies };
-      if (admin.zone) where.zone = admin.zone;
-      if (admin.district) where.district = admin.district;
-    } else {
-      if (!admin.cluster) return NO_USERS;
-      if (admin.zone) where.zone = admin.zone;
-      if (admin.district) where.district = admin.district;
-      where.cluster = admin.cluster;
+      return {
+        designation: next,
+        OR: assemblies.map((name) => ({
+          assemblyName: { equals: name, mode: "insensitive" as const },
+        })),
+      };
     }
+    const cluster = cleanScope(admin.cluster);
+    if (!cluster) return NO_USERS;
+    const where: Record<string, unknown> = {
+      designation: next,
+      cluster: { equals: cluster, mode: "insensitive" as const },
+    };
+    const zone = cleanScope(admin.zone);
+    const district = cleanScope(admin.district);
+    if (zone) where.zone = { equals: zone, mode: "insensitive" as const };
+    if (district) where.district = { equals: district, mode: "insensitive" as const };
+    return where;
   } else if (admin.accessLevel === "ALC") {
-    if (!admin.assemblyName) return NO_USERS;
-    if (admin.zone) where.zone = admin.zone;
-    if (admin.district) where.district = admin.district;
-    where.assemblyName = admin.assemblyName;
+    const assembly = cleanScope(admin.assemblyName);
+    if (!assembly) return NO_USERS;
+    const where: Record<string, unknown> = {
+      designation: next,
+      assemblyName: { equals: assembly, mode: "insensitive" as const },
+    };
+    const zone = cleanScope(admin.zone);
+    const district = cleanScope(admin.district);
+    if (zone) where.zone = { equals: zone, mode: "insensitive" as const };
+    if (district) where.district = { equals: district, mode: "insensitive" as const };
+    return where;
   } else if (admin.accessLevel === "State") {
     // statewide — all next-level (ZLC) users
   } else {
@@ -282,22 +349,26 @@ export function canReviewLeave(
   const next = leaveReviewDesignation(admin.accessLevel);
   if (!next || user.designation !== next) return false;
   if (admin.accessLevel === "State") return true;
-  if (isZoneScopedAdmin(admin.accessLevel)) return Boolean(admin.zone) && user.zone === admin.zone;
+  if (isZoneScopedAdmin(admin.accessLevel)) {
+    const zone = cleanScope(admin.zone);
+    return Boolean(zone) && user.zone.trim().toLowerCase() === zone.toLowerCase();
+  }
   if (admin.accessLevel === "DLC") {
-    return Boolean(admin.district) && user.district === admin.district && (!admin.zone || user.zone === admin.zone);
+    const district = cleanScope(admin.district);
+    return Boolean(district) && user.district.trim().toLowerCase() === district.toLowerCase();
   }
   if (admin.accessLevel === "Cluster") {
     const assemblies = adminAssemblies(admin);
     if (assemblies.length) {
-      if (!assemblies.includes(user.assemblyName)) return false;
-      if (admin.zone && user.zone !== admin.zone) return false;
-      if (admin.district && user.district !== admin.district) return false;
-      return true;
+      const userAssembly = (user.assemblyName || "").trim().toLowerCase();
+      return assemblies.some((a) => a.toLowerCase() === userAssembly);
     }
-    return Boolean(admin.cluster) && (user.cluster || "") === admin.cluster;
+    const cluster = cleanScope(admin.cluster);
+    return Boolean(cluster) && (user.cluster || "").trim().toLowerCase() === cluster.toLowerCase();
   }
   if (admin.accessLevel === "ALC") {
-    return Boolean(admin.assemblyName) && user.assemblyName === admin.assemblyName;
+    const assembly = cleanScope(admin.assemblyName);
+    return Boolean(assembly) && user.assemblyName.trim().toLowerCase() === assembly.toLowerCase();
   }
   return false;
 }

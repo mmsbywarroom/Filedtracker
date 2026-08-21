@@ -92,7 +92,7 @@ export async function DELETE(req: Request) {
   if (ids.length > 500) return NextResponse.json({ error: "Too many users at once (max 500)." }, { status: 400 });
 
   const scoped = await prisma.user.findMany({
-    where: { id: { in: ids }, ...userScopeWhere(s.admin) },
+    where: { AND: [{ id: { in: ids } }, userScopeWhere(s.admin)] },
     select: { id: true },
   });
   const allowed = scoped.map((u) => u.id);
