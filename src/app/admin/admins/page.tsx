@@ -33,6 +33,8 @@ export default function AdminsPage() {
   const [designationFilter, setDesignationFilter] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
+  const [bulkBusy, setBulkBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState({
     name: "",
@@ -58,6 +60,7 @@ export default function AdminsPage() {
     }
     const data = await res.json();
     setAdmins(data.admins || []);
+    setSelected({});
     const look = await fetch("/api/admin/lookups").then((r) => r.json());
     setPlaces(look.places || []);
   }
@@ -120,6 +123,33 @@ export default function AdminsPage() {
     return filtered.slice(start, start + pageSize);
   }, [filtered, page, pageSize]);
 
+  const deletablePage = useMemo(() => pageRows.filter((a) => !a.isSuper), [pageRows]);
+  const selectedCount = useMemo(() => Object.values(selected).filter(Boolean).length, [selected]);
+  const pageAllSelected = deletablePage.length > 0 && deletablePage.every((a) => selected[a.id]);
+
+  function toggleOne(id: string) {
+    setSelected((s) => ({ ...s, [id]: !s[id] }));
+  }
+
+  function togglePage() {
+    setSelected((s) => {
+      const next = { ...s };
+      const turnOn = !pageAllSelected;
+      for (const a of deletablePage) next[a.id] = turnOn;
+      return next;
+    });
+  }
+
+  function selectFiltered() {
+    setSelected((s) => {
+      const next = { ...s };
+      for (const a of filtered) {
+        if (!a.isSuper) next[a.id] = true;
+      }
+      return next;
+    });
+  }
+
   function setLevel(accessLevel: string) {
     setForm({ ...form, accessLevel, designations: defaultVisibleDesignations(accessLevel) });
   }
@@ -178,6 +208,26 @@ export default function AdminsPage() {
   async function remove(id: string) {
     if (!confirm("Delete this admin login?")) return;
     await fetch(`/api/admin/admins/${id}`, { method: "DELETE" });
+    load();
+  }
+
+  async function bulkDelete() {
+    const ids = Object.keys(selected).filter((id) => selected[id]);
+    if (!ids.length) return;
+    if (!confirm(`Delete ${ids.length} selected admin login(s)?`)) return;
+    setBulkBusy(true);
+    const res = await fetch("/api/admin/admins", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids }),
+    });
+    setBulkBusy(false);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setCsvMsg(data.error || "Bulk delete failed");
+      return;
+    }
+    setCsvMsg(`Deleted ${data.deleted || 0} admin(s).`);
     load();
   }
 
@@ -395,10 +445,47 @@ export default function AdminsPage() {
             </div>
           </div>
 
+          {selectedCount > 0 && (
+            <div className="flex flex-wrap items-center gap-3 border-b border-red-100 bg-red-50/80 px-4 py-3">
+              <p className="text-sm font-medium text-red-800">{selectedCount} selected</p>
+              <button
+                type="button"
+                onClick={selectFiltered}
+                className="rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-navy/70 shadow-sm"
+              >
+                Select all filtered
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelected({})}
+                className="rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-navy/70 shadow-sm"
+              >
+                Clear
+              </button>
+              <button
+                type="button"
+                disabled={bulkBusy}
+                onClick={bulkDelete}
+                className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+              >
+                {bulkBusy ? "Deleting…" : `Delete selected (${selectedCount})`}
+              </button>
+            </div>
+          )}
+
           <div className="overflow-auto">
             <table className="min-w-full text-left text-sm">
               <thead className="sticky top-0 z-10 bg-[#eef3fb] text-[11px] font-semibold uppercase tracking-wider text-navy/55">
                 <tr>
+                  <th className="px-3 py-3">
+                    <input
+                      type="checkbox"
+                      checked={pageAllSelected}
+                      onChange={togglePage}
+                      aria-label="Select page"
+                      className="h-4 w-4 rounded border-navy/20"
+                    />
+                  </th>
                   <th className="px-4 py-3">Admin</th>
                   <th className="px-4 py-3">Level</th>
                   <th className="px-4 py-3">Designations</th>
@@ -409,6 +496,19 @@ export default function AdminsPage() {
               <tbody>
                 {pageRows.map((a) => (
                   <tr key={a.id} className="border-t border-navy/5 hover:bg-[#f7f9fd]">
+                    <td className="px-3 py-3">
+                      {!a.isSuper ? (
+                        <input
+                          type="checkbox"
+                          checked={Boolean(selected[a.id])}
+                          onChange={() => toggleOne(a.id)}
+                          aria-label={`Select ${a.name || a.email}`}
+                          className="h-4 w-4 rounded border-navy/20"
+                        />
+                      ) : (
+                        <span className="inline-block w-4" />
+                      )}
+                    </td>
                     <td className="px-4 py-3">
                       <p className="font-semibold text-ink">{a.name || a.email}</p>
                       <p className="text-xs text-navy/50">{a.email}</p>

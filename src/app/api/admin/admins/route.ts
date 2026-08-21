@@ -88,3 +88,22 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "This admin ID already exists." }, { status: 409 });
   }
 }
+
+export async function DELETE(req: Request) {
+  const s = await requireAdmin();
+  if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!canManageAdmins(s.admin)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const body = await req.json().catch(() => null);
+  const ids = Array.isArray(body?.ids) ? body.ids.filter((id: unknown) => typeof id === "string" && id.length > 0) : [];
+  if (!ids.length) return NextResponse.json({ error: "Select at least one admin." }, { status: 400 });
+  if (ids.length > 200) return NextResponse.json({ error: "Too many admins at once (max 200)." }, { status: 400 });
+
+  const result = await prisma.admin.deleteMany({
+    where: {
+      id: { in: ids },
+      isSuper: false,
+      NOT: { id: s.admin.id },
+    },
+  });
+  return NextResponse.json({ deleted: result.count, ok: true });
+}

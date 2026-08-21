@@ -38,6 +38,8 @@ export default function AdminUsersPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [csvMsg, setCsvMsg] = useState("");
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
+  const [bulkBusy, setBulkBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function load() {
@@ -48,6 +50,7 @@ export default function AdminUsersPage() {
     }
     const data = await res.json();
     setUsers(data.users || []);
+    setSelected({});
   }
 
   useEffect(() => {
@@ -61,6 +64,26 @@ export default function AdminUsersPage() {
   async function remove(id: string) {
     if (!confirm("Delete this user and all footprints?")) return;
     await fetch(`/api/admin/users/${id}`, { method: "DELETE" });
+    load();
+  }
+
+  async function bulkDelete() {
+    const ids = Object.keys(selected).filter((id) => selected[id]);
+    if (!ids.length) return;
+    if (!confirm(`Delete ${ids.length} selected user(s) and all their footprints?`)) return;
+    setBulkBusy(true);
+    const res = await fetch("/api/admin/users", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids }),
+    });
+    setBulkBusy(false);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setCsvMsg(data.error || "Bulk delete failed");
+      return;
+    }
+    setCsvMsg(`Deleted ${data.deleted || 0} user(s).`);
     load();
   }
 
@@ -117,6 +140,30 @@ export default function AdminUsersPage() {
     const start = (page - 1) * pageSize;
     return filtered.slice(start, start + pageSize);
   }, [filtered, page, pageSize]);
+
+  const selectedCount = useMemo(() => Object.values(selected).filter(Boolean).length, [selected]);
+  const pageAllSelected = pageRows.length > 0 && pageRows.every((u) => selected[u.id]);
+
+  function toggleOne(id: string) {
+    setSelected((s) => ({ ...s, [id]: !s[id] }));
+  }
+
+  function togglePage() {
+    setSelected((s) => {
+      const next = { ...s };
+      const turnOn = !pageAllSelected;
+      for (const u of pageRows) next[u.id] = turnOn;
+      return next;
+    });
+  }
+
+  function selectFiltered() {
+    setSelected((s) => {
+      const next = { ...s };
+      for (const u of filtered) next[u.id] = true;
+      return next;
+    });
+  }
 
   const selectClass = "h-11 rounded-xl border border-navy/10 bg-white px-3 text-sm outline-none focus:border-teal";
 
@@ -209,11 +256,50 @@ export default function AdminUsersPage() {
         </select>
       </div>
 
+      {isSuper && selectedCount > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-3 rounded-2xl border border-red-100 bg-red-50/80 px-4 py-3">
+          <p className="text-sm font-medium text-red-800">{selectedCount} selected</p>
+          <button
+            type="button"
+            onClick={selectFiltered}
+            className="rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-navy/70 shadow-sm"
+          >
+            Select all filtered ({filtered.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelected({})}
+            className="rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-navy/70 shadow-sm"
+          >
+            Clear
+          </button>
+          <button
+            type="button"
+            disabled={bulkBusy}
+            onClick={bulkDelete}
+            className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
+          >
+            {bulkBusy ? "Deleting…" : `Delete selected (${selectedCount})`}
+          </button>
+        </div>
+      )}
+
       <section className="overflow-hidden rounded-2xl border border-navy/5 bg-white shadow-card">
         <div className="overflow-auto">
           <table className="min-w-full text-left text-sm">
             <thead className="sticky top-0 z-10 bg-[#eef3fb] text-[11px] font-semibold uppercase tracking-wider text-navy/55">
               <tr>
+                {isSuper && (
+                  <th className="px-3 py-3">
+                    <input
+                      type="checkbox"
+                      checked={pageAllSelected}
+                      onChange={togglePage}
+                      aria-label="Select page"
+                      className="h-4 w-4 rounded border-navy/20"
+                    />
+                  </th>
+                )}
                 <th className="px-4 py-3">User</th>
                 <th className="px-4 py-3">Designation</th>
                 <th className="px-4 py-3">Assembly / Sector</th>
@@ -227,6 +313,17 @@ export default function AdminUsersPage() {
             <tbody>
               {pageRows.map((u) => (
                 <tr key={u.id} className={`border-t border-navy/5 hover:bg-[#f7f9fd] ${u.isActive ? "" : "opacity-70"}`}>
+                  {isSuper && (
+                    <td className="px-3 py-3">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(selected[u.id])}
+                        onChange={() => toggleOne(u.id)}
+                        aria-label={`Select ${u.name}`}
+                        className="h-4 w-4 rounded border-navy/20"
+                      />
+                    </td>
+                  )}
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
                       <FacePhoto src={u.faceImage} label={u.name} />
