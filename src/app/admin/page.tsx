@@ -149,7 +149,7 @@ export default function AdminDashboardPage() {
   return (
     <main className="min-h-screen bg-gradient-to-b from-[#fff6d4] via-[#f3f6fb] to-[#e8eef8] px-4 py-6 md:px-8">
       <div className="mb-2 flex items-center gap-3">
-        <BrandMark size={64} className="shadow-sm" />
+        <BrandMark size={64} />
         <div>
           <p className="text-xs uppercase tracking-[0.2em] text-teal">Dashboard</p>
           <h1 className="text-2xl font-semibold">Hierarchy overview</h1>

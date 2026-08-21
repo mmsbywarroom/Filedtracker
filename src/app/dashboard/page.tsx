@@ -312,7 +312,7 @@ export default function DashboardPage() {
   if (!user) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-3">
-        <BrandMark size={80} className="shadow-card" />
+        <BrandMark size={80} />
         <p>{t("loading")}</p>
       </div>
     );
@@ -323,7 +323,7 @@ export default function DashboardPage() {
       <div className="mx-auto max-w-6xl px-4 py-5">
         <header className="mb-4 flex items-center justify-between gap-3 rounded-3xl bg-white px-4 py-3 shadow-card">
           <div className="flex items-center gap-3">
-            <BrandMark size={56} className="shadow-sm" />
+            <BrandMark size={56} />
             <div>
               <p className="text-xs uppercase tracking-wider text-navy/50">{t("aap")}</p>
               <h1 className="font-semibold">{user.name}</h1>

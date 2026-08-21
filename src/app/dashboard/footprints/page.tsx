@@ -91,7 +91,7 @@ export default function FootprintsPage() {
       <div className="mx-auto max-w-6xl px-4 py-5">
         <header className="mb-4 flex items-center justify-between gap-3 rounded-3xl bg-white px-4 py-3 shadow-card">
           <div className="flex items-center gap-3">
-            <BrandMark size={52} className="shadow-sm" />
+            <BrandMark size={52} />
             <div>
               <Link href="/dashboard" className="text-xs text-navy/50">
                 ← {t("backDash")}
