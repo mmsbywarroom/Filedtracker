@@ -415,7 +415,7 @@ export default function DashboardPage() {
 
         <div className="overflow-hidden rounded-[2rem] bg-white shadow-float">
           {open ? (
-            <div className="h-[52vh] min-h-[340px]">
+            <div className="h-[min(52vh,420px)] min-h-[280px] overflow-hidden">
               <RouteMap
                 points={open.points}
                 punchIn={{ lat: open.punchInLat, lng: open.punchInLng }}
@@ -425,14 +425,14 @@ export default function DashboardPage() {
               />
             </div>
           ) : (
-            <div className="h-[42vh] min-h-[280px]">
+            <div className="h-[min(42vh,380px)] min-h-[260px] overflow-hidden">
               <RouteMap points={[]} liveLocation={livePos} />
             </div>
           )}
 
-          <div className="flex flex-wrap gap-2 p-4">
+          <div className="relative z-10 flex flex-wrap items-center gap-2 border-t border-navy/5 bg-white p-4">
             {!user.faceRegisteredAt && (
-              <button onClick={() => setMode("register")} className="rounded-full bg-navy px-5 py-3 text-white font-semibold">
+              <button onClick={() => setMode("register")} className="rounded-full bg-navy px-5 py-3 font-semibold text-white">
                 {t("registerFace")}
               </button>
             )}
@@ -450,6 +450,9 @@ export default function DashboardPage() {
               <span className="self-center text-sm text-navy/60">
                 {t("live")} · {formatDuration(live?.durationMs || 0)} · {formatKm(Math.max(open.distanceMeters, pathDistance([{ lat: open.punchInLat, lng: open.punchInLng }, ...open.points])))}
               </span>
+            )}
+            {user.faceRegisteredAt && !open && (
+              <p className="w-full text-xs text-navy/45 md:w-auto md:flex-1">{t("punchStart")}</p>
             )}
           </div>
         </div>

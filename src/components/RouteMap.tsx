@@ -233,13 +233,13 @@ export default function RouteMap({
   }, [ready, liveLocation?.lat, liveLocation?.lng, points.length]);
 
   return (
-    <div className="relative h-full min-h-[420px] w-full overflow-hidden rounded-3xl">
-      <div ref={el} className="h-full min-h-[420px] w-full" />
+    <div className="relative h-full min-h-[200px] w-full overflow-hidden rounded-3xl">
+      <div ref={el} className="absolute inset-0 h-full w-full" />
       {error && (
-        <div className="absolute inset-0 grid place-items-center bg-white/90 p-6 text-center text-sm text-navy/70">{error}</div>
+        <div className="absolute inset-0 z-10 grid place-items-center bg-white/90 p-6 text-center text-sm text-navy/70">{error}</div>
       )}
       {!error && !liveLocation && !points.length && !punchIn && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">
+        <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10 flex justify-center">
           <span className="rounded-full bg-white/95 px-3 py-1 text-xs font-medium text-navy/60 shadow">
             Finding you…
           </span>
