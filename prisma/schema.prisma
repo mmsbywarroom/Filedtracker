@@ -18,6 +18,8 @@ model Admin {
   zone           String   @default("")
   district       String   @default("")
   assemblyName   String   @default("")
+  /// Mapped assemblies for DLC / Cluster (multiple). ALC still uses assemblyName.
+  assemblies     String[] @default([])
   cluster        String   @default("")
   createdAt      DateTime @default(now())
 }

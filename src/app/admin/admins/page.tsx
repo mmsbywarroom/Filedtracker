@@ -14,6 +14,7 @@ type AdminRow = {
   zone: string;
   district: string;
   assemblyName: string;
+  assemblies?: string[];
   cluster: string;
 };
 
@@ -45,6 +46,7 @@ export default function AdminsPage() {
     zone: "",
     district: "",
     assemblyName: "",
+    assemblies: [] as string[],
     cluster: "",
   });
 
@@ -151,7 +153,23 @@ export default function AdminsPage() {
   }
 
   function setLevel(accessLevel: string) {
-    setForm({ ...form, accessLevel, designations: defaultVisibleDesignations(accessLevel) });
+    setForm({
+      ...form,
+      accessLevel,
+      designations: defaultVisibleDesignations(accessLevel),
+      assemblies: [],
+      assemblyName: "",
+    });
+  }
+
+  function toggleAssembly(name: string) {
+    setForm((f) => {
+      const has = f.assemblies.includes(name);
+      return {
+        ...f,
+        assemblies: has ? f.assemblies.filter((x) => x !== name) : [...f.assemblies, name],
+      };
+    });
   }
 
   function toggleDes(d: string) {
@@ -177,6 +195,10 @@ export default function AdminsPage() {
       setError("Select a cluster.");
       return;
     }
+    if ((form.accessLevel === "DLC" || form.accessLevel === "Cluster") && !form.assemblies.length) {
+      setError("Select at least one assembly for this DLC / Cluster.");
+      return;
+    }
     if (form.accessLevel === "ALC" && !form.assemblyName) {
       setError("Select an assembly. ALC can only see users in that assembly.");
       return;
@@ -200,6 +222,7 @@ export default function AdminsPage() {
       zone: "",
       district: "",
       assemblyName: "",
+      assemblies: [],
       cluster: "",
     });
     load();
@@ -254,7 +277,8 @@ export default function AdminsPage() {
           <p className="text-xs uppercase tracking-[0.2em] text-teal">Access</p>
           <h1 className="text-2xl font-semibold">Admin users</h1>
           <p className="mt-1 max-w-3xl text-sm text-navy/60">
-            Create admins one by one or bulk upload CSV. ZLC / DLC / Cluster / ALC only see their assigned area.
+            Create admins one by one or bulk upload CSV. For DLC / Cluster, map multiple assemblies — they will only see
+            ALC and Sector Incharge users in those assemblies.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -347,7 +371,9 @@ export default function AdminsPage() {
                 <select
                   required
                   value={form.zone}
-                  onChange={(e) => setForm({ ...form, zone: e.target.value, district: "", cluster: "", assemblyName: "" })}
+                  onChange={(e) =>
+                    setForm({ ...form, zone: e.target.value, district: "", cluster: "", assemblyName: "", assemblies: [] })
+                  }
                   className={field}
                 >
                   <option value="">Select zone</option>
@@ -362,7 +388,9 @@ export default function AdminsPage() {
                   <select
                     required
                     value={form.district}
-                    onChange={(e) => setForm({ ...form, district: e.target.value, cluster: "", assemblyName: "" })}
+                    onChange={(e) =>
+                      setForm({ ...form, district: e.target.value, cluster: "", assemblyName: "", assemblies: [] })
+                    }
                     className={field}
                   >
                     <option value="">Select district</option>
@@ -404,6 +432,36 @@ export default function AdminsPage() {
                   </select>
                 </label>
               )}
+            </div>
+          )}
+
+          {(form.accessLevel === "DLC" || form.accessLevel === "Cluster") && form.district && (
+            <div className="mt-3">
+              <p className="text-xs font-semibold uppercase tracking-wider text-navy/45">
+                Mapped assemblies ({form.assemblies.length} selected)
+              </p>
+              <p className="mt-1 text-xs text-navy/50">
+                Tick every assembly under this {form.accessLevel}. Users list will show ALC + Sector Incharge in these
+                assemblies only.
+              </p>
+              <div className="mt-2 max-h-48 overflow-auto rounded-xl border border-navy/10 bg-sand/30 p-2">
+                {assemblies.length ? (
+                  <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
+                    {assemblies.map((a) => (
+                      <label key={a} className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-white/80">
+                        <input
+                          type="checkbox"
+                          checked={form.assemblies.includes(a)}
+                          onChange={() => toggleAssembly(a)}
+                        />
+                        <span className="truncate">{a}</span>
+                      </label>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="px-2 py-3 text-xs text-navy/45">No assemblies found for this district yet. Create users first.</p>
+                )}
+              </div>
             </div>
           )}
 
@@ -523,7 +581,14 @@ export default function AdminsPage() {
                       {(a.designations || []).join(", ") || "Default below level"}
                     </td>
                     <td className="px-4 py-3 text-xs text-navy/70">
-                      {[a.zone, a.district, a.cluster, a.assemblyName].filter(Boolean).join(" · ") || "Full organisation"}
+                      {[a.zone, a.district, a.cluster].filter(Boolean).join(" · ") || "Full organisation"}
+                      {(a.assemblies?.length || a.assemblyName) && (
+                        <p className="mt-1 text-[11px] text-navy/50">
+                          Assemblies:{" "}
+                          {(a.assemblies?.length ? a.assemblies : a.assemblyName.split(/[|;,]/)).filter(Boolean).join(", ") ||
+                            "—"}
+                        </p>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-right">
                       {!a.isSuper && (

@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import Papa from "papaparse";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { DESIGNATIONS, canManageAdmins, defaultVisibleDesignations } from "@/lib/hierarchy";
+import { DESIGNATIONS, canManageAdmins, defaultVisibleDesignations, parseAssembliesInput } from "@/lib/hierarchy";
 
 const LEVELS = new Set(["State", "ZLC", "DLC", "Cluster", "ALC"]);
 
@@ -51,7 +51,7 @@ export async function POST(req: Request) {
     const zone = pick(row, "Zone");
     const district = pick(row, "District");
     const cluster = pick(row, "Cluster");
-    const assemblyName = pick(row, "Assembly", "Assembly Name");
+    const assemblyRaw = pick(row, "Assemblies", "Assembly", "Assembly Name");
     const designations = parseDesignations(pick(row, "Designations", "Can See Designations"), accessLevel);
 
     if (!name || !email || !password || !LEVELS.has(accessLevel)) {
@@ -74,9 +74,25 @@ export async function POST(req: Request) {
       errors.push({ row: i + 2, error: "Cluster is required for Cluster level." });
       continue;
     }
-    if (accessLevel === "ALC" && !assemblyName) {
-      errors.push({ row: i + 2, error: "Assembly is required for ALC." });
-      continue;
+
+    let assemblies = parseAssembliesInput(assemblyRaw);
+    let assemblyName = "";
+    if (accessLevel === "DLC" || accessLevel === "Cluster") {
+      if (!assemblies.length) {
+        errors.push({
+          row: i + 2,
+          error: "DLC/Cluster need Assemblies column with one or more names, e.g. Bhoa|Sujanpur|Pathankot",
+        });
+        continue;
+      }
+      assemblyName = assemblies.join("|");
+    } else if (accessLevel === "ALC") {
+      if (!assemblies.length) {
+        errors.push({ row: i + 2, error: "Assembly is required for ALC." });
+        continue;
+      }
+      assemblyName = assemblies[0];
+      assemblies = [assemblyName];
     }
 
     const existing = await prisma.admin.findUnique({ where: { email } });
@@ -97,6 +113,7 @@ export async function POST(req: Request) {
           zone: accessLevel === "State" ? "" : zone,
           district,
           assemblyName,
+          assemblies,
           cluster,
         },
       });

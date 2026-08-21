@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Admin" ADD COLUMN IF NOT EXISTS "assemblies" TEXT[] DEFAULT ARRAY[]::TEXT[];

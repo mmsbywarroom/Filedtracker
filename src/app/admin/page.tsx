@@ -100,7 +100,13 @@ export default function AdminDashboardPage() {
   const [data, setData] = useState<Dash | null>(null);
   const [level, setLevel] = useState("State");
   const [isSuper, setIsSuper] = useState(false);
-  const [scope, setScope] = useState({ zone: "", district: "", assemblyName: "", cluster: "" });
+  const [scope, setScope] = useState({
+    zone: "",
+    district: "",
+    assemblyName: "",
+    assemblies: [] as string[],
+    cluster: "",
+  });
 
   async function load(d: string, des: string) {
     const params = new URLSearchParams({ date: d });
@@ -114,10 +120,12 @@ export default function AdminDashboardPage() {
     const me = await fetch("/api/admin/me").then((r) => r.json());
     if (me.admin?.accessLevel) setLevel(me.admin.accessLevel);
     setIsSuper(Boolean(me.admin?.isSuper));
+    const assemblies = Array.isArray(me.admin?.assemblies) ? me.admin.assemblies : [];
     setScope({
       zone: me.admin?.zone || "",
       district: me.admin?.district || "",
       assemblyName: me.admin?.assemblyName || "",
+      assemblies,
       cluster: me.admin?.cluster || "",
     });
   }
@@ -126,22 +134,29 @@ export default function AdminDashboardPage() {
     load(date, designation);
   }, [date, designation]);
 
+  const mappedAssemblies =
+    scope.assemblies.length > 0
+      ? scope.assemblies
+      : scope.assemblyName
+        ? scope.assemblyName.split(/[|;,]/).map((a) => a.trim()).filter(Boolean)
+        : [];
+
   const scopeText = isSuper
     ? "Full organisation"
     : level === "ALC" && !scope.assemblyName
       ? "No assembly assigned — no users visible"
       : level === "ZLC" && !scope.zone
         ? "No zone assigned — no users visible"
-        : level === "DLC" && !scope.district
-          ? "No district assigned — no users visible"
-          : level === "Cluster" && !scope.cluster
+        : (level === "DLC" || level === "Cluster") && !mappedAssemblies.length
+          ? "No assemblies mapped — map assemblies on this admin to see ALC / Sector Incharge users"
+          : level === "Cluster" && !scope.cluster && !mappedAssemblies.length
             ? "No cluster assigned — no users visible"
             : [
-                "Users below this level",
+                "Users in scope",
                 scope.zone,
                 scope.district,
                 scope.cluster,
-                scope.assemblyName,
+                mappedAssemblies.length ? `${mappedAssemblies.length} assemblies` : scope.assemblyName,
               ]
                 .filter(Boolean)
                 .join(" · ");

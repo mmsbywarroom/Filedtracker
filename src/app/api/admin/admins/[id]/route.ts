@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { DESIGNATIONS, canManageAdmins } from "@/lib/hierarchy";
+import { DESIGNATIONS, canManageAdmins, parseAssembliesInput } from "@/lib/hierarchy";
 
 const schema = z.object({
   name: z.string().min(1).max(80).optional(),
@@ -13,6 +13,7 @@ const schema = z.object({
   zone: z.string().optional(),
   district: z.string().optional(),
   assemblyName: z.string().optional(),
+  assemblies: z.union([z.array(z.string()), z.string()]).optional(),
   cluster: z.string().optional(),
 });
 
@@ -30,13 +31,25 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   }
   if (parsed.data.zone != null) data.zone = parsed.data.zone.trim();
   if (parsed.data.district != null) data.district = parsed.data.district.trim();
-  if (parsed.data.assemblyName != null) data.assemblyName = parsed.data.assemblyName.trim();
   if (parsed.data.cluster != null) data.cluster = parsed.data.cluster.trim();
+  if (parsed.data.assemblies != null) {
+    const assemblies = parseAssembliesInput(parsed.data.assemblies);
+    data.assemblies = assemblies;
+    data.assemblyName = assemblies.join("|");
+  } else if (parsed.data.assemblyName != null) {
+    const assemblyName = parsed.data.assemblyName.trim();
+    data.assemblyName = assemblyName;
+    if (assemblyName.includes("|") || assemblyName.includes(";")) {
+      data.assemblies = parseAssembliesInput(assemblyName);
+    } else if (assemblyName) {
+      data.assemblies = [assemblyName];
+    }
+  }
   if (parsed.data.password) data.passwordHash = await bcrypt.hash(parsed.data.password, 12);
   const admin = await prisma.admin.update({
     where: { id: params.id },
     data,
-    select: { id: true, email: true, name: true, accessLevel: true },
+    select: { id: true, email: true, name: true, accessLevel: true, assemblies: true },
   });
   return NextResponse.json({ admin });
 }

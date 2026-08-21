@@ -3,7 +3,12 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { DESIGNATIONS, canManageAdmins, defaultVisibleDesignations } from "@/lib/hierarchy";
+import {
+  DESIGNATIONS,
+  canManageAdmins,
+  defaultVisibleDesignations,
+  parseAssembliesInput,
+} from "@/lib/hierarchy";
 
 const schema = z.object({
   email: z.string().min(3).max(80),
@@ -14,6 +19,7 @@ const schema = z.object({
   zone: z.string().optional(),
   district: z.string().optional(),
   assemblyName: z.string().optional(),
+  assemblies: z.union([z.array(z.string()), z.string()]).optional(),
   cluster: z.string().optional(),
 });
 
@@ -33,6 +39,7 @@ export async function GET() {
       zone: true,
       district: true,
       assemblyName: true,
+      assemblies: true,
       cluster: true,
       createdAt: true,
     },
@@ -50,8 +57,10 @@ export async function POST(req: Request) {
   const accessLevel = parsed.data.accessLevel;
   const zone = parsed.data.zone?.trim() || "";
   const district = parsed.data.district?.trim() || "";
-  const assemblyName = parsed.data.assemblyName?.trim() || "";
   const cluster = parsed.data.cluster?.trim() || "";
+  let assemblies = parseAssembliesInput(parsed.data.assemblies);
+  let assemblyName = parsed.data.assemblyName?.trim() || "";
+
   if (accessLevel !== "State" && !zone) {
     return NextResponse.json({ error: "Zone is required." }, { status: 400 });
   }
@@ -61,9 +70,21 @@ export async function POST(req: Request) {
   if (accessLevel === "Cluster" && !cluster) {
     return NextResponse.json({ error: "Cluster is required." }, { status: 400 });
   }
-  if (accessLevel === "ALC" && !assemblyName) {
-    return NextResponse.json({ error: "Assembly is required for ALC." }, { status: 400 });
+  if (accessLevel === "DLC" || accessLevel === "Cluster") {
+    if (!assemblies.length && assemblyName) assemblies = parseAssembliesInput(assemblyName);
+    if (!assemblies.length) {
+      return NextResponse.json(
+        { error: "Map at least one assembly for DLC / Cluster (pipe-separated in CSV, or multi-select)." },
+        { status: 400 }
+      );
+    }
+    assemblyName = assemblies.join("|");
   }
+  if (accessLevel === "ALC") {
+    if (!assemblyName) return NextResponse.json({ error: "Assembly is required for ALC." }, { status: 400 });
+    assemblies = [assemblyName];
+  }
+
   const designations = (parsed.data.designations || defaultVisibleDesignations(accessLevel)).filter((d) =>
     DESIGNATIONS.includes(d as (typeof DESIGNATIONS)[number])
   );
@@ -79,9 +100,10 @@ export async function POST(req: Request) {
         zone,
         district,
         assemblyName,
+        assemblies,
         cluster,
       },
-      select: { id: true, email: true, name: true, accessLevel: true },
+      select: { id: true, email: true, name: true, accessLevel: true, assemblies: true },
     });
     return NextResponse.json({ admin });
   } catch {

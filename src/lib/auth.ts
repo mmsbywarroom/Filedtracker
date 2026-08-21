@@ -79,6 +79,7 @@ export async function requireAdmin() {
     zone: admin.zone,
     district: admin.district,
     assemblyName: admin.assemblyName,
+    assemblies: admin.assemblies || [],
     cluster: admin.cluster,
   };
   return { ...s, admin: scope };
