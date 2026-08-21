@@ -14,7 +14,7 @@ const schema = z.object({
   email: z.string().min(3).max(80),
   name: z.string().min(1).max(80),
   password: z.string().min(6).max(80),
-  accessLevel: z.enum(["State", "ZLC", "DLC", "Cluster", "ALC"]),
+  accessLevel: z.enum(["State", "Zone Coordinator", "ZLC", "DLC", "Cluster", "ALC"]),
   designations: z.array(z.string()).optional(),
   zone: z.string().optional(),
   district: z.string().optional(),

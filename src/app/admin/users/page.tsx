@@ -67,6 +67,16 @@ export default function AdminUsersPage() {
     load();
   }
 
+  async function resetFace(u: UserRow) {
+    if (!confirm(`Clear face for ${u.name}? They must register face again on punch.`)) return;
+    const res = await fetch(`/api/admin/users/${u.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clearFace: true }),
+    });
+    if (res.ok) load();
+  }
+
   async function bulkDelete() {
     const ids = Object.keys(selected).filter((id) => selected[id]);
     if (!ids.length) return;
@@ -373,6 +383,15 @@ export default function AdminUsersPage() {
                           >
                             Edit
                           </Link>
+                          {u.faceRegistered && (
+                            <button
+                              type="button"
+                              onClick={() => resetFace(u)}
+                              className="rounded-lg bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800"
+                            >
+                              Reset face
+                            </button>
+                          )}
                           <button onClick={() => remove(u.id)} className="rounded-lg bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-600">
                             Delete
                           </button>

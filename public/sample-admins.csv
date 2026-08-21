@@ -1,5 +1,5 @@
 Name,Admin ID,Password,Admin Level,Designations,Zone,District,Cluster,Assemblies
-Gurpreet Singh,zlc.majha,Pass@12345,ZLC,"DLC|Cluster|ALC|Sector Incharge",Majha,,,
+Gurpreet Singh,zc.majha,Pass@12345,Zone Coordinator,"DLC|Cluster|ALC|Sector Incharge",Majha,,,
 Simran Kaur,dlc.pathankot,Pass@12345,DLC,"ALC|Sector Incharge",Majha,Pathankot,,"Bhoa|Sujanpur|Pathankot"
 Ravi Kumar,cluster.north,Pass@12345,Cluster,"ALC|Sector Incharge",Majha,Pathankot,North Cluster,"Bhoa|Sujanpur"
 Harpreet Singh,alc.bhoa,Pass@12345,ALC,"Sector Incharge",Majha,Pathankot,,Bhoa

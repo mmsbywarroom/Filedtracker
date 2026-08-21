@@ -8,7 +8,7 @@ import { DESIGNATIONS, canManageAdmins, parseAssembliesInput } from "@/lib/hiera
 const schema = z.object({
   name: z.string().min(1).max(80).optional(),
   password: z.string().min(6).max(80).optional(),
-  accessLevel: z.enum(["State", "ZLC", "DLC", "Cluster", "ALC"]).optional(),
+  accessLevel: z.enum(["State", "Zone Coordinator", "ZLC", "DLC", "Cluster", "ALC"]).optional(),
   designations: z.array(z.string()).optional(),
   zone: z.string().optional(),
   district: z.string().optional(),

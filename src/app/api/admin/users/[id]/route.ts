@@ -15,6 +15,7 @@ const userSchema = z.object({
   district: z.string().min(1).max(80),
   cluster: z.string().optional(),
   isActive: z.boolean().optional(),
+  clearFace: z.boolean().optional(),
 });
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
@@ -30,8 +31,14 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
   }
-  const data = { ...parsed.data };
-  if (data.phone) {
+  const { clearFace, ...rest } = parsed.data;
+  const data: Record<string, unknown> = { ...rest };
+  if (clearFace) {
+    data.faceDescriptorJson = null;
+    data.faceImage = null;
+    data.faceRegisteredAt = null;
+  }
+  if (typeof data.phone === "string") {
     const phone = normalizePhone(data.phone);
     if (!phone) return NextResponse.json({ error: "Invalid mobile number." }, { status: 400 });
     data.phone = phone;

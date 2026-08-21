@@ -5,7 +5,7 @@ import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { DESIGNATIONS, canManageAdmins, defaultVisibleDesignations, parseAssembliesInput } from "@/lib/hierarchy";
 
-const LEVELS = new Set(["State", "ZLC", "DLC", "Cluster", "ALC"]);
+const LEVELS = new Set(["State", "Zone Coordinator", "ZLC", "DLC", "Cluster", "ALC"]);
 
 function pick(row: Record<string, string>, ...keys: string[]) {
   for (const key of keys) {

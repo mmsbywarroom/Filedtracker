@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { PaginationBar } from "@/components/PaginationBar";
-import { DESIGNATIONS, defaultVisibleDesignations } from "@/lib/hierarchy";
+import { ADMIN_LEVELS, DESIGNATIONS, defaultVisibleDesignations } from "@/lib/hierarchy";
 
 type AdminRow = {
   id: string;
@@ -20,7 +20,7 @@ type AdminRow = {
 
 type Place = { zone: string; district: string; assemblyName: string; cluster: string };
 
-const LEVELS = ["State", "ZLC", "DLC", "Cluster", "ALC"] as const;
+const LEVELS = ADMIN_LEVELS;
 const field = "mt-1 w-full rounded-xl border border-navy/10 bg-sand/40 px-3 py-2 text-sm";
 const selectClass = "h-11 rounded-xl border border-navy/10 bg-white px-3 text-sm outline-none focus:border-teal";
 
@@ -41,8 +41,8 @@ export default function AdminsPage() {
     name: "",
     email: "",
     password: "",
-    accessLevel: "ZLC",
-    designations: defaultVisibleDesignations("ZLC"),
+    accessLevel: "Zone Coordinator",
+    designations: defaultVisibleDesignations("Zone Coordinator"),
     zone: "",
     district: "",
     assemblyName: "",
@@ -217,8 +217,8 @@ export default function AdminsPage() {
       name: "",
       email: "",
       password: "",
-      accessLevel: "ZLC",
-      designations: defaultVisibleDesignations("ZLC"),
+      accessLevel: "Zone Coordinator",
+      designations: defaultVisibleDesignations("Zone Coordinator"),
       zone: "",
       district: "",
       assemblyName: "",

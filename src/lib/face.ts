@@ -40,7 +40,9 @@ export async function loadFaceModels() {
   return loading;
 }
 
-const detector = () => new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.4 });
+/** Slightly looser detector for low-end phone cameras */
+const detector = () =>
+  new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.35 });
 
 export type FaceScanError = "no_face" | "too_far" | "multiple";
 
@@ -48,33 +50,50 @@ export type FaceScan =
   | { ok: true; descriptor: number[]; box: { x: number; y: number; width: number; height: number } }
   | { ok: false; error: FaceScanError };
 
+export function averageDescriptors(samples: number[][]): number[] {
+  if (!samples.length) return [];
+  const len = samples[0].length;
+  const out = new Array(len).fill(0);
+  for (const sample of samples) {
+    if (sample.length !== len) continue;
+    for (let i = 0; i < len; i++) out[i] += sample[i];
+  }
+  const n = samples.length;
+  for (let i = 0; i < len; i++) out[i] /= n;
+  return out;
+}
+
 export async function scanFace(video: HTMLVideoElement): Promise<FaceScan> {
   await loadFaceModels();
   if (!video.videoWidth) return { ok: false, error: "no_face" };
 
-  const detections = await faceapi.detectAllFaces(video, detector());
+  // One pass: detect + landmarks + descriptor (avoids mismatched second detection)
+  const detections = await faceapi
+    .detectAllFaces(video, detector())
+    .withFaceLandmarks()
+    .withFaceDescriptors();
+
   if (!detections.length) return { ok: false, error: "no_face" };
 
-  detections.sort((a, b) => b.box.width * b.box.height - a.box.width * a.box.height);
+  detections.sort((a, b) => b.detection.box.width * b.detection.box.height - a.detection.box.width * a.detection.box.height);
   const best = detections[0];
+  const box = best.detection.box;
   const minSide = Math.min(video.videoWidth, video.videoHeight);
-  const faceSide = Math.min(best.box.width, best.box.height);
-  if (faceSide < minSide * 0.1) return { ok: false, error: "too_far" };
+  const faceSide = Math.min(box.width, box.height);
+  // Require face to fill a bit of the frame (phone selfies vary a lot)
+  if (faceSide < minSide * 0.12) return { ok: false, error: "too_far" };
 
   const second = detections[1];
-  if (second && Math.min(second.box.width, second.box.height) > minSide * 0.14) {
-    return { ok: false, error: "multiple" };
+  if (second) {
+    const s = second.detection.box;
+    if (Math.min(s.width, s.height) > minSide * 0.14) {
+      return { ok: false, error: "multiple" };
+    }
   }
-
-  const detail = await faceapi
-    .detectSingleFace(video, detector())
-    .withFaceLandmarks()
-    .withFaceDescriptor();
-  if (!detail) return { ok: false, error: "no_face" };
 
   return {
     ok: true,
-    descriptor: Array.from(detail.descriptor),
-    box: { x: best.box.x, y: best.box.y, width: best.box.width, height: best.box.height },
+    descriptor: Array.from(best.descriptor),
+    box: { x: box.x, y: box.y, width: box.width, height: box.height },
   };
 }

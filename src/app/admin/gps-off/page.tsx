@@ -56,7 +56,7 @@ export default function GpsOffLogsPage() {
       <p className="text-xs uppercase tracking-[0.2em] text-teal">Alerts</p>
       <h1 className="text-2xl font-semibold">GPS off logs</h1>
       <p className="mt-1 text-sm text-navy/55">
-        GPS-off alerts only for the level just below you: State→ZLC→DLC→Cluster→ALC→Sector Incharge (within your zone/district/assembly).
+        GPS-off alerts only for the level just below you: State→Zone Coordinator/ZLC→DLC→Cluster→ALC→Sector Incharge (within your zone/district/assembly).
       </p>
 
       <div className="mt-4 mb-4 flex flex-wrap items-end gap-3 rounded-2xl bg-white p-4 shadow-card">

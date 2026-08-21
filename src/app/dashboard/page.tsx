@@ -250,16 +250,19 @@ export default function DashboardPage() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Face check failed.");
     if (!data.matched) {
-      throw new Error("Face did not match. Look straight at the camera.");
+      throw new Error(
+        data.hint ||
+          "Face did not match. Use bright light, look straight, or ask admin to clear face and register again."
+      );
     }
   }
 
-  async function onRegister(descriptor: number[], image: string) {
+  async function onRegister(descriptor: number[], image: string, samples?: number[][]) {
     setBusy(true);
     const res = await fetch("/api/face/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ descriptor, image }),
+      body: JSON.stringify({ descriptor, image, samples }),
     });
     setBusy(false);
     if (!res.ok) {
@@ -404,8 +407,11 @@ export default function DashboardPage() {
           <div className="mb-4 rounded-[2rem] bg-white p-6 shadow-card">
             <FaceCapture
               busy={busy}
+              mode={mode === "register" ? "register" : "verify"}
               actionLabel={mode === "register" ? t("saveFace") : mode === "in" ? t("confirmIn") : t("confirmOut")}
-              onCapture={(d, image) => (mode === "register" ? onRegister(d, image) : punch(mode, d, image))}
+              onCapture={(d, image, samples) =>
+                mode === "register" ? onRegister(d, image, samples) : punch(mode, d, image)
+              }
             />
             <button className="mt-3 w-full text-sm text-navy/50" onClick={() => setMode("idle")}>
               {t("cancel")}

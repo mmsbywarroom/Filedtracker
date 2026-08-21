@@ -1,14 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { loadFaceModels, scanFace, type FaceScan } from "@/lib/face";
+import { averageDescriptors, loadFaceModels, scanFace, type FaceScan } from "@/lib/face";
 import { useLang } from "@/lib/i18n";
 import { jpegQuality, jpegSize } from "@/lib/network";
 
 type Props = {
   actionLabel: string;
-  onCapture: (descriptor: number[], image: string) => Promise<void> | void;
+  onCapture: (descriptor: number[], image: string, samples?: number[][]) => Promise<void> | void;
   busy?: boolean;
+  /** Registration needs a few solid frames; verify can be quicker */
+  mode?: "register" | "verify";
 };
 
 function snapshot(video: HTMLVideoElement, box?: { x: number; y: number; width: number; height: number }) {
@@ -34,10 +36,11 @@ function snapshot(video: HTMLVideoElement, box?: { x: number; y: number; width: 
   return canvas.toDataURL("image/jpeg", jpegQuality());
 }
 
-export function FaceCapture({ actionLabel, onCapture, busy }: Props) {
+export function FaceCapture({ actionLabel, onCapture, busy, mode = "verify" }: Props) {
   const { t } = useLang();
   const videoRef = useRef<HTMLVideoElement>(null);
   const lastGood = useRef<FaceScan | null>(null);
+  const samples = useRef<number[][]>([]);
   const firing = useRef(false);
   const hits = useRef(0);
   const [camReady, setCamReady] = useState(false);
@@ -45,6 +48,7 @@ export function FaceCapture({ actionLabel, onCapture, busy }: Props) {
   const [locked, setLocked] = useState(false);
   const [error, setError] = useState("");
   const [hint, setHint] = useState("");
+  const needHits = mode === "register" ? 4 : 2;
 
   useEffect(() => {
     setHint(t("camStarting"));
@@ -56,7 +60,11 @@ export function FaceCapture({ actionLabel, onCapture, busy }: Props) {
     (async () => {
       try {
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "user", width: { ideal: 480 }, height: { ideal: 480 } },
+          video: {
+            facingMode: "user",
+            width: { ideal: 640 },
+            height: { ideal: 640 },
+          },
           audio: false,
         });
         if (cancelled || !videoRef.current) {
@@ -77,7 +85,7 @@ export function FaceCapture({ actionLabel, onCapture, busy }: Props) {
         await loadFaceModels();
         if (cancelled) return;
         setModelsReady(true);
-        setHint(t("lookCamera"));
+        setHint(mode === "register" ? t("lookCamera") : t("lookCamera"));
       } catch {
         if (!cancelled) setHint(t("retryLook"));
       }
@@ -86,7 +94,7 @@ export function FaceCapture({ actionLabel, onCapture, busy }: Props) {
       cancelled = true;
       stream?.getTracks().forEach((t) => t.stop());
     };
-  }, []);
+  }, [mode]);
 
   async function submit(result: FaceScan) {
     if (!result.ok || !videoRef.current || firing.current || busy) return;
@@ -94,12 +102,15 @@ export function FaceCapture({ actionLabel, onCapture, busy }: Props) {
     setLocked(true);
     setHint(t("faceLocked"));
     const image = snapshot(videoRef.current, result.box);
+    const collected = samples.current.length ? [...samples.current] : [result.descriptor];
+    const averaged = averageDescriptors(collected);
     try {
-      await onCapture(result.descriptor, image);
+      await onCapture(averaged.length ? averaged : result.descriptor, image, collected);
     } catch (e) {
       firing.current = false;
       setLocked(false);
       hits.current = 0;
+      samples.current = [];
       setHint(e instanceof Error ? e.message : t("retryLook"));
     }
   }
@@ -115,19 +126,26 @@ export function FaceCapture({ actionLabel, onCapture, busy }: Props) {
       if (result.ok) {
         lastGood.current = result;
         hits.current += 1;
-        setHint(t("faceFound"));
-        if (hits.current >= 2) await submit(result);
+        if (samples.current.length < 5) samples.current.push(result.descriptor);
+        if (mode === "register") {
+          setHint(`${t("faceFound")} (${Math.min(hits.current, needHits)}/${needHits})`);
+        } else {
+          setHint(t("faceFound"));
+        }
+        if (hits.current >= needHits) await submit(result);
       } else {
         hits.current = 0;
         lastGood.current = null;
+        // Keep a couple samples if we briefly lost the face
+        if (samples.current.length > 2) samples.current = samples.current.slice(-2);
         setHint(result.error === "too_far" ? t("tooFar") : result.error === "multiple" ? t("multiple") : t("noFace"));
       }
       running = false;
     };
-    timer = window.setInterval(tick, 280);
+    timer = window.setInterval(tick, 320);
     tick();
     return () => clearInterval(timer);
-  }, [camReady, modelsReady, busy]);
+  }, [camReady, modelsReady, busy, mode, needHits, t]);
 
   return (
     <div className="flex flex-col items-center gap-4">
@@ -141,16 +159,21 @@ export function FaceCapture({ actionLabel, onCapture, busy }: Props) {
           <div className={`h-40 w-40 rounded-full border-4 ${locked ? "border-emerald-400" : "border-white/80"}`} />
         </div>
         {!camReady && (
-          <div className="absolute inset-0 grid place-items-center bg-navy/80 text-white text-sm">{t("camStarting")}</div>
+          <div className="absolute inset-0 grid place-items-center bg-navy/80 text-sm text-white">{t("camStarting")}</div>
         )}
       </div>
       <p className="text-center text-sm font-medium text-navy/80">{error || hint}</p>
       {!modelsReady && camReady && <p className="text-xs text-navy/50">{t("firstLoad")}</p>}
+      {mode === "register" && (
+        <p className="max-w-xs text-center text-xs text-navy/50">
+          Hold still in bright light for a few seconds. Do not tilt your head.
+        </p>
+      )}
       <button
         type="button"
         disabled={!camReady || !modelsReady || busy || firing.current}
         onClick={() => lastGood.current?.ok && submit(lastGood.current)}
-        className="rounded-full bg-teal px-8 py-3 text-white font-semibold shadow-card disabled:opacity-50"
+        className="rounded-full bg-teal px-8 py-3 font-semibold text-white shadow-card disabled:opacity-50"
       >
         {busy || firing.current ? t("unlocking") : !modelsReady ? t("preparing") : actionLabel}
       </button>

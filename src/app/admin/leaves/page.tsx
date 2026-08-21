@@ -72,7 +72,7 @@ export default function AdminLeavesPage() {
       <p className="text-xs uppercase tracking-[0.2em] text-teal">Approvals</p>
       <h1 className="text-2xl font-semibold">Leave requests</h1>
       <p className="mt-1 text-sm text-navy/55">
-        You only see leave from the level just below you: State→ZLC→DLC→Cluster→ALC→Sector Incharge (within your zone/district/assembly).
+        You only see leave from the level just below you: State→Zone Coordinator/ZLC→DLC→Cluster→ALC→Sector Incharge (within your zone/district/assembly).
       </p>
 
       <div className="mt-4 mb-4 flex flex-wrap items-end gap-3 rounded-2xl bg-white p-4 shadow-card">
