@@ -1,0 +1,186 @@
+{
+  "verdict": "OK — inside own assembly ALLOW, outside BLOCK",
+  "summary": {
+    "namedTestsPass": 14,
+    "namedTestsFail": 0,
+    "all117_insideOwn_ALLOW": 117,
+    "all117_insideOwn_FAIL": 0,
+    "all117_outsideDelhi_BLOCK": 117,
+    "patialaUser_in_kharar": "BLOCK (correct)",
+    "patiala_at_patialaHome": "ALLOW",
+    "rural_at_ruralHome": "ALLOW",
+    "patiala_at_ruralHome": "BLOCK",
+    "rural_at_patialaHome": "BLOCK"
+  },
+  "rows": [
+    {
+      "appName": "Patiala",
+      "map": "Patiala",
+      "acNo": 115,
+      "homePoint": {
+        "lat": 30.285758159521514,
+        "lng": 76.36850406312206
+      },
+      "insideHome": "ALLOW",
+      "outsideDelhi": "BLOCK",
+      "result": "PASS"
+    },
+    {
+      "appName": "Patiala Rural",
+      "map": "Patiala Rural",
+      "acNo": 110,
+      "homePoint": {
+        "lat": 30.37470451138413,
+        "lng": 76.19299763449828
+      },
+      "insideHome": "ALLOW",
+      "outsideDelhi": "BLOCK",
+      "result": "PASS"
+    },
+    {
+      "appName": "Jalandhar Central",
+      "map": "Jalandhar Central",
+      "acNo": 35,
+      "homePoint": {
+        "lat": 31.315646823642048,
+        "lng": 75.60015683485011
+      },
+      "insideHome": "ALLOW",
+      "outsideDelhi": "BLOCK",
+      "result": "PASS"
+    },
+    {
+      "appName": "Jullundur Central",
+      "map": "Jalandhar Central",
+      "acNo": 35,
+      "homePoint": {
+        "lat": 31.315646823642048,
+        "lng": 75.60015683485011
+      },
+      "insideHome": "ALLOW",
+      "outsideDelhi": "BLOCK",
+      "result": "PASS"
+    },
+    {
+      "appName": "Kharar",
+      "map": "Kharar",
+      "acNo": 52,
+      "homePoint": {
+        "lat": 30.79539865865123,
+        "lng": 76.56826002314162
+      },
+      "insideHome": "ALLOW",
+      "outsideDelhi": "BLOCK",
+      "result": "PASS"
+    },
+    {
+      "appName": "S.A.S. Nagar",
+      "map": "S.A.S.Nagar",
+      "acNo": 53,
+      "homePoint": {
+        "lat": 30.644942906055313,
+        "lng": 76.63791683514387
+      },
+      "insideHome": "ALLOW",
+      "outsideDelhi": "BLOCK",
+      "result": "PASS"
+    },
+    {
+      "appName": "Mohali",
+      "map": "S.A.S.Nagar",
+      "acNo": 53,
+      "homePoint": {
+        "lat": 30.644942906055313,
+        "lng": 76.63791683514387
+      },
+      "insideHome": "ALLOW",
+      "outsideDelhi": "BLOCK",
+      "result": "PASS"
+    },
+    {
+      "appName": "Khem Karan",
+      "map": "Khem Karan",
+      "acNo": 22,
+      "homePoint": {
+        "lat": 31.133900702610383,
+        "lng": 74.52607658678508
+      },
+      "insideHome": "ALLOW",
+      "outsideDelhi": "BLOCK",
+      "result": "PASS"
+    },
+    {
+      "appName": "Dera Baba Nanak",
+      "map": "Dera Baba Nanak",
+      "acNo": 10,
+      "homePoint": {
+        "lat": 31.902150508764038,
+        "lng": 74.91438900917548
+      },
+      "insideHome": "ALLOW",
+      "outsideDelhi": "BLOCK",
+      "result": "PASS"
+    },
+    {
+      "appName": "Amritsar North",
+      "map": "Amritsar North",
+      "acNo": 15,
+      "homePoint": {
+        "lat": 31.642751844926742,
+        "lng": 74.85294711056576
+      },
+      "insideHome": "ALLOW",
+      "outsideDelhi": "BLOCK",
+      "result": "PASS"
+    },
+    {
+      "appName": "Bathinda Urban",
+      "map": "Bathinda Urban",
+      "acNo": 92,
+      "homePoint": {
+        "lat": 30.193525692906473,
+        "lng": 74.87401676789958
+      },
+      "insideHome": "ALLOW",
+      "outsideDelhi": "BLOCK",
+      "result": "PASS"
+    },
+    {
+      "appName": "Bhatinda",
+      "map": "Bathinda Urban",
+      "acNo": 92,
+      "homePoint": {
+        "lat": 30.193525692906473,
+        "lng": 74.87401676789958
+      },
+      "insideHome": "ALLOW",
+      "outsideDelhi": "BLOCK",
+      "result": "PASS"
+    },
+    {
+      "appName": "Ropar",
+      "map": "Rupnagar",
+      "acNo": 50,
+      "homePoint": {
+        "lat": 31.221311602103814,
+        "lng": 76.34721913934185
+      },
+      "insideHome": "ALLOW",
+      "outsideDelhi": "BLOCK",
+      "result": "PASS"
+    },
+    {
+      "appName": "Rupnagar",
+      "map": "Rupnagar",
+      "acNo": 50,
+      "homePoint": {
+        "lat": 31.221311602103814,
+        "lng": 76.34721913934185
+      },
+      "insideHome": "ALLOW",
+      "outsideDelhi": "BLOCK",
+      "result": "PASS"
+    }
+  ],
+  "insideFails": []
+}

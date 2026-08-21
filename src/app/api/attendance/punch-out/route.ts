@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { pathDistance } from "@/lib/utils";
 import { sanitizeFaceImage } from "@/lib/faceImage";
 import { assertInsideAssignedAssembly } from "@/lib/assemblyGeofence";
+import { closeOpenAttendance } from "@/lib/punchOut";
 
 export async function POST(req: Request) {
   const s = await requireUser();
@@ -16,51 +16,30 @@ export async function POST(req: Request) {
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
     return NextResponse.json({ error: "Location is required for punch out." }, { status: 400 });
   }
-  const open = await prisma.attendance.findFirst({
-    where: { userId: s.sub, punchOutAt: null },
-    include: { points: { orderBy: { recordedAt: "asc" } } },
-  });
-  if (!open) return NextResponse.json({ error: "No active punch in." }, { status: 400 });
 
   const user = await prisma.user.findUnique({
     where: { id: s.sub },
-    select: { assemblyName: true },
+    select: { assemblyName: true, designation: true },
   });
-  const geo = assertInsideAssignedAssembly({ assemblyName: user?.assemblyName, lat, lng });
+  const geo = assertInsideAssignedAssembly({
+    assemblyName: user?.assemblyName,
+    designation: user?.designation,
+    lat,
+    lng,
+  });
   if (!geo.ok) {
     return NextResponse.json({ error: geo.error, code: geo.code }, { status: 403 });
   }
 
-  const distance = pathDistance([
-    { lat: open.punchInLat, lng: open.punchInLng },
-    ...open.points.map((p) => ({ lat: p.lat, lng: p.lng })),
-    { lat, lng },
-  ]);
-
-  const base = {
-    punchOutAt: new Date(),
-    punchOutLat: lat,
-    punchOutLng: lng,
-    punchOutAddress: address,
-    distanceMeters: distance,
-    points: {
-      create: { lat, lng, recordedAt: new Date(), accuracy: Number(body?.accuracy) || null },
-    },
-  };
-
-  try {
-    const attendance = await prisma.attendance.update({
-      where: { id: open.id },
-      data: { ...base, punchOutFace },
-      select: { id: true, punchOutAt: true, distanceMeters: true },
-    });
-    return NextResponse.json({ attendance, ok: true });
-  } catch {
-    const attendance = await prisma.attendance.update({
-      where: { id: open.id },
-      data: base,
-      select: { id: true, punchOutAt: true, distanceMeters: true },
-    });
-    return NextResponse.json({ attendance, ok: true });
-  }
+  const attendance = await closeOpenAttendance({
+    userId: s.sub,
+    lat,
+    lng,
+    address,
+    accuracy: Number.isFinite(Number(body?.accuracy)) ? Number(body.accuracy) : null,
+    reason: "manual",
+    punchOutFace,
+  });
+  if (!attendance) return NextResponse.json({ error: "No active punch in." }, { status: 400 });
+  return NextResponse.json({ attendance, ok: true });
 }

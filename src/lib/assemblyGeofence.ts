@@ -24,8 +24,13 @@ export type AssemblyMatch = {
 };
 
 export type GeofenceResult =
-  | { ok: true; assembly: AssemblyMatch; inside: boolean; distanceMeters: number }
+  | { ok: true; assembly: AssemblyMatch; inside: boolean; distanceMeters: number; scope: "assembly" | "punjab_chandigarh" }
   | { ok: false; error: string; code: "NO_ASSEMBLY" | "UNKNOWN_ASSEMBLY" | "OUTSIDE" };
+
+/** These designations may punch anywhere inside Punjab + Chandigarh (not other states). */
+export const STATEWIDE_PUNCH_DESIGNATIONS = new Set(["State", "ZLC", "DLC", "Cluster"]);
+
+let regionCache: { geometries: Geometry[] } | null = null;
 
 let cached: { byNorm: Map<string, Feature>; features: Feature[] } | null = null;
 
@@ -274,8 +279,57 @@ function minDistanceToGeometryMeters(lat: number, lng: number, geometry: Geometr
   return min;
 }
 
+function loadPunjabChandigarh() {
+  if (regionCache) return regionCache;
+  const path = join(process.cwd(), "data", "boundaries", "punjab-chandigarh.geojson");
+  const data = JSON.parse(readFileSync(path, "utf8")) as {
+    features: { geometry: Geometry }[];
+  };
+  regionCache = { geometries: data.features.map((f) => f.geometry) };
+  return regionCache;
+}
+
+function assertInsidePunjabChandigarh(opts: {
+  lat: number;
+  lng: number;
+  bufferMeters?: number;
+  designation: string;
+}): GeofenceResult {
+  const buffer = opts.bufferMeters ?? ASSEMBLY_BUFFER_METERS;
+  const { geometries } = loadPunjabChandigarh();
+  let bestDist = Number.POSITIVE_INFINITY;
+  for (const geometry of geometries) {
+    if (pointInGeometry(opts.lng, opts.lat, geometry)) {
+      return {
+        ok: true,
+        assembly: { acNo: 0, acName: "Punjab / Chandigarh", matchedAs: opts.designation },
+        inside: true,
+        distanceMeters: 0,
+        scope: "punjab_chandigarh",
+      };
+    }
+    bestDist = Math.min(bestDist, minDistanceToGeometryMeters(opts.lat, opts.lng, geometry));
+  }
+  if (bestDist <= buffer) {
+    return {
+      ok: true,
+      assembly: { acNo: 0, acName: "Punjab / Chandigarh", matchedAs: opts.designation },
+      inside: false,
+      distanceMeters: bestDist,
+      scope: "punjab_chandigarh",
+    };
+  }
+  return {
+    ok: false,
+    code: "OUTSIDE",
+    error:
+      "Punch is allowed only inside Punjab or Chandigarh for your designation. Delhi and other states are not allowed.",
+  };
+}
+
 export function assertInsideAssignedAssembly(opts: {
   assemblyName: string | null | undefined;
+  designation?: string | null;
   lat: number;
   lng: number;
   bufferMeters?: number;
@@ -286,8 +340,20 @@ export function assertInsideAssignedAssembly(opts: {
       assembly: { acNo: 0, acName: String(opts.assemblyName || ""), matchedAs: String(opts.assemblyName || "") },
       inside: true,
       distanceMeters: 0,
+      scope: "assembly",
     };
   }
+
+  const designation = String(opts.designation || "").trim();
+  if (STATEWIDE_PUNCH_DESIGNATIONS.has(designation)) {
+    return assertInsidePunjabChandigarh({
+      lat: opts.lat,
+      lng: opts.lng,
+      bufferMeters: opts.bufferMeters,
+      designation,
+    });
+  }
+
   const name = String(opts.assemblyName || "").trim();
   if (!name) {
     return {
@@ -317,11 +383,11 @@ export function assertInsideAssignedAssembly(opts: {
   const buffer = opts.bufferMeters ?? ASSEMBLY_BUFFER_METERS;
   const inside = pointInGeometry(opts.lng, opts.lat, feat.geometry);
   if (inside) {
-    return { ok: true, assembly: match, inside: true, distanceMeters: 0 };
+    return { ok: true, assembly: match, inside: true, distanceMeters: 0, scope: "assembly" };
   }
   const distanceMeters = minDistanceToGeometryMeters(opts.lat, opts.lng, feat.geometry);
   if (distanceMeters <= buffer) {
-    return { ok: true, assembly: match, inside: false, distanceMeters };
+    return { ok: true, assembly: match, inside: false, distanceMeters, scope: "assembly" };
   }
   return {
     ok: false,

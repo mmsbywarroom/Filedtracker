@@ -39,6 +39,7 @@ model User {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
   attendances         Attendance[]
+  leaveRequests       LeaveRequest[]
 }
 
 model OtpChallenge {
@@ -66,11 +67,13 @@ model Attendance {
   punchOutAddress String?
   punchInFace     String?
   punchOutFace    String?
+  punchOutReason  String?
   distanceMeters Float   @default(0)
   createdAt     DateTime @default(now())
   points        TrackPoint[]
 
   @@index([userId, punchInAt])
+  @@index([punchOutReason])
 }
 
 model TrackPoint {
@@ -84,4 +87,21 @@ model TrackPoint {
   createdAt    DateTime   @default(now())
 
   @@index([attendanceId, recordedAt])
+}
+
+model LeaveRequest {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fromDate    DateTime
+  toDate      DateTime
+  reason      String
+  status      String   @default("pending")
+  adminNote   String?
+  reviewedAt  DateTime?
+  reviewedBy  String?
+  createdAt   DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
 }

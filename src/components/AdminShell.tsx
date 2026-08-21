@@ -30,6 +30,8 @@ export default function AdminShell({ children }: { children: ReactNode }) {
   const nav = [
     { href: "/admin", label: t("dashboard"), match: (p: string) => p === "/admin" },
     { href: "/admin/users", label: t("users"), match: (p: string) => p.startsWith("/admin/users") },
+    { href: "/admin/gps-off", label: t("gpsOffLogs"), match: (p: string) => p.startsWith("/admin/gps-off") },
+    { href: "/admin/leaves", label: t("leaveModule"), match: (p: string) => p.startsWith("/admin/leaves") },
     ...(isSuper
       ? [
           { href: "/admin/create", label: t("createUser"), match: (p: string) => p.startsWith("/admin/create") },
@@ -48,7 +50,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
     <div className="min-h-screen bg-[#f3f6fb] md:flex">
       <header className="sticky top-0 z-30 flex items-center justify-between gap-2 bg-ink px-4 py-3 text-white md:hidden">
         <div className="flex items-center gap-2">
-          <BrandMark size={32} className="rounded-xl" />
+          <BrandMark size={40} className="rounded-xl" />
           <p className="font-semibold">{t("app")}</p>
         </div>
         <div className="flex items-center gap-2">
@@ -65,7 +67,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
         <div className="hidden border-b border-white/10 px-5 py-6 md:block">
           <div className="flex items-center gap-3">
             <Link href="/admin" onClick={() => setOpen(false)}>
-              <BrandMark size={48} />
+              <BrandMark size={64} />
             </Link>
             <div>
               <p className="text-xs uppercase tracking-[0.18em] text-teal-bright">{t("aap")}</p>

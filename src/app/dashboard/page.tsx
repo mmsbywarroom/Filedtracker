@@ -29,6 +29,7 @@ type Attendance = {
   punchInLng: number;
   punchOutLat: number | null;
   punchOutLng: number | null;
+  punchOutReason?: string | null;
   distanceMeters: number;
   points: Point[];
 };
@@ -65,6 +66,8 @@ export default function DashboardPage() {
   const buffer = useRef<Point[]>([]);
   const lastFix = useRef<{ lat: number; lng: number } | null>(null);
   const pendingGps = useRef<Promise<GeolocationPosition | null> | null>(null);
+  const gpsOffLock = useRef(false);
+  const [gpsOffFlag, setGpsOffFlag] = useState(false);
 
   async function refresh() {
     const me = await fetch("/api/me").then((r) => r.json());
@@ -76,6 +79,8 @@ export default function DashboardPage() {
     const att = await fetch("/api/attendance").then((r) => r.json());
     setOpen(att.open);
     setHistory(att.history || []);
+    const last = att.history?.[0];
+    if (!att.open && last?.punchOutReason === "gps_off") setGpsOffFlag(true);
   }
 
   useEffect(() => {
@@ -89,9 +94,47 @@ export default function DashboardPage() {
     }
   }, [mode]);
 
+  async function autoPunchOutForGpsOff() {
+    if (gpsOffLock.current) return;
+    gpsOffLock.current = true;
+    const last =
+      lastFix.current ||
+      (open ? { lat: open.punchInLat, lng: open.punchInLng } : null);
+    if (buffer.current.length) {
+      const batch = buffer.current.splice(0, buffer.current.length);
+      fetch("/api/attendance/track", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        keepalive: true,
+        body: JSON.stringify({ points: batch }),
+      }).catch(() => {});
+    }
+    try {
+      await fetch("/api/attendance/gps-off", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        keepalive: true,
+        body: JSON.stringify({
+          lat: last?.lat,
+          lng: last?.lng,
+          address: "GPS turned off",
+        }),
+      });
+    } catch {
+      /* still show flag */
+    }
+    setOpen(null);
+    setMode("idle");
+    setOkMsg(false);
+    setGpsOffFlag(true);
+    setMsg(t("gpsOffFlag"));
+    refresh();
+  }
+
   useEffect(() => {
     if (!open) return;
     lastFix.current = open.points[open.points.length - 1] || { lat: open.punchInLat, lng: open.punchInLng };
+    gpsOffLock.current = false;
     let wake: { release: () => Promise<void> } | null = null;
     navigator.wakeLock?.request("screen").then((lock) => {
       wake = lock;
@@ -120,7 +163,9 @@ export default function DashboardPage() {
         buffer.current.push(point);
         setOpen((cur) => (cur ? { ...cur, points: [...cur.points, point] } : cur));
       },
-      () => {},
+      (err) => {
+        if (err.code === 1 || err.code === 2) autoPunchOutForGpsOff();
+      },
       { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
     );
     const t = setInterval(flush, 8000);
@@ -128,10 +173,24 @@ export default function DashboardPage() {
       if (document.visibilityState === "hidden") flush();
     };
     document.addEventListener("visibilitychange", onHide);
+
+    let perm: PermissionStatus | null = null;
+    const onPerm = () => {
+      if (perm && perm.state !== "granted") autoPunchOutForGpsOff();
+    };
+    navigator.permissions
+      ?.query({ name: "geolocation" })
+      .then((status) => {
+        perm = status;
+        status.addEventListener("change", onPerm);
+      })
+      .catch(() => {});
+
     return () => {
       navigator.geolocation.clearWatch(watch);
       clearInterval(t);
       document.removeEventListener("visibilitychange", onHide);
+      perm?.removeEventListener("change", onPerm);
       flush();
       wake?.release().catch(() => {});
     };
@@ -218,6 +277,7 @@ export default function DashboardPage() {
       if (!res.ok) throw new Error(data.error || "Could not save punch.");
       setMode("idle");
       setOkMsg(true);
+      setGpsOffFlag(false);
       setMsg(kind === "in" ? t("punchedIn") : t("punchedOut"));
       setBusy(false);
       refresh();
@@ -252,7 +312,7 @@ export default function DashboardPage() {
   if (!user) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-3">
-        <BrandMark size={64} className="shadow-card" />
+        <BrandMark size={80} className="shadow-card" />
         <p>{t("loading")}</p>
       </div>
     );
@@ -263,7 +323,7 @@ export default function DashboardPage() {
       <div className="mx-auto max-w-6xl px-4 py-5">
         <header className="mb-4 flex items-center justify-between gap-3 rounded-3xl bg-white px-4 py-3 shadow-card">
           <div className="flex items-center gap-3">
-            <BrandMark size={44} className="shadow-sm" />
+            <BrandMark size={56} className="shadow-sm" />
             <div>
               <p className="text-xs uppercase tracking-wider text-navy/50">{t("aap")}</p>
               <h1 className="font-semibold">{user.name}</h1>
@@ -280,6 +340,12 @@ export default function DashboardPage() {
           </div>
         </header>
 
+        {gpsOffFlag && (
+          <div className="mb-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+            <p className="font-semibold">Punched out because GPS was turned off</p>
+            <p className="mt-1">{t("gpsOffFlag")}</p>
+          </div>
+        )}
         {msg && (
           <p
             className={`mb-3 rounded-2xl px-4 py-2 text-sm ${
@@ -360,8 +426,18 @@ export default function DashboardPage() {
         </div>
 
         <Link
+          href="/dashboard/leave"
+          className="mt-3 flex items-center justify-between rounded-2xl bg-white px-4 py-3 shadow-card"
+        >
+          <div>
+            <p className="font-semibold">{t("leaveRequest")}</p>
+            <p className="text-sm text-navy/55">{t("leaveHint")}</p>
+          </div>
+          <span className="text-navy/40">→</span>
+        </Link>
+        <Link
           href="/dashboard/footprints"
-          className="mt-5 flex items-center justify-between rounded-2xl bg-white px-4 py-3 shadow-card"
+          className="mt-3 flex items-center justify-between rounded-2xl bg-white px-4 py-3 shadow-card"
         >
           <div>
             <p className="font-semibold">{t("recent")}</p>
