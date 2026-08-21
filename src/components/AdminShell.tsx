@@ -62,18 +62,15 @@ export default function AdminShell({ children }: { children: ReactNode }) {
       </header>
 
       <aside
-        className={`${open ? "flex" : "hidden"} z-20 w-full flex-col bg-ink text-white md:sticky md:top-0 md:flex md:h-screen md:w-60 md:shrink-0`}
+        className={`${open ? "flex" : "hidden"} z-20 w-full flex-col overflow-hidden bg-ink text-white md:sticky md:top-0 md:flex md:h-screen md:w-60 md:shrink-0`}
       >
-        <div className="hidden border-b border-white/10 px-5 py-6 md:block">
-          <div className="flex items-center gap-3">
-            <Link href="/admin" onClick={() => setOpen(false)}>
-              <BrandMark size={64} tone="onDark" />
-            </Link>
-            <div>
-              <p className="text-xs uppercase tracking-[0.18em] text-teal-bright">{t("aap")}</p>
-              <h1 className="mt-0.5 text-lg font-semibold">{t("admin")}</h1>
-            </div>
-          </div>
+        <div className="hidden border-b border-white/10 px-4 py-5 md:block">
+          <Link href="/admin" onClick={() => setOpen(false)} className="block overflow-hidden">
+            <BrandMark size={36} tone="onDark" className="max-w-full" />
+            <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-teal-bright">{t("aap")}</p>
+            <h1 className="mt-1 truncate text-base font-semibold leading-tight">{t("app")}</h1>
+            <p className="mt-0.5 text-xs text-white/55">Admin</p>
+          </Link>
           <div className="mt-3">
             <LangToggle />
           </div>

@@ -38,6 +38,8 @@ export function defaultVisibleDesignations(level: string): string[] {
 
 export function visibleDesignationsFor(admin: Pick<AdminScope, "isSuper" | "accessLevel" | "designations">): string[] {
   if (admin.isSuper) return [...DESIGNATIONS];
+  // State admins always see every designation of users (leave/GPS still use next-level scope)
+  if (admin.accessLevel === "State") return [...DESIGNATIONS];
   if (admin.designations.length) return admin.designations;
   return defaultVisibleDesignations(admin.accessLevel);
 }
@@ -52,6 +54,8 @@ export function canManageAdmins(admin: Pick<AdminScope, "isSuper">) {
 
 export function userScopeWhere(admin: AdminScope) {
   if (admin.isSuper) return {};
+  // State: all designations statewide — no designation filter
+  if (admin.accessLevel === "State") return {};
   const dens = visibleDesignationsFor(admin);
   const where: Record<string, unknown> = {
     designation: { in: dens.length ? dens : ["__none__"] },
@@ -87,6 +91,7 @@ export function canSeeUser(
   user: { designation?: string | null; zone: string; district: string; assemblyName: string; cluster?: string | null }
 ) {
   if (admin.isSuper) return true;
+  if (admin.accessLevel === "State") return true;
   const dens = visibleDesignationsFor(admin);
   if (user.designation && !dens.includes(user.designation)) return false;
   if (admin.accessLevel === "ZLC") return Boolean(admin.zone) && user.zone === admin.zone;
