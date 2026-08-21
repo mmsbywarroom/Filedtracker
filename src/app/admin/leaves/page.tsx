@@ -71,7 +71,9 @@ export default function AdminLeavesPage() {
     <main className="px-4 py-6 md:px-8">
       <p className="text-xs uppercase tracking-[0.2em] text-teal">Approvals</p>
       <h1 className="text-2xl font-semibold">Leave requests</h1>
-      <p className="mt-1 text-sm text-navy/55">Approve or reject leave from users in your assignment.</p>
+      <p className="mt-1 text-sm text-navy/55">
+        You only see leave from the level just below you: State→ZLC→DLC→Cluster→ALC→Sector Incharge (within your zone/district/assembly).
+      </p>
 
       <div className="mt-4 mb-4 flex flex-wrap items-end gap-3 rounded-2xl bg-white p-4 shadow-card">
         <select

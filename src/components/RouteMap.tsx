@@ -241,7 +241,7 @@ export default function RouteMap({
       {!error && !liveLocation && !points.length && !punchIn && (
         <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">
           <span className="rounded-full bg-white/95 px-3 py-1 text-xs font-medium text-navy/60 shadow">
-            Getting your GPS…
+            Finding you…
           </span>
         </div>
       )}

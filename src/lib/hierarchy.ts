@@ -103,3 +103,67 @@ export function canSeeUser(
   if (admin.cluster && (user.cluster || "") !== admin.cluster) return false;
   return true;
 }
+
+/** Immediate junior designation chain:
+ * State→ZLC→DLC→Cluster→ALC→Sector Incharge
+ */
+export function leaveReviewDesignation(level: string): string | null {
+  const rank = DESIGNATION_RANK[level];
+  if (rank == null) return null;
+  return DESIGNATIONS.find((d) => DESIGNATION_RANK[d] === rank + 1) || null;
+}
+
+/** Same geography as users, but only the next designation down (leave + GPS-off). */
+export function nextLevelScopeWhere(admin: AdminScope) {
+  if (admin.isSuper) return {};
+  const next = leaveReviewDesignation(admin.accessLevel);
+  if (!next) return NO_USERS;
+  const where: Record<string, unknown> = { designation: next };
+  if (admin.accessLevel === "ZLC") {
+    if (!admin.zone) return NO_USERS;
+    where.zone = admin.zone;
+  } else if (admin.accessLevel === "DLC") {
+    if (!admin.district) return NO_USERS;
+    if (admin.zone) where.zone = admin.zone;
+    where.district = admin.district;
+  } else if (admin.accessLevel === "Cluster") {
+    if (!admin.cluster) return NO_USERS;
+    if (admin.zone) where.zone = admin.zone;
+    if (admin.district) where.district = admin.district;
+    where.cluster = admin.cluster;
+  } else if (admin.accessLevel === "ALC") {
+    if (!admin.assemblyName) return NO_USERS;
+    if (admin.zone) where.zone = admin.zone;
+    if (admin.district) where.district = admin.district;
+    where.assemblyName = admin.assemblyName;
+  } else if (admin.accessLevel === "State") {
+    // statewide — all next-level (ZLC) users
+  } else {
+    return NO_USERS;
+  }
+  return where;
+}
+
+/** @deprecated alias — use nextLevelScopeWhere */
+export const leaveScopeWhere = nextLevelScopeWhere;
+
+export function canReviewLeave(
+  admin: AdminScope,
+  user: { designation?: string | null; zone: string; district: string; assemblyName: string; cluster?: string | null }
+) {
+  if (admin.isSuper) return true;
+  const next = leaveReviewDesignation(admin.accessLevel);
+  if (!next || user.designation !== next) return false;
+  if (admin.accessLevel === "State") return true;
+  if (admin.accessLevel === "ZLC") return Boolean(admin.zone) && user.zone === admin.zone;
+  if (admin.accessLevel === "DLC") {
+    return Boolean(admin.district) && user.district === admin.district && (!admin.zone || user.zone === admin.zone);
+  }
+  if (admin.accessLevel === "Cluster") {
+    return Boolean(admin.cluster) && (user.cluster || "") === admin.cluster;
+  }
+  if (admin.accessLevel === "ALC") {
+    return Boolean(admin.assemblyName) && user.assemblyName === admin.assemblyName;
+  }
+  return false;
+}

@@ -46,10 +46,17 @@ function getPosition(): Promise<GeolocationPosition> {
       else if (code === 3) reject(new Error("GPS timed out. Try outdoors, then tap Confirm."));
       else reject(new Error("Location not found. Turn on GPS and tap Confirm again."));
     };
-    navigator.geolocation.getCurrentPosition(resolve, fail, {
-      enableHighAccuracy: true,
-      timeout: 15000,
-      maximumAge: 0,
+    // Prefer a quick cached/network fix first; fall back to high-accuracy GPS.
+    navigator.geolocation.getCurrentPosition(resolve, () => {
+      navigator.geolocation.getCurrentPosition(resolve, fail, {
+        enableHighAccuracy: true,
+        timeout: 20000,
+        maximumAge: 0,
+      });
+    }, {
+      enableHighAccuracy: false,
+      timeout: 4000,
+      maximumAge: 120000,
     });
   });
 }
@@ -64,6 +71,7 @@ export default function DashboardPage() {
   const [okMsg, setOkMsg] = useState(false);
   const buffer = useRef<Point[]>([]);
   const lastFix = useRef<{ lat: number; lng: number } | null>(null);
+  const liveAcc = useRef<number>(Infinity);
   const pendingGps = useRef<Promise<GeolocationPosition | null> | null>(null);
   const gpsOffLock = useRef(false);
   const [gpsOffFlag, setGpsOffFlag] = useState(false);
@@ -87,24 +95,38 @@ export default function DashboardPage() {
     loadFaceModels().catch(() => {});
   }, []);
 
-  // Always keep a live GPS fix so the map shows where the user actually is
+  // Fast map pin: accept cached/network location first, then refine with GPS
   useEffect(() => {
     if (!navigator.geolocation) return;
-    const apply = (pos: GeolocationPosition) => {
-      if (pos.coords.accuracy > 300) return;
+    const apply = (pos: GeolocationPosition, force = false) => {
+      const acc = pos.coords.accuracy || 9999;
+      // Map can show a coarse fix; skip only absurd readings
+      if (!force && acc > 2000) return;
+      // Prefer better accuracy; allow small worsen so the pin still moves with you
+      if (!force && acc > liveAcc.current * 1.8 && liveAcc.current < 80) return;
+      liveAcc.current = acc;
       const next = { lat: pos.coords.latitude, lng: pos.coords.longitude };
       setLivePos(next);
       lastFix.current = next;
     };
-    navigator.geolocation.getCurrentPosition(apply, () => {}, {
-      enableHighAccuracy: true,
-      timeout: 20000,
-      maximumAge: 0,
+
+    // 1) Instant-ish: last known / network location
+    navigator.geolocation.getCurrentPosition((p) => apply(p, true), () => {}, {
+      enableHighAccuracy: false,
+      timeout: 3500,
+      maximumAge: 180000,
     });
-    const watch = navigator.geolocation.watchPosition(apply, () => {}, {
+    // 2) Better GPS shortly after
+    navigator.geolocation.getCurrentPosition((p) => apply(p, true), () => {}, {
       enableHighAccuracy: true,
-      maximumAge: 3000,
-      timeout: 20000,
+      timeout: 12000,
+      maximumAge: 5000,
+    });
+    // 3) Keep updating
+    const watch = navigator.geolocation.watchPosition((p) => apply(p), () => {}, {
+      enableHighAccuracy: true,
+      maximumAge: 5000,
+      timeout: 15000,
     });
     return () => navigator.geolocation.clearWatch(watch);
   }, []);

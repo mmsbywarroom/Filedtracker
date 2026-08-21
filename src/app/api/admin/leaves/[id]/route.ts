@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { canSeeUser } from "@/lib/hierarchy";
+import { canReviewLeave } from "@/lib/hierarchy";
 
 const schema = z.object({
   status: z.enum(["approved", "rejected"]),
@@ -19,7 +19,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     where: { id: params.id },
     include: { user: true },
   });
-  if (!leave || !canSeeUser(s.admin, leave.user)) {
+  if (!leave || !canReviewLeave(s.admin, leave.user)) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
   if (leave.status !== "pending") {
