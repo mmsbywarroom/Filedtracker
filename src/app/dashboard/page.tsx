@@ -58,7 +58,6 @@ export default function DashboardPage() {
   const { t } = useLang();
   const [user, setUser] = useState<User | null>(null);
   const [open, setOpen] = useState<Attendance | null>(null);
-  const [history, setHistory] = useState<Attendance[]>([]);
   const [mode, setMode] = useState<"idle" | "register" | "in" | "out">("idle");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
@@ -68,6 +67,7 @@ export default function DashboardPage() {
   const pendingGps = useRef<Promise<GeolocationPosition | null> | null>(null);
   const gpsOffLock = useRef(false);
   const [gpsOffFlag, setGpsOffFlag] = useState(false);
+  const [livePos, setLivePos] = useState<{ lat: number; lng: number } | null>(null);
 
   async function refresh() {
     const me = await fetch("/api/me").then((r) => r.json());
@@ -78,7 +78,6 @@ export default function DashboardPage() {
     setUser(me.user);
     const att = await fetch("/api/attendance").then((r) => r.json());
     setOpen(att.open);
-    setHistory(att.history || []);
     const last = att.history?.[0];
     if (!att.open && last?.punchOutReason === "gps_off") setGpsOffFlag(true);
   }
@@ -86,6 +85,28 @@ export default function DashboardPage() {
   useEffect(() => {
     refresh();
     loadFaceModels().catch(() => {});
+  }, []);
+
+  // Always keep a live GPS fix so the map shows where the user actually is
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    const apply = (pos: GeolocationPosition) => {
+      if (pos.coords.accuracy > 300) return;
+      const next = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      setLivePos(next);
+      lastFix.current = next;
+    };
+    navigator.geolocation.getCurrentPosition(apply, () => {}, {
+      enableHighAccuracy: true,
+      timeout: 20000,
+      maximumAge: 0,
+    });
+    const watch = navigator.geolocation.watchPosition(apply, () => {}, {
+      enableHighAccuracy: true,
+      maximumAge: 3000,
+      timeout: 20000,
+    });
+    return () => navigator.geolocation.clearWatch(watch);
   }, []);
 
   useEffect(() => {
@@ -157,6 +178,7 @@ export default function DashboardPage() {
       (pos) => {
         if (pos.coords.accuracy > 200) return;
         const next = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        setLivePos(next);
         if (lastFix.current && !isPlausibleStep(lastFix.current, next, pos.coords.accuracy)) return;
         lastFix.current = next;
         const point = { ...next, recordedAt: new Date().toISOString(), accuracy: pos.coords.accuracy };
@@ -375,30 +397,15 @@ export default function DashboardPage() {
               <RouteMap
                 points={open.points}
                 punchIn={{ lat: open.punchInLat, lng: open.punchInLng }}
+                liveLocation={livePos}
                 durationMs={live?.durationMs}
                 distanceMeters={open.distanceMeters}
               />
             </div>
-          ) : history[0] ? (
-            <div className="h-[42vh] min-h-[280px]">
-              <RouteMap
-                points={history[0].points}
-                punchIn={{ lat: history[0].punchInLat, lng: history[0].punchInLng }}
-                punchOut={
-                  history[0].punchOutLat != null && history[0].punchOutLng != null
-                    ? { lat: history[0].punchOutLat, lng: history[0].punchOutLng }
-                    : null
-                }
-                durationMs={
-                  history[0].punchOutAt
-                    ? new Date(history[0].punchOutAt).getTime() - new Date(history[0].punchInAt).getTime()
-                    : undefined
-                }
-                distanceMeters={history[0].distanceMeters}
-              />
-            </div>
           ) : (
-            <div className="grid h-64 place-items-center text-navy/50">{t("punchStart")}</div>
+            <div className="h-[42vh] min-h-[280px]">
+              <RouteMap points={[]} liveLocation={livePos} />
+            </div>
           )}
 
           <div className="flex flex-wrap gap-2 p-4">
