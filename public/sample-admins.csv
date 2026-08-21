@@ -1,0 +1,4 @@
+Name,Admin ID,Password,Admin Level,Designations,Zone,District,Cluster,Assembly
+Gurpreet Singh,zlc.majha,Pass@12345,ZLC,"DLC|Cluster|ALC|Sector Incharge",Majha,,,
+Simran Kaur,dlc.pathankot,Pass@12345,DLC,"Cluster|ALC|Sector Incharge",Majha,Pathankot,,
+Harpreet Singh,alc.bhoa,Pass@12345,ALC,"Sector Incharge",Majha,Pathankot,,Bhoa

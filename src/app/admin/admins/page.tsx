@@ -1,6 +1,7 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { PaginationBar } from "@/components/PaginationBar";
 import { DESIGNATIONS, defaultVisibleDesignations } from "@/lib/hierarchy";
 
 type AdminRow = {
@@ -20,11 +21,19 @@ type Place = { zone: string; district: string; assemblyName: string; cluster: st
 
 const LEVELS = ["State", "ZLC", "DLC", "Cluster", "ALC"] as const;
 const field = "mt-1 w-full rounded-xl border border-navy/10 bg-sand/40 px-3 py-2 text-sm";
+const selectClass = "h-11 rounded-xl border border-navy/10 bg-white px-3 text-sm outline-none focus:border-teal";
 
 export default function AdminsPage() {
   const [admins, setAdmins] = useState<AdminRow[]>([]);
   const [places, setPlaces] = useState<Place[]>([]);
   const [error, setError] = useState("");
+  const [csvMsg, setCsvMsg] = useState("");
+  const [q, setQ] = useState("");
+  const [levelFilter, setLevelFilter] = useState("");
+  const [designationFilter, setDesignationFilter] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const fileRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -44,7 +53,7 @@ export default function AdminsPage() {
       return;
     }
     if (res.status === 403) {
-      setError("Only State admin can create other admins.");
+      setError("Only super admin can create other admins.");
       return;
     }
     const data = await res.json();
@@ -89,6 +98,27 @@ export default function AdminsPage() {
       ).sort(),
     [places, form.zone, form.district]
   );
+
+  const filtered = useMemo(() => {
+    return admins.filter((a) => {
+      const text = [a.name, a.email, a.accessLevel, a.zone, a.district, a.cluster, a.assemblyName, ...(a.designations || [])]
+        .join(" ")
+        .toLowerCase();
+      if (q && !text.includes(q.toLowerCase())) return false;
+      if (levelFilter && a.accessLevel !== levelFilter) return false;
+      if (designationFilter && !(a.designations || []).includes(designationFilter)) return false;
+      return true;
+    });
+  }, [admins, q, levelFilter, designationFilter]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [q, levelFilter, designationFilter, pageSize]);
+
+  const pageRows = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filtered.slice(start, start + pageSize);
+  }, [filtered, page, pageSize]);
 
   function setLevel(accessLevel: string) {
     setForm({ ...form, accessLevel, designations: defaultVisibleDesignations(accessLevel) });
@@ -151,31 +181,95 @@ export default function AdminsPage() {
     load();
   }
 
+  async function uploadCsv(file: File) {
+    setCsvMsg("Uploading…");
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch("/api/admin/admins/csv", { method: "POST", body: fd });
+    const data = await res.json();
+    if (!res.ok) {
+      setCsvMsg(data.error || "CSV upload failed");
+      return;
+    }
+    setCsvMsg(
+      `Created ${data.created}, skipped ${data.skipped}${data.errors?.length ? `, ${data.errors.length} row errors` : ""}`
+    );
+    load();
+  }
+
   return (
     <main className="px-4 py-6 md:px-8">
-      <p className="text-xs uppercase tracking-[0.2em] text-teal">Access</p>
-      <h1 className="text-2xl font-semibold">Admin users</h1>
-      <p className="mt-1 max-w-3xl text-sm text-navy/60">
-        Create an admin login. State sees the full organisation. ZLC sees one zone, DLC one district, Cluster one cluster, and ALC one assembly.
-      </p>
+      <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <p className="text-xs uppercase tracking-[0.2em] text-teal">Access</p>
+          <h1 className="text-2xl font-semibold">Admin users</h1>
+          <p className="mt-1 max-w-3xl text-sm text-navy/60">
+            Create admins one by one or bulk upload CSV. ZLC / DLC / Cluster / ALC only see their assigned area.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <a
+            href="/sample-admins.csv"
+            download
+            className="rounded-xl border border-navy/10 bg-white px-4 py-2.5 text-sm font-semibold text-navy/80 shadow-card"
+          >
+            Download CSV template
+          </a>
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            className="rounded-xl border border-teal/30 bg-teal/10 px-4 py-2.5 text-sm font-semibold text-teal shadow-card"
+          >
+            Bulk upload CSV
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".csv,text/csv"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) uploadCsv(f);
+              e.target.value = "";
+            }}
+          />
+        </div>
+      </div>
 
-      <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+      {csvMsg && <p className="mb-4 rounded-xl bg-white px-4 py-2 text-sm text-navy/70 shadow-card">{csvMsg}</p>}
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.25fr)]">
         <form onSubmit={create} className="rounded-[1.75rem] bg-white p-5 shadow-card">
           <h2 className="font-semibold">Create admin</h2>
           <label className="mt-3 block text-xs font-medium text-navy/60">
             Name
-            <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Gurpreet Singh" className={field} />
-            <span className="mt-1 block text-[11px] font-normal text-navy/45">Display name shown in the admin list.</span>
+            <input
+              required
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder="e.g. Gurpreet Singh"
+              className={field}
+            />
           </label>
           <label className="mt-3 block text-xs font-medium text-navy/60">
             Admin ID
-            <input required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="zlc.majha" className={field} />
-            <span className="mt-1 block text-[11px] font-normal text-navy/45">Used as the username on the admin login page.</span>
+            <input
+              required
+              value={form.email}
+              onChange={(e) => setForm({ ...form, email: e.target.value })}
+              placeholder="zlc.majha"
+              className={field}
+            />
           </label>
           <label className="mt-3 block text-xs font-medium text-navy/60">
             Password
-            <input required type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} className={field} />
-            <span className="mt-1 block text-[11px] font-normal text-navy/45">Password for this login. At least 6 characters.</span>
+            <input
+              required
+              type="password"
+              value={form.password}
+              onChange={(e) => setForm({ ...form, password: e.target.value })}
+              className={field}
+            />
           </label>
           <label className="mt-3 block text-xs font-medium text-navy/60">
             Admin level
@@ -184,17 +278,9 @@ export default function AdminsPage() {
                 <option key={l}>{l}</option>
               ))}
             </select>
-            <span className="mt-1 block text-[11px] font-normal text-navy/45">
-              {form.accessLevel === "State" && "State sees all zones and users."}
-              {form.accessLevel === "ZLC" && "ZLC sees only the selected zone and levels below it."}
-              {form.accessLevel === "DLC" && "DLC sees only the selected district and levels below it."}
-              {form.accessLevel === "Cluster" && "Cluster sees only that cluster’s ALCs and Sector Incharges."}
-              {form.accessLevel === "ALC" && "ALC sees only Sector Incharges in the selected assembly."}
-            </span>
           </label>
 
           <p className="mt-4 text-xs font-semibold uppercase tracking-wider text-navy/45">Can see these designations</p>
-          <p className="mt-1 text-[11px] text-navy/45">Tick the designations this admin can see. Example: Sector Incharge only hides DLC/ALC users.</p>
           <div className="mt-2 grid grid-cols-2 gap-2">
             {DESIGNATIONS.map((d) => (
               <label key={d} className="flex items-center gap-2 rounded-xl border border-navy/10 px-3 py-2 text-sm">
@@ -219,7 +305,6 @@ export default function AdminsPage() {
                     <option key={z}>{z}</option>
                   ))}
                 </select>
-                <span className="mt-1 block text-[11px] font-normal text-navy/45">Which zone this admin can see, such as Majha or Malwa.</span>
               </label>
               {(form.accessLevel === "DLC" || form.accessLevel === "Cluster" || form.accessLevel === "ALC") && (
                 <label className="block text-xs font-medium text-navy/60">
@@ -256,7 +341,12 @@ export default function AdminsPage() {
               {form.accessLevel === "ALC" && (
                 <label className="block text-xs font-medium text-navy/60">
                   Assembly
-                  <select required value={form.assemblyName} onChange={(e) => setForm({ ...form, assemblyName: e.target.value })} className={field}>
+                  <select
+                    required
+                    value={form.assemblyName}
+                    onChange={(e) => setForm({ ...form, assemblyName: e.target.value })}
+                    className={field}
+                  >
                     <option value="">Select assembly</option>
                     {assemblies.map((a) => (
                       <option key={a}>{a}</option>
@@ -272,34 +362,85 @@ export default function AdminsPage() {
         </form>
 
         <section className="overflow-hidden rounded-[1.75rem] bg-white shadow-card">
-          <div className="border-b border-navy/5 px-4 py-3 font-semibold">Existing admins</div>
-          <div className="max-h-[70vh] overflow-auto">
-            {admins.map((a) => (
-              <div key={a.id} className="border-t border-navy/5 px-4 py-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-semibold">{a.name || a.email}</p>
-                    <p className="text-xs text-navy/50">{a.email}</p>
-                    <p className="mt-1 text-sm text-navy/70">
-                      {a.accessLevel}
-                      {a.isSuper ? " · Super" : ""}
-                      {a.zone ? ` · ${a.zone}` : ""}
-                      {a.district ? ` · ${a.district}` : ""}
-                      {a.cluster ? ` · ${a.cluster}` : ""}
-                      {a.assemblyName ? ` · ${a.assemblyName}` : ""}
-                    </p>
-                    <p className="mt-1 text-xs text-navy/50">{a.designations.join(", ") || "Default: levels below this admin"}</p>
-                  </div>
-                  {!a.isSuper && (
-                    <button onClick={() => remove(a.id)} className="text-xs font-semibold text-red-600">
-                      Delete
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
-            {!admins.length && !error && <p className="p-6 text-sm text-navy/50">No extra admins yet.</p>}
+          <div className="border-b border-navy/5 px-4 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="font-semibold">Existing admins</h2>
+              <p className="text-xs text-navy/50">
+                {filtered.length} of {admins.length}
+              </p>
+            </div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Search name or admin ID"
+                className={selectClass}
+              />
+              <select value={levelFilter} onChange={(e) => setLevelFilter(e.target.value)} className={selectClass}>
+                <option value="">All levels</option>
+                {LEVELS.map((l) => (
+                  <option key={l}>{l}</option>
+                ))}
+              </select>
+              <select
+                value={designationFilter}
+                onChange={(e) => setDesignationFilter(e.target.value)}
+                className={selectClass}
+              >
+                <option value="">All designations</option>
+                {DESIGNATIONS.map((d) => (
+                  <option key={d}>{d}</option>
+                ))}
+              </select>
+            </div>
           </div>
+
+          <div className="overflow-auto">
+            <table className="min-w-full text-left text-sm">
+              <thead className="sticky top-0 z-10 bg-[#eef3fb] text-[11px] font-semibold uppercase tracking-wider text-navy/55">
+                <tr>
+                  <th className="px-4 py-3">Admin</th>
+                  <th className="px-4 py-3">Level</th>
+                  <th className="px-4 py-3">Designations</th>
+                  <th className="px-4 py-3">Scope</th>
+                  <th className="px-4 py-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pageRows.map((a) => (
+                  <tr key={a.id} className="border-t border-navy/5 hover:bg-[#f7f9fd]">
+                    <td className="px-4 py-3">
+                      <p className="font-semibold text-ink">{a.name || a.email}</p>
+                      <p className="text-xs text-navy/50">{a.email}</p>
+                      {a.isSuper && (
+                        <span className="mt-1 inline-flex rounded-full bg-teal/10 px-2 py-0.5 text-[10px] font-semibold text-teal">
+                          Super
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 font-medium">{a.accessLevel}</td>
+                    <td className="px-4 py-3 text-xs text-navy/70">
+                      {(a.designations || []).join(", ") || "Default below level"}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-navy/70">
+                      {[a.zone, a.district, a.cluster, a.assemblyName].filter(Boolean).join(" · ") || "Full organisation"}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {!a.isSuper && (
+                        <button onClick={() => remove(a.id)} className="rounded-lg bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-600">
+                          Delete
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {!filtered.length && !error && <p className="p-6 text-sm text-navy/50">No matching admins.</p>}
+          </div>
+          {!!filtered.length && (
+            <PaginationBar page={page} pageSize={pageSize} total={filtered.length} onPage={setPage} onPageSize={setPageSize} />
+          )}
         </section>
       </div>
     </main>

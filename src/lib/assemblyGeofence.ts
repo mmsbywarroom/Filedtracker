@@ -1,0 +1,339 @@
+import { readFileSync } from "fs";
+import { join } from "path";
+import { haversineMeters } from "@/lib/utils";
+
+export const ASSEMBLY_BUFFER_METERS = Number(process.env.ASSEMBLY_GEOFENCE_BUFFER_M || 200);
+export const ASSEMBLY_GEOFENCE_ENABLED = process.env.ASSEMBLY_GEOFENCE_ENABLED !== "false";
+
+type Ring = number[][];
+type Geometry =
+  | { type: "Polygon"; coordinates: Ring[] }
+  | { type: "MultiPolygon"; coordinates: Ring[][] };
+
+type Feature = {
+  properties: { acNo: number; acName: string };
+  geometry: Geometry;
+};
+
+type GeoJson = { features: Feature[] };
+
+export type AssemblyMatch = {
+  acNo: number;
+  acName: string;
+  matchedAs: string;
+};
+
+export type GeofenceResult =
+  | { ok: true; assembly: AssemblyMatch; inside: boolean; distanceMeters: number }
+  | { ok: false; error: string; code: "NO_ASSEMBLY" | "UNKNOWN_ASSEMBLY" | "OUTSIDE" };
+
+let cached: { byNorm: Map<string, Feature>; features: Feature[] } | null = null;
+
+/** Manual aliases: app / spoken name → official map AC_NAME */
+const ALIASES: Record<string, string> = {
+  // Jalandhar (old Jullundur spelling)
+  "jullundur central": "Jalandhar Central",
+  "jullundur north": "Jalandhar North",
+  "jullundur south": "Jalandhar West",
+  "jullundur west": "Jalandhar West",
+  "jullundur cantonment": "Jalandhar Cantt.",
+  "jullundur cantt": "Jalandhar Cantt.",
+  "jalandhar cantonment": "Jalandhar Cantt.",
+  "jalandhar cantt": "Jalandhar Cantt.",
+  "jalandhar cantt.": "Jalandhar Cantt.",
+
+  // Patiala
+  "patiala town": "Patiala",
+  "patiala urban": "Patiala",
+  "patiala city": "Patiala",
+  "patiala rural": "Patiala Rural",
+
+  // SAS Nagar
+  "sas nagar": "S.A.S.Nagar",
+  "s a s nagar": "S.A.S.Nagar",
+  "s.a.s nagar": "S.A.S.Nagar",
+  "s.a.s. nagar": "S.A.S.Nagar",
+  "sahibzada ajit singh nagar": "S.A.S.Nagar",
+  "mohali": "S.A.S.Nagar",
+
+  // Bathinda
+  "bhatinda": "Bathinda Urban",
+  "bhatinda urban": "Bathinda Urban",
+  "bhatinda rural": "Bathinda Rural",
+  "bathinda": "Bathinda Urban",
+  "bathinda town": "Bathinda Urban",
+
+  // Common spelling / old names
+  "ropar": "Rupnagar",
+  "roopnagar": "Rupnagar",
+  "anandpur sahib - ropar": "Anandpur Sahib",
+  "anandpur sahib ropar": "Anandpur Sahib",
+  "kot kapura": "Kotkapura",
+  "giddar baha": "Gidderbaha",
+  "gidder baha": "Gidderbaha",
+  "nihal singh wala": "Nihal Singhwala",
+  "nihal singhwala": "Nihal Singhwala",
+  "srihargobindpur": "Sri Hargobindpur",
+  "sri hargobindpur": "Sri Hargobindpur",
+  "firozepur": "Firozpur City",
+  "firozepur city": "Firozpur City",
+  "firozepur cantonment": "Firozpur City",
+  "firozpur": "Firozpur City",
+  "firozpur cantonment": "Firozpur City",
+  "firozpur rural": "Firozpur Rural",
+  "khemkaran": "Khem Karan",
+  "khadoor sahib": "Khadoor Sahib",
+  "nawan shahar": "Nawan Shahr",
+  "nawanshahr": "Nawan Shahr",
+  "bagha purana": "Bhagha Purana",
+  "baghapurana": "Bhagha Purana",
+  "dirbha": "Dirba",
+  "dakala": "Sanour",
+  "pakka kalan": "Bhucho Mandi",
+  "joga": "Maur",
+  "kum kalan": "Sahnewal",
+  "qila raipur": "Gill",
+  "valtoha": "Khem Karan",
+  "naushahra panwan": "Khadoor Sahib",
+  "panjgrain": "Kotkapura",
+  "morinda": "Chamkaur Sahib",
+  "nangal": "Anandpur Sahib",
+  "talwandi sabo": "Talwandi Sabo",
+};
+
+export function normalizeAssemblyName(raw: string) {
+  return String(raw || "")
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/&/g, " and ")
+    .replace(/sahibzada\s+ajit\s+singh\s+nagar/g, "sas nagar")
+    .replace(/\bs\.?\s*a\.?\s*s\.?\s*nagar\b/g, "sas nagar")
+    .replace(/\bcantt\.?\b/g, "cantt")
+    .replace(/\bcantonment\b/g, "cantt")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\bsc\b|\bst\b/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function loadAssemblies() {
+  if (cached) return cached;
+  const path = join(process.cwd(), "data", "boundaries", "punjab-assemblies.geojson");
+  const data = JSON.parse(readFileSync(path, "utf8")) as GeoJson;
+  const byNorm = new Map<string, Feature>();
+  for (const f of data.features) {
+    const key = normalizeAssemblyName(f.properties.acName);
+    byNorm.set(key, f);
+  }
+  // also index aliases → feature
+  for (const [alias, official] of Object.entries(ALIASES)) {
+    const feat = byNorm.get(normalizeAssemblyName(official));
+    if (feat) byNorm.set(normalizeAssemblyName(alias), feat);
+  }
+  cached = { byNorm, features: data.features };
+  return cached;
+}
+
+function levenshtein(a: string, b: string) {
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+  const row = Array.from({ length: b.length + 1 }, (_, i) => i);
+  for (let i = 0; i < a.length; i++) {
+    let prev = i + 1;
+    for (let j = 0; j < b.length; j++) {
+      const cur = a[i] === b[j] ? row[j] : 1 + Math.min(row[j], row[j + 1], prev);
+      row[j] = prev;
+      prev = cur;
+    }
+    row[b.length] = prev;
+  }
+  return row[b.length];
+}
+
+/** Resolve app assemblyName to a map feature (handles Patiala vs Patiala Rural carefully). */
+export function resolveAssemblyFeature(assemblyName: string): AssemblyMatch | null {
+  const { byNorm, features } = loadAssemblies();
+  const norm = normalizeAssemblyName(assemblyName);
+  if (!norm) return null;
+
+  const direct = byNorm.get(norm);
+  if (direct) {
+    return {
+      acNo: direct.properties.acNo,
+      acName: direct.properties.acName,
+      matchedAs: assemblyName,
+    };
+  }
+
+  const aliasTarget = ALIASES[norm];
+  if (aliasTarget) {
+    const feat = byNorm.get(normalizeAssemblyName(aliasTarget));
+    if (feat) {
+      return { acNo: feat.properties.acNo, acName: feat.properties.acName, matchedAs: assemblyName };
+    }
+  }
+
+  // Prefer longest official name that equals or is contained carefully
+  // e.g. "Patiala Rural" must not collapse to "Patiala"
+  let best: { feat: Feature; score: number } | null = null;
+  for (const feat of features) {
+    const n = normalizeAssemblyName(feat.properties.acName);
+    if (!n) continue;
+    if (n === norm) {
+      return { acNo: feat.properties.acNo, acName: feat.properties.acName, matchedAs: assemblyName };
+    }
+    // only allow containment when lengths are close or one is clearly the longer form
+    if (n.startsWith(norm + " ") || norm.startsWith(n + " ")) {
+      // "patiala" vs "patiala rural" — require the app name to include the extra token
+      if (norm.length >= n.length) {
+        const score = 1000 + norm.length;
+        if (!best || score > best.score) best = { feat, score };
+      }
+      continue;
+    }
+    const dist = levenshtein(norm, n);
+    const maxLen = Math.max(norm.length, n.length);
+    if (maxLen >= 6 && dist <= Math.max(1, Math.floor(maxLen * 0.15))) {
+      const score = 500 - dist * 10 + (n === norm ? 100 : 0);
+      if (!best || score > best.score) best = { feat, score };
+    }
+  }
+
+  if (best && best.score >= 480) {
+    return {
+      acNo: best.feat.properties.acNo,
+      acName: best.feat.properties.acName,
+      matchedAs: assemblyName,
+    };
+  }
+  return null;
+}
+
+function pointInRing(lng: number, lat: number, ring: Ring) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i][0];
+    const yi = ring[i][1];
+    const xj = ring[j][0];
+    const yj = ring[j][1];
+    const intersect = yi > lat !== yj > lat && lng < ((xj - xi) * (lat - yi)) / (yj - yi + 0.0) + xi;
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
+function pointInGeometry(lng: number, lat: number, geometry: Geometry) {
+  if (geometry.type === "Polygon") {
+    const [outer, ...holes] = geometry.coordinates;
+    if (!pointInRing(lng, lat, outer)) return false;
+    for (const hole of holes) {
+      if (pointInRing(lng, lat, hole)) return false;
+    }
+    return true;
+  }
+  for (const poly of geometry.coordinates) {
+    const [outer, ...holes] = poly;
+    if (!pointInRing(lng, lat, outer)) continue;
+    let inHole = false;
+    for (const hole of holes) {
+      if (pointInRing(lng, lat, hole)) {
+        inHole = true;
+        break;
+      }
+    }
+    if (!inHole) return true;
+  }
+  return false;
+}
+
+function distPointToSegmentMeters(p: { lat: number; lng: number }, a: number[], b: number[]) {
+  // a,b = [lng, lat]
+  const ax = a[0];
+  const ay = a[1];
+  const bx = b[0];
+  const by = b[1];
+  const dx = bx - ax;
+  const dy = by - ay;
+  if (dx === 0 && dy === 0) return haversineMeters(p, { lat: ay, lng: ax });
+  const t = Math.max(0, Math.min(1, ((p.lng - ax) * dx + (p.lat - ay) * dy) / (dx * dx + dy * dy)));
+  return haversineMeters(p, { lat: ay + t * dy, lng: ax + t * dx });
+}
+
+function minDistanceToGeometryMeters(lat: number, lng: number, geometry: Geometry) {
+  const p = { lat, lng };
+  let min = Number.POSITIVE_INFINITY;
+  const rings: Ring[] =
+    geometry.type === "Polygon" ? geometry.coordinates : geometry.coordinates.flat();
+  for (const ring of rings) {
+    for (let i = 0; i < ring.length - 1; i++) {
+      min = Math.min(min, distPointToSegmentMeters(p, ring[i], ring[i + 1]));
+    }
+  }
+  return min;
+}
+
+export function assertInsideAssignedAssembly(opts: {
+  assemblyName: string | null | undefined;
+  lat: number;
+  lng: number;
+  bufferMeters?: number;
+}): GeofenceResult {
+  if (!ASSEMBLY_GEOFENCE_ENABLED) {
+    return {
+      ok: true,
+      assembly: { acNo: 0, acName: String(opts.assemblyName || ""), matchedAs: String(opts.assemblyName || "") },
+      inside: true,
+      distanceMeters: 0,
+    };
+  }
+  const name = String(opts.assemblyName || "").trim();
+  if (!name) {
+    return {
+      ok: false,
+      code: "NO_ASSEMBLY",
+      error: "Your account has no assembly assigned. Contact admin.",
+    };
+  }
+  const match = resolveAssemblyFeature(name);
+  if (!match) {
+    return {
+      ok: false,
+      code: "UNKNOWN_ASSEMBLY",
+      error: `Assembly boundary not found for "${name}". Contact admin to fix the assembly name.`,
+    };
+  }
+  const { byNorm } = loadAssemblies();
+  const feat = byNorm.get(normalizeAssemblyName(match.acName));
+  if (!feat) {
+    return {
+      ok: false,
+      code: "UNKNOWN_ASSEMBLY",
+      error: `Assembly boundary not found for "${name}". Contact admin to fix the assembly name.`,
+    };
+  }
+
+  const buffer = opts.bufferMeters ?? ASSEMBLY_BUFFER_METERS;
+  const inside = pointInGeometry(opts.lng, opts.lat, feat.geometry);
+  if (inside) {
+    return { ok: true, assembly: match, inside: true, distanceMeters: 0 };
+  }
+  const distanceMeters = minDistanceToGeometryMeters(opts.lat, opts.lng, feat.geometry);
+  if (distanceMeters <= buffer) {
+    return { ok: true, assembly: match, inside: false, distanceMeters };
+  }
+  return {
+    ok: false,
+    code: "OUTSIDE",
+    error: `You are outside your assigned assembly (${match.acName}). Punch is allowed only inside that assembly (within ${buffer} m of the boundary).`,
+  };
+}
+
+/** For admin/debug: list all official map names */
+export function listOfficialAssemblies() {
+  return loadAssemblies().features.map((f) => ({
+    acNo: f.properties.acNo,
+    acName: f.properties.acName,
+  }));
+}

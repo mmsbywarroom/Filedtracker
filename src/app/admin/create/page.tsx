@@ -131,8 +131,16 @@ function CreateUserForm() {
         <div className="rounded-[1.75rem] bg-white p-5 shadow-card">
           <h2 className="font-semibold">CSV upload</h2>
           <p className="mt-1 text-xs text-navy/50">
-            Columns: Sector Incharge Name, Sector Incharge Number, Assembly Name, Sector Allotted, Zone, District, Designation, Cluster
+            Required columns: Sector Incharge Name, Sector Incharge Number, Assembly Name, Sector Allotted, Zone, District.
+            Optional: Designation, Cluster.
           </p>
+          <a
+            href="/sample-users.csv"
+            download
+            className="mt-3 inline-flex rounded-xl border border-navy/10 px-3 py-2 text-sm font-semibold text-teal"
+          >
+            Download CSV template
+          </a>
           <input
             type="file"
             accept=".csv"
@@ -142,9 +150,6 @@ function CreateUserForm() {
               if (f) uploadCsv(f);
             }}
           />
-          <a href="/sample-users.csv" className="mt-2 inline-block text-sm text-teal">
-            Download sample CSV
-          </a>
           {csvMsg && <p className="mt-2 text-sm text-navy/70">{csvMsg}</p>}
         </div>
       </div>

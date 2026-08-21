@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { downsample } from "@/lib/utils";
 import { sanitizeFaceImage } from "@/lib/faceImage";
+import { assertInsideAssignedAssembly } from "@/lib/assemblyGeofence";
 
 export async function GET() {
   const s = await requireUser();
@@ -51,6 +52,18 @@ export async function POST(req: Request) {
     where: { userId: s.sub, punchOutAt: null },
   });
   if (existing) return NextResponse.json({ error: "Already punched in." }, { status: 400 });
+
+  const user = await prisma.user.findUnique({
+    where: { id: s.sub },
+    select: { assemblyName: true, isActive: true },
+  });
+  if (!user || !user.isActive) {
+    return NextResponse.json({ error: "Account not found or inactive." }, { status: 403 });
+  }
+  const geo = assertInsideAssignedAssembly({ assemblyName: user.assemblyName, lat, lng });
+  if (!geo.ok) {
+    return NextResponse.json({ error: geo.error, code: geo.code }, { status: 403 });
+  }
 
   const attendance = await prisma.attendance.create({
     data: {

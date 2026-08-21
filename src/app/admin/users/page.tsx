@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { FacePhoto } from "@/components/FacePhoto";
+import { PaginationBar } from "@/components/PaginationBar";
 import { DESIGNATIONS } from "@/lib/hierarchy";
 
 type UserRow = {
@@ -34,6 +35,10 @@ export default function AdminUsersPage() {
   const [face, setFace] = useState("");
   const [status, setStatus] = useState("");
   const [isSuper, setIsSuper] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [csvMsg, setCsvMsg] = useState("");
+  const fileRef = useRef<HTMLInputElement>(null);
 
   async function load() {
     const res = await fetch("/api/admin/users");
@@ -70,9 +75,27 @@ export default function AdminUsersPage() {
     }
   }
 
+  async function uploadCsv(file: File) {
+    setCsvMsg("Uploading…");
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch("/api/admin/users/csv", { method: "POST", body: fd });
+    const data = await res.json();
+    if (!res.ok) {
+      setCsvMsg(data.error || "CSV upload failed");
+      return;
+    }
+    setCsvMsg(
+      `Created ${data.created}, updated ${data.updated}${data.errors?.length ? `, ${data.errors.length} row errors` : ""}`
+    );
+    load();
+  }
+
   const filtered = useMemo(() => {
     return users.filter((u) => {
-      const text = [u.name, u.phone, u.assemblyName, u.sectorAllotted, u.zone, u.district, u.designation, u.cluster].join(" ").toLowerCase();
+      const text = [u.name, u.phone, u.assemblyName, u.sectorAllotted, u.zone, u.district, u.designation, u.cluster]
+        .join(" ")
+        .toLowerCase();
       if (q && !text.includes(q.toLowerCase())) return false;
       if (assembly && u.assemblyName !== assembly) return false;
       if (designation && u.designation !== designation) return false;
@@ -85,6 +108,15 @@ export default function AdminUsersPage() {
       return true;
     });
   }, [users, q, assembly, designation, zone, district, face, status]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [q, assembly, designation, zone, district, face, status, pageSize]);
+
+  const pageRows = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filtered.slice(start, start + pageSize);
+  }, [filtered, page, pageSize]);
 
   const selectClass = "h-11 rounded-xl border border-navy/10 bg-white px-3 text-sm outline-none focus:border-teal";
 
@@ -99,23 +131,57 @@ export default function AdminUsersPage() {
           </p>
         </div>
         {isSuper && (
-          <Link href="/admin/create" className="rounded-xl bg-teal px-4 py-2.5 text-sm font-semibold text-white shadow-card">
-            Create user
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <a
+              href="/sample-users.csv"
+              download
+              className="rounded-xl border border-navy/10 bg-white px-4 py-2.5 text-sm font-semibold text-navy/80 shadow-card"
+            >
+              Download CSV template
+            </a>
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              className="rounded-xl border border-teal/30 bg-teal/10 px-4 py-2.5 text-sm font-semibold text-teal shadow-card"
+            >
+              Bulk upload CSV
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) uploadCsv(f);
+                e.target.value = "";
+              }}
+            />
+            <Link href="/admin/create" className="rounded-xl bg-teal px-4 py-2.5 text-sm font-semibold text-white shadow-card">
+              Create user
+            </Link>
+          </div>
         )}
       </div>
 
-      <div className="mb-4 grid gap-3 rounded-2xl bg-white p-4 shadow-card md:grid-cols-3 lg:grid-cols-7">
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name or number" className={`${selectClass} lg:col-span-2`} />
-        <select value={assembly} onChange={(e) => setAssembly(e.target.value)} className={selectClass}>
-          <option value="">All assemblies</option>
-          {unique(users, "assemblyName").map((v) => (
-            <option key={v}>{v}</option>
-          ))}
-        </select>
+      {csvMsg && <p className="mb-3 rounded-xl bg-white px-4 py-2 text-sm text-navy/70 shadow-card">{csvMsg}</p>}
+
+      <div className="mb-4 grid gap-3 rounded-2xl bg-white p-4 shadow-card md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search name or number"
+          className={`${selectClass} lg:col-span-2 xl:col-span-1`}
+        />
         <select value={designation} onChange={(e) => setDesignation(e.target.value)} className={selectClass}>
           <option value="">All designations</option>
           {DESIGNATIONS.map((v) => (
+            <option key={v}>{v}</option>
+          ))}
+        </select>
+        <select value={assembly} onChange={(e) => setAssembly(e.target.value)} className={selectClass}>
+          <option value="">All assemblies</option>
+          {unique(users, "assemblyName").map((v) => (
             <option key={v}>{v}</option>
           ))}
         </select>
@@ -144,7 +210,7 @@ export default function AdminUsersPage() {
       </div>
 
       <section className="overflow-hidden rounded-2xl border border-navy/5 bg-white shadow-card">
-        <div className="max-h-[calc(100vh-220px)] overflow-auto">
+        <div className="overflow-auto">
           <table className="min-w-full text-left text-sm">
             <thead className="sticky top-0 z-10 bg-[#eef3fb] text-[11px] font-semibold uppercase tracking-wider text-navy/55">
               <tr>
@@ -159,7 +225,7 @@ export default function AdminUsersPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((u) => (
+              {pageRows.map((u) => (
                 <tr key={u.id} className={`border-t border-navy/5 hover:bg-[#f7f9fd] ${u.isActive ? "" : "opacity-70"}`}>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
@@ -178,7 +244,11 @@ export default function AdminUsersPage() {
                   <td className="px-4 py-3">{u.zone}</td>
                   <td className="px-4 py-3">{u.district}</td>
                   <td className="px-4 py-3">
-                    <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${u.faceRegistered ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+                    <span
+                      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
+                        u.faceRegistered ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"
+                      }`}
+                    >
                       {u.faceRegistered ? "Registered" : "Pending"}
                     </span>
                   </td>
@@ -200,7 +270,10 @@ export default function AdminUsersPage() {
                       </Link>
                       {isSuper && (
                         <>
-                          <Link href={`/admin/create?edit=${u.id}`} className="rounded-lg bg-navy/5 px-2.5 py-1 text-xs font-semibold text-navy/70">
+                          <Link
+                            href={`/admin/create?edit=${u.id}`}
+                            className="rounded-lg bg-navy/5 px-2.5 py-1 text-xs font-semibold text-navy/70"
+                          >
                             Edit
                           </Link>
                           <button onClick={() => remove(u.id)} className="rounded-lg bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-600">
@@ -220,6 +293,15 @@ export default function AdminUsersPage() {
             </p>
           )}
         </div>
+        {!!filtered.length && (
+          <PaginationBar
+            page={page}
+            pageSize={pageSize}
+            total={filtered.length}
+            onPage={setPage}
+            onPageSize={setPageSize}
+          />
+        )}
       </section>
     </main>
   );

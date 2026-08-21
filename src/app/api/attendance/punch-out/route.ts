@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { pathDistance } from "@/lib/utils";
 import { sanitizeFaceImage } from "@/lib/faceImage";
+import { assertInsideAssignedAssembly } from "@/lib/assemblyGeofence";
 
 export async function POST(req: Request) {
   const s = await requireUser();
@@ -20,6 +21,15 @@ export async function POST(req: Request) {
     include: { points: { orderBy: { recordedAt: "asc" } } },
   });
   if (!open) return NextResponse.json({ error: "No active punch in." }, { status: 400 });
+
+  const user = await prisma.user.findUnique({
+    where: { id: s.sub },
+    select: { assemblyName: true },
+  });
+  const geo = assertInsideAssignedAssembly({ assemblyName: user?.assemblyName, lat, lng });
+  if (!geo.ok) {
+    return NextResponse.json({ error: geo.error, code: geo.code }, { status: 403 });
+  }
 
   const distance = pathDistance([
     { lat: open.punchInLat, lng: open.punchInLng },
