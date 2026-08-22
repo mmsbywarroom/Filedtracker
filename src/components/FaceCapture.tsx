@@ -64,7 +64,7 @@ export function FaceCapture({ actionLabel, onCapture, busy, mode = "verify" }: P
   const [locked, setLocked] = useState(false);
   const [error, setError] = useState("");
   const [hint, setHint] = useState("");
-  const needHits = mode === "register" ? 6 : 2;
+  const needHits = mode === "register" ? 6 : 1;
 
   function hintForError(err: FaceScanError) {
     if (err === "too_far") return t("tooFar");
@@ -134,11 +134,12 @@ export function FaceCapture({ actionLabel, onCapture, busy, mode = "verify" }: P
     try {
       await onCapture(averaged.length ? averaged : result.descriptor, image, collected);
     } catch (e) {
-      firing.current = false;
-      setLocked(false);
       hits.current = 0;
       samples.current = [];
       setHint(e instanceof Error ? e.message : t("retryLook"));
+    } finally {
+      firing.current = false;
+      setLocked(false);
     }
   }
 

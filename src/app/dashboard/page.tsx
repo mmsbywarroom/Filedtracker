@@ -78,29 +78,39 @@ function getPositionWithFallback(): Promise<GeolocationPosition> {
   });
 }
 
-async function resolvePunchInPosition(
+/** Fast read for punch — never block on fresh GPS after face scan (iOS breaks without user tap). */
+function instantPunchLocation(
   lastFix: { lat: number; lng: number } | null,
   liveAccuracy: number,
   prefetched: PunchGps | null
-): Promise<{ lat: number; lng: number; accuracy: number | null }> {
-  const maxAge = isIosBrowser() ? 180_000 : 120_000;
+): { lat: number; lng: number; accuracy: number | null } {
+  const maxAge = 300_000;
   if (prefetched && Date.now() - prefetched.at < maxAge) {
     return { lat: prefetched.lat, lng: prefetched.lng, accuracy: prefetched.accuracy };
   }
-  const accLimit = isIosBrowser() ? 250 : 120;
-  try {
-    const pos = await getPositionWithFallback();
+  if (lastFix) {
     return {
-      lat: pos.coords.latitude,
-      lng: pos.coords.longitude,
-      accuracy: pos.coords.accuracy ?? null,
+      lat: lastFix.lat,
+      lng: lastFix.lng,
+      accuracy: Number.isFinite(liveAccuracy) && liveAccuracy < 9000 ? liveAccuracy : null,
     };
-  } catch (freshErr) {
-    if (lastFix && liveAccuracy <= accLimit) {
-      return { lat: lastFix.lat, lng: lastFix.lng, accuracy: liveAccuracy };
-    }
-    throw freshErr;
   }
+  throw new Error("Location not ready. Tap “Show your location” on the map, then Punch In again.");
+}
+
+/** Same user tap — quick network/cached fix (≤4s). */
+function getPositionQuick(): Promise<GeolocationPosition> {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error("Location is off. Turn on Location in phone settings."));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      resolve,
+      (e) => reject(geoFail(e)),
+      { enableHighAccuracy: false, timeout: 4000, maximumAge: 120000 }
+    );
+  });
 }
 
 async function capturePunchInGps(
@@ -108,7 +118,7 @@ async function capturePunchInGps(
   liveAccuracy: number
 ): Promise<PunchGps> {
   try {
-    const pos = await getPositionWithFallback();
+    const pos = await getPositionQuick();
     return {
       lat: pos.coords.latitude,
       lng: pos.coords.longitude,
@@ -116,12 +126,32 @@ async function capturePunchInGps(
       at: Date.now(),
     };
   } catch {
-    const accLimit = isIosBrowser() ? 250 : 120;
-    if (lastFix && liveAccuracy <= accLimit) {
-      return { lat: lastFix.lat, lng: lastFix.lng, accuracy: liveAccuracy, at: Date.now() };
+    if (lastFix) {
+      return {
+        lat: lastFix.lat,
+        lng: lastFix.lng,
+        accuracy: Number.isFinite(liveAccuracy) && liveAccuracy < 9000 ? liveAccuracy : null,
+        at: Date.now(),
+      };
     }
     throw new Error("Turn on Location and allow GPS for this site, then tap Punch In again.");
   }
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const t = window.setTimeout(() => reject(new Error(message)), ms);
+    promise.then(
+      (v) => {
+        clearTimeout(t);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(t);
+        reject(e);
+      }
+    );
+  });
 }
 
 export default function DashboardPage() {
@@ -307,11 +337,15 @@ export default function DashboardPage() {
   }, [open?.id]);
 
   async function verifyFace(descriptor: number[]) {
-    const res = await fetch("/api/face/verify", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ descriptor }),
-    });
+    const res = await withTimeout(
+      fetch("/api/face/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ descriptor }),
+      }),
+      12000,
+      "Face check timed out. Check network and tap Confirm again."
+    );
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "Face check failed.");
     if (!data.matched) {
@@ -336,6 +370,9 @@ export default function DashboardPage() {
       setOkMsg(true);
       setMsg(t("faceSaved"));
       refresh();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Could not save face.");
+      throw e;
     } finally {
       setBusy(false);
     }
@@ -346,7 +383,6 @@ export default function DashboardPage() {
     setMsg("");
     setOkMsg(false);
     try {
-      await verifyFace(descriptor);
       let lat: number;
       let lng: number;
       let accuracy: number | null = null;
@@ -368,18 +404,25 @@ export default function DashboardPage() {
         lat = last.lat;
         lng = last.lng;
       } else {
-        const fix = await resolvePunchInPosition(lastFix.current, liveAcc.current, punchGpsRef.current);
+        const fix = instantPunchLocation(lastFix.current, liveAcc.current, punchGpsRef.current);
         lat = fix.lat;
         lng = fix.lng;
         accuracy = fix.accuracy;
       }
+
+      await verifyFace(descriptor);
+
       const payload = { lat, lng, accuracy, image };
       const url = kind === "in" ? "/api/attendance" : "/api/attendance/punch-out";
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      const res = await withTimeout(
+        fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        }),
+        20000,
+        "Punch timed out. Check network and try again."
+      );
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not save punch.");
       punchGpsRef.current = null;
@@ -404,18 +447,25 @@ export default function DashboardPage() {
     }
   }
 
-  async function beginPunchIn() {
+  function beginPunchIn() {
     setMsg("");
     setOkMsg(false);
     startGeoTracking();
     setMode("in");
-    capturePunchInGps(lastFix.current, liveAcc.current)
-      .then((gps) => {
-        punchGpsRef.current = gps;
-      })
-      .catch(() => {
-        /* GPS continues in background; retry when face confirms */
-      });
+    if (!punchGpsRef.current) {
+      capturePunchInGps(lastFix.current, liveAcc.current)
+        .then((gps) => {
+          punchGpsRef.current = gps;
+        })
+        .catch(() => {});
+    }
+  }
+
+  function beginPunchOut() {
+    setMsg("");
+    setOkMsg(false);
+    startGeoTracking();
+    setMode("out");
   }
 
   const live = useMemo(() => {
@@ -510,7 +560,7 @@ export default function DashboardPage() {
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                 <button
                   type="button"
-                  onClick={() => setMode("out")}
+                  onClick={beginPunchOut}
                   className="w-full rounded-2xl bg-ink px-5 py-4 text-base font-semibold text-white sm:w-auto sm:min-w-[200px]"
                 >
                   {t("punchOut")}
