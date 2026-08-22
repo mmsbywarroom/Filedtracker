@@ -158,14 +158,11 @@ export function FaceCapture({ actionLabel, onCapture, busy, mode = "verify" }: P
   return (
     <div className="flex flex-col items-center gap-4">
       <div
-        className={`relative aspect-[3/4] w-full max-w-xs overflow-hidden rounded-[1.75rem] border-4 bg-black shadow-float ${
+        className={`relative aspect-square w-full max-w-xs overflow-hidden rounded-full border-[5px] bg-black shadow-float ${
           locked ? "border-emerald-400 ring-4 ring-emerald-300/50" : "border-white ring-4 ring-teal/30"
         }`}
       >
         <video ref={videoRef} className="h-full w-full object-cover scale-x-[-1]" playsInline muted autoPlay />
-        <div className="pointer-events-none absolute inset-0 grid place-items-center">
-          <div className={`h-40 w-40 rounded-full border-4 ${locked ? "border-emerald-400" : "border-white/80"}`} />
-        </div>
         {!camReady && (
           <div className="absolute inset-0 grid place-items-center bg-navy/80 text-sm text-white">{t("camStarting")}</div>
         )}
@@ -174,7 +171,7 @@ export function FaceCapture({ actionLabel, onCapture, busy, mode = "verify" }: P
       {!modelsReady && camReady && <p className="text-xs text-navy/50">{t("firstLoad")}</p>}
       {mode === "register" && (
         <p className="max-w-xs text-center text-xs text-navy/50">
-          Center your full face in the circle — forehead, both eyes, nose and chin visible. Bright light, no turban-only shot.
+          Center your full face in the round frame — forehead, both eyes, nose and chin visible. Bright light, no turban-only shot.
         </p>
       )}
       <button

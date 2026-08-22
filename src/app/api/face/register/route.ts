@@ -26,7 +26,7 @@ export async function POST(req: Request) {
 
   if (list.length < 3) {
     return NextResponse.json(
-      { error: "Hold still with your full face in the circle for a few seconds, then try again." },
+      { error: "Hold still with your full face in the frame for a few seconds, then try again." },
       { status: 400 }
     );
   }
