@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { FaceCapture } from "@/components/FaceCapture";
 import { BrandMark } from "@/components/BrandMark";
@@ -48,18 +48,33 @@ function isIosBrowser() {
 }
 
 
-/** Punch in/out geofence — always prefer a fresh high-accuracy GPS fix (no stale cache). */
-function getFreshPosition(): Promise<GeolocationPosition> {
+/** iOS-friendly: network fix first, then high-accuracy GPS. */
+function getPositionWithFallback(): Promise<GeolocationPosition> {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) {
       reject(new Error("Location is off. Turn on Location in phone settings."));
       return;
     }
-    navigator.geolocation.getCurrentPosition(resolve, (e) => reject(geoFail(e)), {
-      enableHighAccuracy: true,
-      timeout: 25000,
-      maximumAge: 0,
-    });
+    const ios = isIosBrowser();
+    navigator.geolocation.getCurrentPosition(
+      resolve,
+      () => {
+        navigator.geolocation.getCurrentPosition(
+          resolve,
+          (e) => reject(geoFail(e)),
+          {
+            enableHighAccuracy: true,
+            timeout: ios ? 15000 : 22000,
+            maximumAge: ios ? 60000 : 0,
+          }
+        );
+      },
+      {
+        enableHighAccuracy: false,
+        timeout: ios ? 10000 : 6000,
+        maximumAge: 300000,
+      }
+    );
   });
 }
 
@@ -74,7 +89,7 @@ async function resolvePunchInPosition(
   }
   const accLimit = isIosBrowser() ? 250 : 120;
   try {
-    const pos = await getFreshPosition();
+    const pos = await getPositionWithFallback();
     return {
       lat: pos.coords.latitude,
       lng: pos.coords.longitude,
@@ -93,7 +108,7 @@ async function capturePunchInGps(
   liveAccuracy: number
 ): Promise<PunchGps> {
   try {
-    const pos = await getFreshPosition();
+    const pos = await getPositionWithFallback();
     return {
       lat: pos.coords.latitude,
       lng: pos.coords.longitude,
@@ -120,11 +135,43 @@ export default function DashboardPage() {
   const buffer = useRef<Point[]>([]);
   const lastFix = useRef<{ lat: number; lng: number } | null>(null);
   const liveAcc = useRef<number>(Infinity);
-  const pendingGps = useRef<Promise<GeolocationPosition | null> | null>(null);
   const punchGpsRef = useRef<PunchGps | null>(null);
+  const geoWatchId = useRef<number | null>(null);
+  const geoStarted = useRef(false);
   const gpsOffLock = useRef(false);
   const [gpsOffFlag, setGpsOffFlag] = useState(false);
   const [livePos, setLivePos] = useState<{ lat: number; lng: number } | null>(null);
+  const [locating, setLocating] = useState(false);
+
+  const applyPosition = useCallback((pos: GeolocationPosition, force = false) => {
+    const acc = pos.coords.accuracy || 9999;
+    if (!force && acc > 2000) return;
+    if (!force && acc > liveAcc.current * 1.8 && liveAcc.current < 80) return;
+    liveAcc.current = acc;
+    const next = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+    setLivePos(next);
+    lastFix.current = next;
+  }, []);
+
+  const requestLiveLocation = useCallback(() => {
+    if (!navigator.geolocation) return;
+    setLocating(true);
+    getPositionWithFallback()
+      .then((p) => applyPosition(p, true))
+      .catch(() => {})
+      .finally(() => setLocating(false));
+  }, [applyPosition]);
+
+  const startGeoTracking = useCallback(() => {
+    if (geoStarted.current || !navigator.geolocation) return;
+    geoStarted.current = true;
+    requestLiveLocation();
+    geoWatchId.current = navigator.geolocation.watchPosition(
+      (p) => applyPosition(p),
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 20000 }
+    );
+  }, [applyPosition, requestLiveLocation]);
 
   async function refresh() {
     const me = await fetch("/api/me").then((r) => r.json());
@@ -144,49 +191,16 @@ export default function DashboardPage() {
     loadFaceModels().catch(() => {});
   }, []);
 
-  // Fast map pin: accept cached/network location first, then refine with GPS
   useEffect(() => {
-    if (!navigator.geolocation) return;
-    const apply = (pos: GeolocationPosition, force = false) => {
-      const acc = pos.coords.accuracy || 9999;
-      // Map can show a coarse fix; skip only absurd readings
-      if (!force && acc > 2000) return;
-      // Prefer better accuracy; allow small worsen so the pin still moves with you
-      if (!force && acc > liveAcc.current * 1.8 && liveAcc.current < 80) return;
-      liveAcc.current = acc;
-      const next = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-      setLivePos(next);
-      lastFix.current = next;
+    const onGesture = () => startGeoTracking();
+    window.addEventListener("touchstart", onGesture, { once: true, passive: true });
+    window.addEventListener("click", onGesture, { once: true });
+    return () => {
+      window.removeEventListener("touchstart", onGesture);
+      window.removeEventListener("click", onGesture);
+      if (geoWatchId.current != null) navigator.geolocation.clearWatch(geoWatchId.current);
     };
-
-    // 1) Instant-ish: last known / network location
-    navigator.geolocation.getCurrentPosition((p) => apply(p, true), () => {}, {
-      enableHighAccuracy: false,
-      timeout: 3500,
-      maximumAge: 180000,
-    });
-    // 2) Better GPS shortly after
-    navigator.geolocation.getCurrentPosition((p) => apply(p, true), () => {}, {
-      enableHighAccuracy: true,
-      timeout: 12000,
-      maximumAge: 5000,
-    });
-    // 3) Keep updating
-    const watch = navigator.geolocation.watchPosition((p) => apply(p), () => {}, {
-      enableHighAccuracy: true,
-      maximumAge: 5000,
-      timeout: 15000,
-    });
-    return () => navigator.geolocation.clearWatch(watch);
-  }, []);
-
-  useEffect(() => {
-    if (mode === "in") {
-      pendingGps.current = getFreshPosition().catch(() => null);
-    } else {
-      pendingGps.current = null;
-    }
-  }, [mode]);
+  }, [startGeoTracking]);
 
   async function autoPunchOutForGpsOff() {
     if (gpsOffLock.current) return;
@@ -393,15 +407,15 @@ export default function DashboardPage() {
   async function beginPunchIn() {
     setMsg("");
     setOkMsg(false);
-    setBusy(true);
-    try {
-      punchGpsRef.current = await capturePunchInGps(lastFix.current, liveAcc.current);
-      setMode("in");
-    } catch (e) {
-      setMsg(e instanceof Error ? e.message : "Turn on Location, then try again.");
-    } finally {
-      setBusy(false);
-    }
+    startGeoTracking();
+    setMode("in");
+    capturePunchInGps(lastFix.current, liveAcc.current)
+      .then((gps) => {
+        punchGpsRef.current = gps;
+      })
+      .catch(() => {
+        /* GPS continues in background; retry when face confirms */
+      });
   }
 
   const live = useMemo(() => {
@@ -516,8 +530,7 @@ export default function DashboardPage() {
                 <button
                   type="button"
                   onClick={beginPunchIn}
-                  disabled={busy}
-                  className="w-full rounded-2xl bg-teal px-5 py-4 text-base font-semibold text-white disabled:opacity-60"
+                  className="w-full rounded-2xl bg-teal px-5 py-4 text-base font-semibold text-white"
                 >
                   {t("punchIn")}
                 </button>
@@ -534,13 +547,23 @@ export default function DashboardPage() {
                 points={open.points}
                 punchIn={{ lat: open.punchInLat, lng: open.punchInLng }}
                 liveLocation={livePos}
+                locating={locating}
+                onLocateMe={requestLiveLocation}
                 durationMs={live?.durationMs}
                 distanceMeters={open.distanceMeters}
               />
             </div>
           ) : (
             <div className="h-[min(40vh,360px)] min-h-[220px] overflow-hidden">
-              <RouteMap points={[]} liveLocation={livePos} />
+              <RouteMap
+                points={[]}
+                liveLocation={livePos}
+                locating={locating}
+                onLocateMe={() => {
+                  startGeoTracking();
+                  requestLiveLocation();
+                }}
+              />
             </div>
           )}
         </div>
