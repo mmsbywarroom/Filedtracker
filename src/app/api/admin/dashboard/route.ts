@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { userScopeWhere } from "@/lib/hierarchy";
+import { formatKm } from "@/lib/utils";
 
 function groupCounts(
   users: { id: string; key: string; isActive: boolean }[],
@@ -27,6 +28,8 @@ function groupCounts(
   return Array.from(map.values()).sort((a, b) => b.users - a.users);
 }
 
+const METRICS = new Set(["total", "active", "inactive", "live", "punched", "distance"]);
+
 export async function GET(req: Request) {
   const s = await requireAdmin();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -35,6 +38,7 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const date = searchParams.get("date") || new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
     const designation = searchParams.get("designation") || "";
+    const metric = searchParams.get("metric") || "";
     const start = new Date(`${date}T00:00:00+05:30`);
     const end = new Date(`${date}T23:59:59.999+05:30`);
 
@@ -47,34 +51,72 @@ export async function GET(req: Request) {
       where: userWhere,
       select: {
         id: true,
+        name: true,
+        phone: true,
         designation: true,
         zone: true,
         district: true,
         assemblyName: true,
+        sectorAllotted: true,
         cluster: true,
         isActive: true,
       },
     });
 
-    // Nested user filter avoids huge `userId in (...)` lists that can fail for zone-wide admins
     const punches = await prisma.attendance.findMany({
       where: {
         punchInAt: { gte: start, lte: end },
         user: userWhere,
       },
-      select: { userId: true, punchOutAt: true, distanceMeters: true },
+      select: { userId: true, punchOutAt: true, distanceMeters: true, punchInAt: true },
     });
 
     const punchedIds = new Set(punches.map((p) => p.userId));
     const liveIds = new Set(punches.filter((p) => !p.punchOutAt).map((p) => p.userId));
     const distByUser = new Map<string, number>();
+    const punchInByUser = new Map<string, Date>();
     let totalDistance = 0;
     for (const p of punches) {
       const add = p.distanceMeters || 0;
       totalDistance += add;
       distByUser.set(p.userId, (distByUser.get(p.userId) || 0) + add);
+      if (!punchInByUser.has(p.userId)) punchInByUser.set(p.userId, p.punchInAt);
     }
     const activeUsers = users.filter((u) => u.isActive).length;
+
+    if (metric && METRICS.has(metric)) {
+      let filtered = users;
+      if (metric === "active") filtered = users.filter((u) => u.isActive);
+      else if (metric === "inactive") filtered = users.filter((u) => !u.isActive);
+      else if (metric === "live") filtered = users.filter((u) => liveIds.has(u.id));
+      else if (metric === "punched") filtered = users.filter((u) => punchedIds.has(u.id));
+      else if (metric === "distance") filtered = users.filter((u) => (distByUser.get(u.id) || 0) > 0);
+
+      const rows = filtered
+        .map((u) => ({
+          id: u.id,
+          name: u.name,
+          phone: u.phone,
+          designation: u.designation,
+          assemblyName: u.assemblyName,
+          sectorAllotted: u.sectorAllotted,
+          zone: u.zone,
+          district: u.district,
+          cluster: u.cluster,
+          isActive: u.isActive,
+          punchedToday: punchedIds.has(u.id),
+          liveNow: liveIds.has(u.id),
+          distanceMeters: distByUser.get(u.id) || 0,
+          distanceLabel: formatKm(distByUser.get(u.id) || 0),
+          punchInAt: punchInByUser.get(u.id)?.toISOString() || null,
+        }))
+        .sort((a, b) => {
+          if (metric === "distance") return b.distanceMeters - a.distanceMeters;
+          return a.name.localeCompare(b.name);
+        });
+
+      return NextResponse.json({ date, metric, rows, count: rows.length });
+    }
 
     const grouped = (key: "designation" | "zone" | "district" | "assemblyName" | "cluster") =>
       groupCounts(

@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { normalizePhone } from "@/lib/security";
 import { CSV_COLUMNS } from "@/lib/utils";
 import { isSuperAdmin } from "@/lib/hierarchy";
+import { normalizeUserAssemblies } from "@/lib/userAssemblies";
+import { parseAssembliesInput } from "@/lib/hierarchy";
 
 function pick(row: Record<string, string>, key: string) {
   const found = Object.keys(row).find((k) => k.trim().toLowerCase() === key.toLowerCase());
@@ -41,13 +43,23 @@ export async function POST(req: Request) {
     const district = pick(row, CSV_COLUMNS[5]);
     const designation = pick(row, "Designation") || "Sector Incharge";
     const cluster = pick(row, "Cluster");
+    const assembliesRaw = pick(row, "Assemblies") || pick(row, "Mapped Assemblies");
+    const { assemblyName: asm, assemblies } = normalizeUserAssemblies(
+      designation,
+      assemblyName,
+      assembliesRaw ? parseAssembliesInput(assembliesRaw) : undefined
+    );
     const phone = normalizePhone(phoneRaw);
-    if (!name || !phone || !assemblyName || !sectorAllotted || !zone || !district) {
+    if (!name || !phone || !asm || !sectorAllotted || !zone || !district) {
       errors.push({ row: i + 2, error: "Missing or invalid fields" });
       continue;
     }
+    if (designation === "ALC" && assemblies.length < 1) {
+      errors.push({ row: i + 2, error: "ALC needs Assemblies column" });
+      continue;
+    }
     const existing = await prisma.user.findUnique({ where: { phone } });
-    const data = { name, phone, assemblyName, sectorAllotted, zone, district, designation, cluster };
+    const data = { name, phone, assemblyName: asm, assemblies, sectorAllotted, zone, district, designation, cluster };
     if (existing) {
       await prisma.user.update({ where: { id: existing.id }, data });
       updated.push(phone);

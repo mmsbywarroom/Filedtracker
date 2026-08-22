@@ -19,10 +19,11 @@ export async function POST(req: Request) {
 
   const user = await prisma.user.findUnique({
     where: { id: s.sub },
-    select: { assemblyName: true, designation: true },
+    select: { assemblyName: true, designation: true, assemblies: true },
   });
   const geo = assertInsideAssignedAssembly({
     assemblyName: user?.assemblyName,
+    assemblies: user?.assemblies,
     designation: user?.designation,
     lat,
     lng,

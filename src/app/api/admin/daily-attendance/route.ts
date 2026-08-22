@@ -163,7 +163,7 @@ const patchSchema = z.object({
   userId: z.string().min(1),
   date: z.string().min(8),
   status: z.enum(["present", "absent", "leave"]),
-  note: z.string().max(200).optional(),
+  note: z.string().trim().min(3, "Reason is required (at least 3 characters).").max(200),
 });
 
 export async function PATCH(req: Request) {
@@ -172,7 +172,8 @@ export async function PATCH(req: Request) {
 
   const parsed = patchSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {
-    return NextResponse.json({ error: "Invalid request." }, { status: 400 });
+    const msg = parsed.error.errors[0]?.message || "Invalid request.";
+    return NextResponse.json({ error: msg }, { status: 400 });
   }
 
   const { userId, date, status, note } = parsed.data;
@@ -207,14 +208,14 @@ export async function PATCH(req: Request) {
       status,
       source: "manual",
       hoursWorked: hours,
-      note: note || null,
+      note,
       markedBy: s.admin.id,
     },
     update: {
       status,
       source: "manual",
       hoursWorked: hours,
-      note: note || null,
+      note,
       markedBy: s.admin.id,
     },
   });

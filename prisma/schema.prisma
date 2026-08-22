@@ -30,6 +30,8 @@ model User {
   phone               String   @unique
   designation         String   @default("Sector Incharge")
   assemblyName        String
+  /// Multiple assemblies for ALC field users — punch allowed inside any mapped boundary
+  assemblies          String[] @default([])
   sectorAllotted      String
   zone                String
   district            String

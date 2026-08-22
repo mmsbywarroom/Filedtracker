@@ -31,6 +31,33 @@ type Dash = {
   byCluster: Group[];
 };
 
+type DetailRow = {
+  id: string;
+  name: string;
+  phone: string;
+  designation: string;
+  assemblyName: string;
+  sectorAllotted: string;
+  zone: string;
+  district: string;
+  isActive: boolean;
+  punchedToday: boolean;
+  liveNow: boolean;
+  distanceLabel: string;
+  punchInAt: string | null;
+};
+
+type Metric = "total" | "active" | "inactive" | "live" | "punched" | "distance";
+
+const METRIC_LABELS: Record<Metric, string> = {
+  total: "Total users",
+  active: "Active users",
+  inactive: "Inactive users",
+  live: "Live now",
+  punched: "Punched today",
+  distance: "Travel today",
+};
+
 function todayIst() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 }
@@ -40,18 +67,26 @@ function Stat({
   value,
   hint,
   className,
+  active,
+  onClick,
 }: {
   label: string;
   value: string | number;
   hint: string;
   className: string;
+  active?: boolean;
+  onClick?: () => void;
 }) {
   return (
-    <div className={`rounded-2xl px-5 py-4 text-white shadow-card ${className}`}>
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-2xl px-5 py-4 text-left text-white shadow-card transition ring-offset-2 hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-teal ${active ? "ring-2 ring-white" : ""} ${className}`}
+    >
       <p className="text-xs font-semibold uppercase tracking-wider text-white/75">{label}</p>
       <p className="mt-1 text-3xl font-semibold">{value}</p>
       <p className="mt-1 text-xs text-white/70">{hint}</p>
-    </div>
+    </button>
   );
 }
 
@@ -98,6 +133,9 @@ export default function AdminDashboardPage() {
   const [date, setDate] = useState(todayIst);
   const [designation, setDesignation] = useState("");
   const [data, setData] = useState<Dash | null>(null);
+  const [metric, setMetric] = useState<Metric | null>(null);
+  const [detailRows, setDetailRows] = useState<DetailRow[]>([]);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [level, setLevel] = useState("State");
   const [isSuper, setIsSuper] = useState(false);
   const [scope, setScope] = useState({
@@ -135,8 +173,25 @@ export default function AdminDashboardPage() {
     });
   }
 
+  async function loadMetric(m: Metric) {
+    setMetric(m);
+    setDetailLoading(true);
+    const params = new URLSearchParams({ date, metric: m });
+    if (designation) params.set("designation", designation);
+    const res = await fetch(`/api/admin/dashboard?${params}`);
+    setDetailLoading(false);
+    if (!res.ok) {
+      setDetailRows([]);
+      return;
+    }
+    const json = await res.json();
+    setDetailRows(json.rows || []);
+  }
+
   useEffect(() => {
     load(date, designation);
+    setMetric(null);
+    setDetailRows([]);
   }, [date, designation]);
 
   const mappedAssemblies =
@@ -209,13 +264,121 @@ export default function AdminDashboardPage() {
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        <Stat className="bg-ink" label="Total users" value={data?.totalUsers || 0} hint="Users in your assigned area" />
-        <Stat className="bg-teal" label="Active" value={data?.activeUsers || 0} hint="Account enabled" />
-        <Stat className="bg-navy/70" label="Inactive" value={data?.inactiveUsers || 0} hint="Account disabled" />
-        <Stat className="bg-emerald-600" label="Live now" value={data?.liveNow || 0} hint="Currently in the field" />
-        <Stat className="bg-[#c45c12]" label="Punched today" value={data?.activeToday || 0} hint="Punched in today" />
-        <Stat className="bg-[#0f766e]" label="Distance" value={formatKm(data?.totalDistance || 0)} hint="Total travel today" />
+        <Stat
+          className="bg-ink"
+          label="Total users"
+          value={data?.totalUsers || 0}
+          hint="Tap to view list"
+          active={metric === "total"}
+          onClick={() => loadMetric("total")}
+        />
+        <Stat
+          className="bg-teal"
+          label="Active"
+          value={data?.activeUsers || 0}
+          hint="Tap to view list"
+          active={metric === "active"}
+          onClick={() => loadMetric("active")}
+        />
+        <Stat
+          className="bg-navy/70"
+          label="Inactive"
+          value={data?.inactiveUsers || 0}
+          hint="Tap to view list"
+          active={metric === "inactive"}
+          onClick={() => loadMetric("inactive")}
+        />
+        <Stat
+          className="bg-emerald-600"
+          label="Live now"
+          value={data?.liveNow || 0}
+          hint="Tap to view list"
+          active={metric === "live"}
+          onClick={() => loadMetric("live")}
+        />
+        <Stat
+          className="bg-[#c45c12]"
+          label="Punched today"
+          value={data?.activeToday || 0}
+          hint="Tap to view list"
+          active={metric === "punched"}
+          onClick={() => loadMetric("punched")}
+        />
+        <Stat
+          className="bg-[#0f766e]"
+          label="Distance"
+          value={formatKm(data?.totalDistance || 0)}
+          hint="Tap to view list"
+          active={metric === "distance"}
+          onClick={() => loadMetric("distance")}
+        />
       </div>
+
+      {metric && (
+        <section className="mt-6 overflow-hidden rounded-2xl border border-navy/5 bg-white shadow-card">
+          <div className="flex items-center justify-between border-b border-navy/5 bg-[#12305A] px-4 py-3 text-white">
+            <h2 className="font-semibold">
+              {METRIC_LABELS[metric]} · {date}
+            </h2>
+            <button type="button" onClick={() => setMetric(null)} className="text-sm text-white/80 hover:text-white">
+              Close
+            </button>
+          </div>
+          <div className="max-h-[420px] overflow-auto">
+            {detailLoading ? (
+              <p className="p-6 text-sm text-navy/50">Loading…</p>
+            ) : (
+              <table className="min-w-full text-left text-sm">
+                <thead className="sticky top-0 bg-[#eef3fb] text-[11px] font-semibold uppercase tracking-wider text-navy/55">
+                  <tr>
+                    <th className="px-4 py-2">User</th>
+                    <th className="px-4 py-2">Designation</th>
+                    <th className="px-4 py-2">Assembly / Sector</th>
+                    <th className="px-4 py-2">Zone</th>
+                    {metric === "distance" && <th className="px-4 py-2">Distance</th>}
+                    {(metric === "live" || metric === "punched") && <th className="px-4 py-2">Punch in</th>}
+                    {metric === "live" && <th className="px-4 py-2">Status</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {detailRows.map((r) => (
+                    <tr key={r.id} className="border-t border-navy/5 hover:bg-[#f7f9fd]">
+                      <td className="px-4 py-2">
+                        <p className="font-semibold">{r.name}</p>
+                        <p className="text-xs text-navy/50">{r.phone}</p>
+                      </td>
+                      <td className="px-4 py-2">{r.designation}</td>
+                      <td className="px-4 py-2">
+                        <p>{r.assemblyName}</p>
+                        <p className="text-xs text-navy/50">{r.sectorAllotted}</p>
+                      </td>
+                      <td className="px-4 py-2">{r.zone}</td>
+                      {metric === "distance" && <td className="px-4 py-2 font-semibold">{r.distanceLabel}</td>}
+                      {(metric === "live" || metric === "punched") && (
+                        <td className="px-4 py-2 text-xs">
+                          {r.punchInAt
+                            ? new Date(r.punchInAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+                            : "—"}
+                        </td>
+                      )}
+                      {metric === "live" && (
+                        <td className="px-4 py-2">
+                          <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                            Live
+                          </span>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            {!detailLoading && !detailRows.length && (
+              <p className="p-6 text-sm text-navy/50">No users for this filter.</p>
+            )}
+          </div>
+        </section>
+      )}
 
       <div className="mt-6 grid gap-4 lg:grid-cols-2">
         <GroupTable title="Hierarchy · Designation wise" accent="bg-[#12305A] text-white" rows={data?.byDesignation || []} />

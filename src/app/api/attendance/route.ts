@@ -70,7 +70,7 @@ export async function POST(req: Request) {
 
   const user = await prisma.user.findUnique({
     where: { id: s.sub },
-    select: { assemblyName: true, designation: true, isActive: true },
+    select: { assemblyName: true, designation: true, isActive: true, assemblies: true },
   });
   if (!user || !user.isActive) {
     return NextResponse.json({ error: "Account not found or inactive." }, { status: 403 });
@@ -95,6 +95,7 @@ export async function POST(req: Request) {
 
   const geo = assertInsideAssignedAssembly({
     assemblyName: user.assemblyName,
+    assemblies: user.assemblies,
     designation: user.designation,
     lat,
     lng,

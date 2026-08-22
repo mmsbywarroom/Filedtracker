@@ -327,8 +327,63 @@ function assertInsidePunjabChandigarh(opts: {
   };
 }
 
+function checkSingleAssembly(
+  assemblyName: string,
+  lat: number,
+  lng: number,
+  buffer: number
+): GeofenceResult {
+  const match = resolveAssemblyFeature(assemblyName);
+  if (!match) {
+    return {
+      ok: false,
+      code: "UNKNOWN_ASSEMBLY",
+      error: `Assembly boundary not found for "${assemblyName}". Contact admin to fix the assembly name.`,
+    };
+  }
+  const { byNorm } = loadAssemblies();
+  const feat = byNorm.get(normalizeAssemblyName(match.acName));
+  if (!feat) {
+    return {
+      ok: false,
+      code: "UNKNOWN_ASSEMBLY",
+      error: `Assembly boundary not found for "${assemblyName}". Contact admin to fix the assembly name.`,
+    };
+  }
+
+  const inside = pointInGeometry(lng, lat, feat.geometry);
+  if (inside) {
+    return { ok: true, assembly: match, inside: true, distanceMeters: 0, scope: "assembly" };
+  }
+  const distanceMeters = minDistanceToGeometryMeters(lat, lng, feat.geometry);
+  if (distanceMeters <= buffer) {
+    return { ok: true, assembly: match, inside: false, distanceMeters, scope: "assembly" };
+  }
+  return {
+    ok: false,
+    code: "OUTSIDE",
+    error: `You are outside your assigned assembly (${match.acName}). Punch is allowed only inside that assembly (within ${buffer} m of the boundary).`,
+  };
+}
+
+/** ALC may have multiple mapped assemblies — punch allowed inside any one. */
+export function userAssemblyNames(opts: {
+  designation?: string | null;
+  assemblyName?: string | null;
+  assemblies?: string[] | null;
+}): string[] {
+  const designation = String(opts.designation || "").trim();
+  const fromArr = (opts.assemblies || []).map((a) => String(a || "").trim()).filter(Boolean);
+  if (designation === "ALC" && fromArr.length) {
+    return Array.from(new Set(fromArr));
+  }
+  const primary = String(opts.assemblyName || "").trim();
+  return primary ? [primary] : [];
+}
+
 export function assertInsideAssignedAssembly(opts: {
   assemblyName: string | null | undefined;
+  assemblies?: string[] | null;
   designation?: string | null;
   lat: number;
   lng: number;
@@ -354,45 +409,52 @@ export function assertInsideAssignedAssembly(opts: {
     });
   }
 
-  const name = String(opts.assemblyName || "").trim();
-  if (!name) {
+  const buffer = opts.bufferMeters ?? ASSEMBLY_BUFFER_METERS;
+  const names = userAssemblyNames(opts);
+  if (!names.length) {
     return {
       ok: false,
       code: "NO_ASSEMBLY",
       error: "Your account has no assembly assigned. Contact admin.",
     };
   }
-  const match = resolveAssemblyFeature(name);
-  if (!match) {
-    return {
-      ok: false,
-      code: "UNKNOWN_ASSEMBLY",
-      error: `Assembly boundary not found for "${name}". Contact admin to fix the assembly name.`,
-    };
-  }
-  const { byNorm } = loadAssemblies();
-  const feat = byNorm.get(normalizeAssemblyName(match.acName));
-  if (!feat) {
-    return {
-      ok: false,
-      code: "UNKNOWN_ASSEMBLY",
-      error: `Assembly boundary not found for "${name}". Contact admin to fix the assembly name.`,
-    };
+
+  if (names.length === 1) {
+    return checkSingleAssembly(names[0], opts.lat, opts.lng, buffer);
   }
 
-  const buffer = opts.bufferMeters ?? ASSEMBLY_BUFFER_METERS;
-  const inside = pointInGeometry(opts.lng, opts.lat, feat.geometry);
-  if (inside) {
-    return { ok: true, assembly: match, inside: true, distanceMeters: 0, scope: "assembly" };
+  // ALC — inside ANY mapped assembly
+  let nearest: { name: string; acName: string; distance: number } | null = null;
+  for (const name of names) {
+    const match = resolveAssemblyFeature(name);
+    if (!match) continue;
+    const { byNorm } = loadAssemblies();
+    const feat = byNorm.get(normalizeAssemblyName(match.acName));
+    if (!feat) continue;
+    if (pointInGeometry(opts.lng, opts.lat, feat.geometry)) {
+      return { ok: true, assembly: match, inside: true, distanceMeters: 0, scope: "assembly" };
+    }
+    const dist = minDistanceToGeometryMeters(opts.lat, opts.lng, feat.geometry);
+    if (dist <= buffer) {
+      return { ok: true, assembly: match, inside: false, distanceMeters: dist, scope: "assembly" };
+    }
+    if (!nearest || dist < nearest.distance) {
+      nearest = { name, acName: match.acName, distance: dist };
+    }
   }
-  const distanceMeters = minDistanceToGeometryMeters(opts.lat, opts.lng, feat.geometry);
-  if (distanceMeters <= buffer) {
-    return { ok: true, assembly: match, inside: false, distanceMeters, scope: "assembly" };
+
+  const label = names.join(", ");
+  if (nearest) {
+    return {
+      ok: false,
+      code: "OUTSIDE",
+      error: `You are outside all your mapped assemblies (${label}). Nearest is ${nearest.acName} (${Math.round(nearest.distance)} m away). Punch within ${buffer} m of any mapped assembly boundary.`,
+    };
   }
   return {
     ok: false,
-    code: "OUTSIDE",
-    error: `You are outside your assigned assembly (${match.acName}). Punch is allowed only inside that assembly (within ${buffer} m of the boundary).`,
+    code: "UNKNOWN_ASSEMBLY",
+    error: `Assembly boundary not found for mapped assemblies (${label}). Contact admin.`,
   };
 }
 

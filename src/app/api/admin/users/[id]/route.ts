@@ -4,12 +4,14 @@ import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { normalizePhone } from "@/lib/security";
 import { DESIGNATIONS, canSeeUser, isSuperAdmin } from "@/lib/hierarchy";
+import { normalizeUserAssemblies } from "@/lib/userAssemblies";
 
 const userSchema = z.object({
   name: z.string().min(2).max(80),
   phone: z.string(),
   designation: z.string().optional(),
   assemblyName: z.string().min(1).max(80),
+  assemblies: z.array(z.string()).optional(),
   sectorAllotted: z.string().min(1).max(80),
   zone: z.string().min(1).max(80),
   district: z.string().min(1).max(80),
@@ -45,6 +47,20 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   }
   if (data.designation && !DESIGNATIONS.includes(data.designation as (typeof DESIGNATIONS)[number])) {
     delete data.designation;
+  }
+  const des =
+    (data.designation as string | undefined) || existing.designation;
+  if (parsed.data.assemblyName != null || parsed.data.assemblies != null || parsed.data.designation != null) {
+    const normalized = normalizeUserAssemblies(
+      des,
+      (parsed.data.assemblyName as string | undefined) ?? existing.assemblyName,
+      parsed.data.assemblies ?? existing.assemblies
+    );
+    if (des === "ALC" && normalized.assemblies.length < 1) {
+      return NextResponse.json({ error: "ALC users need at least one mapped assembly." }, { status: 400 });
+    }
+    data.assemblyName = normalized.assemblyName;
+    data.assemblies = normalized.assemblies;
   }
   try {
     const user = await prisma.user.update({ where: { id: params.id }, data });

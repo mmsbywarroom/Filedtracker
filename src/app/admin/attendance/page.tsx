@@ -47,6 +47,13 @@ export default function AttendanceModulePage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const [pending, setPending] = useState<{
+    userId: string;
+    name: string;
+    status: "present" | "absent" | "leave";
+  } | null>(null);
+  const [reason, setReason] = useState("");
+  const [statusErr, setStatusErr] = useState("");
 
   async function load() {
     const params = new URLSearchParams({ date });
@@ -67,15 +74,35 @@ export default function AttendanceModulePage() {
     load();
   }, [date]);
 
-  async function setStatus(userId: string, status: "present" | "absent" | "leave") {
-    setBusy(userId);
+  async function applyStatus() {
+    if (!pending) return;
+    if (reason.trim().length < 3) {
+      setStatusErr("Reason is required (at least 3 characters).");
+      return;
+    }
+    setBusy(pending.userId);
+    setStatusErr("");
     const res = await fetch("/api/admin/daily-attendance", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, date, status }),
+      body: JSON.stringify({ userId: pending.userId, date, status: pending.status, note: reason.trim() }),
     });
     setBusy(null);
-    if (res.ok) load();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setStatusErr(data.error || "Could not update status.");
+      return;
+    }
+    setPending(null);
+    setReason("");
+    load();
+  }
+
+  function requestStatus(userId: string, name: string, status: "present" | "absent" | "leave", current: string) {
+    if (status === current) return;
+    setPending({ userId, name, status });
+    setReason("");
+    setStatusErr("");
   }
 
   const pageRows = useMemo(() => rows.slice((page - 1) * pageSize, (page - 1) * pageSize + pageSize), [rows, page, pageSize]);
@@ -85,7 +112,7 @@ export default function AttendanceModulePage() {
       <p className="text-xs uppercase tracking-[0.2em] text-teal">Attendance</p>
       <h1 className="text-2xl font-semibold">Date-wise attendance</h1>
       <p className="mt-1 text-sm text-navy/55">
-        Auto: no punch or ≤6h = Absent · 8–12h = Present · approved leave = Leave. Admin can change manually.
+        Auto: no punch or ≤6h = Absent · 8–12h = Present · approved leave = Leave. Manual change requires a reason.
       </p>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-4">
@@ -174,7 +201,9 @@ export default function AttendanceModulePage() {
                     <select
                       value={r.status}
                       disabled={busy === r.userId}
-                      onChange={(e) => setStatus(r.userId, e.target.value as "present" | "absent" | "leave")}
+                      onChange={(e) =>
+                        requestStatus(r.userId, r.name, e.target.value as "present" | "absent" | "leave", r.status)
+                      }
                       className={`rounded-xl border border-navy/10 px-2 py-1.5 text-xs font-semibold ${statusClass(r.status)}`}
                     >
                       <option value="present">Present</option>
@@ -196,6 +225,49 @@ export default function AttendanceModulePage() {
           <PaginationBar page={page} pageSize={pageSize} total={rows.length} onPage={setPage} onPageSize={setPageSize} />
         )}
       </section>
+
+      {pending && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-navy/40 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-card">
+            <h2 className="text-lg font-semibold">Change attendance status</h2>
+            <p className="mt-1 text-sm text-navy/60">
+              {pending.name} → <span className="font-semibold capitalize">{pending.status}</span>
+            </p>
+            <label className="mt-4 block text-xs font-medium text-navy/55">
+              Reason (required)
+              <textarea
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                rows={3}
+                placeholder="Why are you changing this status?"
+                className="mt-1 w-full rounded-xl border border-navy/10 px-3 py-2 text-sm"
+              />
+            </label>
+            {statusErr && <p className="mt-2 text-sm text-red-600">{statusErr}</p>}
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setPending(null);
+                  setReason("");
+                  setStatusErr("");
+                }}
+                className="rounded-xl border border-navy/10 px-4 py-2 text-sm font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={applyStatus}
+                disabled={busy === pending.userId}
+                className="rounded-xl bg-ink px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                Apply
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

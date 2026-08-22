@@ -4,12 +4,14 @@ import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { normalizePhone } from "@/lib/security";
 import { DESIGNATIONS, isSuperAdmin, userScopeWhere } from "@/lib/hierarchy";
+import { normalizeUserAssemblies } from "@/lib/userAssemblies";
 
 const userSchema = z.object({
   name: z.string().min(2).max(80),
   phone: z.string(),
   designation: z.string().optional(),
   assemblyName: z.string().min(1).max(80),
+  assemblies: z.array(z.string()).optional(),
   sectorAllotted: z.string().min(1).max(80),
   zone: z.string().min(1).max(80),
   district: z.string().min(1).max(80),
@@ -57,6 +59,7 @@ export async function GET() {
       phone: u.phone,
       designation: u.designation,
       assemblyName: u.assemblyName,
+      assemblies: u.assemblies || [],
       sectorAllotted: u.sectorAllotted,
       zone: u.zone,
       district: u.district,
@@ -82,13 +85,22 @@ export async function POST(req: Request) {
   const designation = DESIGNATIONS.includes(parsed.data.designation as (typeof DESIGNATIONS)[number])
     ? parsed.data.designation!
     : "Sector Incharge";
+  const { assemblyName, assemblies } = normalizeUserAssemblies(
+    designation,
+    parsed.data.assemblyName,
+    parsed.data.assemblies
+  );
+  if (designation === "ALC" && assemblies.length < 1) {
+    return NextResponse.json({ error: "ALC users need at least one mapped assembly." }, { status: 400 });
+  }
   try {
     const user = await prisma.user.create({
       data: {
         name: parsed.data.name,
         phone,
         designation,
-        assemblyName: parsed.data.assemblyName,
+        assemblyName,
+        assemblies,
         sectorAllotted: parsed.data.sectorAllotted,
         zone: parsed.data.zone,
         district: parsed.data.district,
