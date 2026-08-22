@@ -29,6 +29,20 @@ function groupCounts(
 }
 
 const METRICS = new Set(["total", "active", "inactive", "live", "punched", "distance"]);
+const GROUP_BY = new Set(["designation", "zone", "district", "assembly", "cluster"]);
+const GROUP_FIELD: Record<string, "designation" | "zone" | "district" | "assemblyName" | "cluster"> = {
+  designation: "designation",
+  zone: "zone",
+  district: "district",
+  assembly: "assemblyName",
+  cluster: "cluster",
+};
+
+function matchesGroupValue(raw: string | null | undefined, groupValue: string) {
+  const val = raw || "";
+  if (groupValue === "—") return !val;
+  return val === groupValue;
+}
 
 export async function GET(req: Request) {
   const s = await requireAdmin();
@@ -39,6 +53,8 @@ export async function GET(req: Request) {
     const date = searchParams.get("date") || new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
     const designation = searchParams.get("designation") || "";
     const metric = searchParams.get("metric") || "";
+    const groupBy = searchParams.get("groupBy") || "";
+    const groupValue = searchParams.get("groupValue") ?? "";
     const start = new Date(`${date}T00:00:00+05:30`);
     const end = new Date(`${date}T23:59:59.999+05:30`);
 
@@ -92,6 +108,11 @@ export async function GET(req: Request) {
       else if (metric === "punched") filtered = users.filter((u) => punchedIds.has(u.id));
       else if (metric === "distance") filtered = users.filter((u) => (distByUser.get(u.id) || 0) > 0);
 
+      if (groupBy && GROUP_BY.has(groupBy)) {
+        const field = GROUP_FIELD[groupBy];
+        if (field) filtered = filtered.filter((u) => matchesGroupValue(u[field], groupValue));
+      }
+
       const rows = filtered
         .map((u) => ({
           id: u.id,
@@ -115,7 +136,14 @@ export async function GET(req: Request) {
           return a.name.localeCompare(b.name);
         });
 
-      return NextResponse.json({ date, metric, rows, count: rows.length });
+      return NextResponse.json({
+        date,
+        metric,
+        groupBy: groupBy && GROUP_BY.has(groupBy) ? groupBy : null,
+        groupValue: groupBy && GROUP_BY.has(groupBy) ? groupValue : null,
+        rows,
+        count: rows.length,
+      });
     }
 
     const grouped = (key: "designation" | "zone" | "district" | "assemblyName" | "cluster") =>

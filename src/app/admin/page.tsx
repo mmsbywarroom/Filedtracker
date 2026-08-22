@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { BrandMark } from "@/components/BrandMark";
 import { DESIGNATIONS, cleanScope } from "@/lib/hierarchy";
 import { formatKm } from "@/lib/utils";
@@ -48,6 +48,7 @@ type DetailRow = {
 };
 
 type Metric = "total" | "active" | "inactive" | "live" | "punched" | "distance";
+type GroupBy = "designation" | "zone" | "district" | "assembly";
 
 const METRIC_LABELS: Record<Metric, string> = {
   total: "Total users",
@@ -57,6 +58,22 @@ const METRIC_LABELS: Record<Metric, string> = {
   punched: "Punched today",
   distance: "Travel today",
 };
+
+const GROUP_BY_LABELS: Record<GroupBy, string> = {
+  designation: "Designation",
+  zone: "Zone",
+  district: "District",
+  assembly: "Assembly",
+};
+
+const METRIC_COLUMNS: { key: Metric; field: keyof Group; className?: string }[] = [
+  { key: "total", field: "users" },
+  { key: "active", field: "active", className: "text-teal" },
+  { key: "inactive", field: "inactive", className: "text-navy/50" },
+  { key: "punched", field: "punched", className: "text-[#c45c12]" },
+  { key: "live", field: "live", className: "text-emerald-600" },
+  { key: "distance", field: "distance", className: "font-semibold text-ink" },
+];
 
 function todayIst() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
@@ -90,11 +107,52 @@ function Stat({
   );
 }
 
-function GroupTable({ title, accent, rows }: { title: string; accent: string; rows: Group[] }) {
+function CellBtn({
+  value,
+  className,
+  active,
+  onClick,
+  format,
+}: {
+  value: number;
+  className?: string;
+  active?: boolean;
+  onClick: () => void;
+  format?: (n: number) => string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded px-1 py-0.5 underline-offset-2 transition hover:underline focus:outline-none focus:ring-2 focus:ring-teal/40 ${active ? "bg-teal/10 font-semibold underline ring-1 ring-teal/30" : ""} ${className || ""}`}
+    >
+      {format ? format(value) : value}
+    </button>
+  );
+}
+
+function GroupTable({
+  title,
+  accent,
+  rows,
+  groupBy,
+  activeMetric,
+  activeGroup,
+  onCellClick,
+}: {
+  title: string;
+  accent: string;
+  rows: Group[];
+  groupBy: GroupBy;
+  activeMetric: Metric | null;
+  activeGroup: { groupBy: GroupBy; groupValue: string } | null;
+  onCellClick: (metric: Metric, groupValue: string) => void;
+}) {
   return (
     <section className="overflow-hidden rounded-2xl border border-navy/5 bg-white shadow-card">
       <div className={`border-b border-navy/5 px-4 py-3 ${accent}`}>
         <h2 className="font-semibold">{title}</h2>
+        <p className="mt-0.5 text-xs text-white/75">Tap any number to view users</p>
       </div>
       <div className="max-h-[360px] overflow-auto">
         <table className="min-w-full text-left text-sm">
@@ -113,12 +171,24 @@ function GroupTable({ title, accent, rows }: { title: string; accent: string; ro
             {rows.map((r, i) => (
               <tr key={r.name} className={`border-t border-navy/5 ${i % 2 ? "bg-sand/40" : "bg-white"}`}>
                 <td className="px-4 py-2 font-medium">{r.name}</td>
-                <td className="px-4 py-2">{r.users}</td>
-                <td className="px-4 py-2 text-teal">{r.active}</td>
-                <td className="px-4 py-2 text-navy/50">{r.inactive}</td>
-                <td className="px-4 py-2 text-[#c45c12]">{r.punched}</td>
-                <td className="px-4 py-2 text-emerald-600">{r.live}</td>
-                <td className="px-4 py-2 font-semibold text-ink">{formatKm(r.distance || 0)}</td>
+                {METRIC_COLUMNS.map((col) => {
+                  const val = r[col.field] as number;
+                  const isActive =
+                    activeMetric === col.key &&
+                    activeGroup?.groupBy === groupBy &&
+                    activeGroup.groupValue === r.name;
+                  return (
+                    <td key={col.key} className="px-4 py-2">
+                      <CellBtn
+                        value={val}
+                        className={col.className}
+                        active={isActive}
+                        onClick={() => onCellClick(col.key, r.name)}
+                        format={col.key === "distance" ? formatKm : undefined}
+                      />
+                    </td>
+                  );
+                })}
               </tr>
             ))}
           </tbody>
@@ -134,6 +204,7 @@ export default function AdminDashboardPage() {
   const [designation, setDesignation] = useState("");
   const [data, setData] = useState<Dash | null>(null);
   const [metric, setMetric] = useState<Metric | null>(null);
+  const [groupFilter, setGroupFilter] = useState<{ groupBy: GroupBy; groupValue: string } | null>(null);
   const [detailRows, setDetailRows] = useState<DetailRow[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
   const [level, setLevel] = useState("State");
@@ -145,6 +216,7 @@ export default function AdminDashboardPage() {
     assemblies: [] as string[],
     cluster: "",
   });
+  const detailRef = useRef<HTMLElement>(null);
 
   async function load(d: string, des: string) {
     const params = new URLSearchParams({ date: d });
@@ -173,11 +245,16 @@ export default function AdminDashboardPage() {
     });
   }
 
-  async function loadMetric(m: Metric) {
+  async function loadMetric(m: Metric, group?: { groupBy: GroupBy; groupValue: string }) {
     setMetric(m);
+    setGroupFilter(group || null);
     setDetailLoading(true);
     const params = new URLSearchParams({ date, metric: m });
     if (designation) params.set("designation", designation);
+    if (group) {
+      params.set("groupBy", group.groupBy);
+      params.set("groupValue", group.groupValue);
+    }
     const res = await fetch(`/api/admin/dashboard?${params}`);
     setDetailLoading(false);
     if (!res.ok) {
@@ -186,11 +263,13 @@ export default function AdminDashboardPage() {
     }
     const json = await res.json();
     setDetailRows(json.rows || []);
+    requestAnimationFrame(() => detailRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
   }
 
   useEffect(() => {
     load(date, designation);
     setMetric(null);
+    setGroupFilter(null);
     setDetailRows([]);
   }, [date, designation]);
 
@@ -269,7 +348,7 @@ export default function AdminDashboardPage() {
           label="Total users"
           value={data?.totalUsers || 0}
           hint="Tap to view list"
-          active={metric === "total"}
+          active={metric === "total" && !groupFilter}
           onClick={() => loadMetric("total")}
         />
         <Stat
@@ -277,7 +356,7 @@ export default function AdminDashboardPage() {
           label="Active"
           value={data?.activeUsers || 0}
           hint="Tap to view list"
-          active={metric === "active"}
+          active={metric === "active" && !groupFilter}
           onClick={() => loadMetric("active")}
         />
         <Stat
@@ -285,7 +364,7 @@ export default function AdminDashboardPage() {
           label="Inactive"
           value={data?.inactiveUsers || 0}
           hint="Tap to view list"
-          active={metric === "inactive"}
+          active={metric === "inactive" && !groupFilter}
           onClick={() => loadMetric("inactive")}
         />
         <Stat
@@ -293,7 +372,7 @@ export default function AdminDashboardPage() {
           label="Live now"
           value={data?.liveNow || 0}
           hint="Tap to view list"
-          active={metric === "live"}
+          active={metric === "live" && !groupFilter}
           onClick={() => loadMetric("live")}
         />
         <Stat
@@ -301,7 +380,7 @@ export default function AdminDashboardPage() {
           label="Punched today"
           value={data?.activeToday || 0}
           hint="Tap to view list"
-          active={metric === "punched"}
+          active={metric === "punched" && !groupFilter}
           onClick={() => loadMetric("punched")}
         />
         <Stat
@@ -309,18 +388,70 @@ export default function AdminDashboardPage() {
           label="Distance"
           value={formatKm(data?.totalDistance || 0)}
           hint="Tap to view list"
-          active={metric === "distance"}
+          active={metric === "distance" && !groupFilter}
           onClick={() => loadMetric("distance")}
         />
       </div>
 
+      <div className="mt-6 grid gap-4 lg:grid-cols-2">
+        <GroupTable
+          title="Hierarchy · Designation wise"
+          accent="bg-[#12305A] text-white"
+          rows={data?.byDesignation || []}
+          groupBy="designation"
+          activeMetric={metric}
+          activeGroup={groupFilter}
+          onCellClick={(m, name) => loadMetric(m, { groupBy: "designation", groupValue: name })}
+        />
+        <GroupTable
+          title="Zone wise"
+          accent="bg-teal text-white"
+          rows={data?.byZone || []}
+          groupBy="zone"
+          activeMetric={metric}
+          activeGroup={groupFilter}
+          onCellClick={(m, name) => loadMetric(m, { groupBy: "zone", groupValue: name })}
+        />
+        <GroupTable
+          title="District wise"
+          accent="bg-emerald-700 text-white"
+          rows={data?.byDistrict || []}
+          groupBy="district"
+          activeMetric={metric}
+          activeGroup={groupFilter}
+          onCellClick={(m, name) => loadMetric(m, { groupBy: "district", groupValue: name })}
+        />
+        <GroupTable
+          title="Assembly wise"
+          accent="bg-[#1A56C4] text-white"
+          rows={data?.byAssembly || []}
+          groupBy="assembly"
+          activeMetric={metric}
+          activeGroup={groupFilter}
+          onCellClick={(m, name) => loadMetric(m, { groupBy: "assembly", groupValue: name })}
+        />
+      </div>
+
       {metric && (
-        <section className="mt-6 overflow-hidden rounded-2xl border border-navy/5 bg-white shadow-card">
+        <section ref={detailRef} id="dashboard-detail" className="mt-6 overflow-hidden rounded-2xl border border-navy/5 bg-white shadow-card">
           <div className="flex items-center justify-between border-b border-navy/5 bg-[#12305A] px-4 py-3 text-white">
             <h2 className="font-semibold">
               {METRIC_LABELS[metric]} · {date}
+              {groupFilter && (
+                <span className="font-normal text-white/85">
+                  {" "}
+                  · {GROUP_BY_LABELS[groupFilter.groupBy]}: {groupFilter.groupValue}
+                </span>
+              )}
             </h2>
-            <button type="button" onClick={() => setMetric(null)} className="text-sm text-white/80 hover:text-white">
+            <button
+              type="button"
+              onClick={() => {
+                setMetric(null);
+                setGroupFilter(null);
+              }}
+              className="text-sm text-white/80 hover:text-white"
+            >
               Close
             </button>
           </div>
@@ -379,13 +510,6 @@ export default function AdminDashboardPage() {
           </div>
         </section>
       )}
-
-      <div className="mt-6 grid gap-4 lg:grid-cols-2">
-        <GroupTable title="Hierarchy · Designation wise" accent="bg-[#12305A] text-white" rows={data?.byDesignation || []} />
-        <GroupTable title="Zone wise" accent="bg-teal text-white" rows={data?.byZone || []} />
-        <GroupTable title="District wise" accent="bg-emerald-700 text-white" rows={data?.byDistrict || []} />
-        <GroupTable title="Assembly wise" accent="bg-[#1A56C4] text-white" rows={data?.byAssembly || []} />
-      </div>
     </main>
   );
 }
