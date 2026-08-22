@@ -99,6 +99,7 @@ const dict = {
     rejected: "Rejected",
     adminNote: "Admin note",
     leaveModule: "Leave requests",
+    attendanceModule: "Attendance",
   },
   pa: {
     aap: "ਆਮ ਆਦਮੀ ਪਾਰਟੀ",
@@ -194,6 +195,7 @@ const dict = {
     rejected: "ਨਾਮਨਜ਼ੂਰ",
     adminNote: "ਐਡਮਿਨ ਨੋਟ",
     leaveModule: "ਛੁੱਟੀ ਬੇਨਤੀਆਂ",
+    attendanceModule: "ਹਾਜ਼ਰੀ",
   },
 } as const;
 

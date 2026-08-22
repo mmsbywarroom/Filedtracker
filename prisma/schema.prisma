@@ -42,6 +42,25 @@ model User {
   updatedAt           DateTime @updatedAt
   attendances         Attendance[]
   leaveRequests       LeaveRequest[]
+  dailyAttendanceMarks DailyAttendanceMark[]
+}
+
+model DailyAttendanceMark {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Calendar date in IST (stored as UTC midnight of YYYY-MM-DD)
+  date        DateTime @db.Date
+  status      String
+  source      String   @default("manual")
+  hoursWorked Float?
+  note        String?
+  markedBy    String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([userId, date])
+  @@index([date, status])
 }
 
 model OtpChallenge {
