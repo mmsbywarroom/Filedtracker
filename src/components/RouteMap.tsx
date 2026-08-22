@@ -12,6 +12,7 @@ type Props = {
   /** Live GPS — where the user is right now */
   liveLocation?: { lat: number; lng: number } | null;
   locating?: boolean;
+  locationError?: string;
   onLocateMe?: () => void;
   startLabel?: string;
   endLabel?: string;
@@ -51,6 +52,7 @@ export default function RouteMap({
   punchOut,
   liveLocation,
   locating,
+  locationError,
   onLocateMe,
   startLabel = "Punch in",
   endLabel = "Punch out",
@@ -243,14 +245,20 @@ export default function RouteMap({
         <div className="absolute inset-0 z-10 grid place-items-center bg-white/90 p-6 text-center text-sm text-navy/70">{error}</div>
       )}
       {!error && !liveLocation && !points.length && !punchIn && (
-        <div className="absolute inset-x-0 bottom-3 z-10 flex justify-center px-3">
+        <div className="absolute inset-x-0 bottom-3 z-10 flex flex-col items-center gap-1 px-3">
           <button
             type="button"
             onClick={() => onLocateMe?.()}
-            className="rounded-full bg-white/95 px-4 py-2 text-xs font-semibold text-navy/70 shadow ring-1 ring-navy/10 active:scale-[0.98]"
+            disabled={locating}
+            className="rounded-full bg-white/95 px-4 py-2 text-xs font-semibold text-navy/70 shadow ring-1 ring-navy/10 active:scale-[0.98] disabled:opacity-70"
           >
-            {locating ? "Finding you…" : "Tap to show your location"}
+            {locating ? "Finding you… (max 8s)" : "Tap to show your location"}
           </button>
+          {locationError && !locating && (
+            <p className="max-w-[90%] rounded-lg bg-red-50 px-2 py-1 text-center text-[10px] font-medium text-red-700">
+              {locationError}
+            </p>
+          )}
         </div>
       )}
     </div>
