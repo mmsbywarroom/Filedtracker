@@ -250,7 +250,7 @@ export default function RouteMap({
             type="button"
             onClick={() => onLocateMe?.()}
             disabled={locating}
-            className="rounded-full bg-white/95 px-4 py-2 text-xs font-semibold text-navy/70 shadow ring-1 ring-navy/10 active:scale-[0.98] disabled:opacity-70"
+            className="rounded-full bg-white/95 px-4 py-2 text-xs font-semibold text-navy/70 shadow ring-1 ring-navy/10 active:scale-[0.98] disabled:opacity-70 touch-manipulation"
           >
             {locating ? "Finding you… (max 8s)" : "Tap to show your location"}
           </button>

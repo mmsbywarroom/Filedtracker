@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { averageDescriptors, loadFaceModels, scanFace, type FaceScan, type FaceScanError } from "@/lib/face";
+import { isIosBrowser } from "@/lib/deviceGeo";
 import { useLang } from "@/lib/i18n";
 import { jpegQuality, jpegSize } from "@/lib/network";
 
@@ -37,12 +38,14 @@ function snapshot(video: HTMLVideoElement, box?: { x: number; y: number; width: 
 }
 
 function waitVideoReady(video: HTMLVideoElement) {
-  return new Promise<void>((resolve) => {
+  return new Promise<void>((resolve, reject) => {
     if (video.videoWidth > 0 && video.readyState >= 2) {
       resolve();
       return;
     }
+    const timer = window.setTimeout(() => reject(new Error("Camera slow to start. Close other apps and try again.")), 8000);
     const done = () => {
+      clearTimeout(timer);
       video.removeEventListener("loadedmetadata", done);
       video.removeEventListener("loadeddata", done);
       resolve();
@@ -84,11 +87,12 @@ export function FaceCapture({ actionLabel, onCapture, busy, mode = "verify" }: P
     let cancelled = false;
     (async () => {
       try {
+        const ios = isIosBrowser();
         stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: "user",
-            width: { ideal: 640 },
-            height: { ideal: 640 },
+            width: { ideal: ios ? 480 : 640 },
+            height: { ideal: ios ? 480 : 640 },
           },
           audio: false,
         });
@@ -104,8 +108,8 @@ export function FaceCapture({ actionLabel, onCapture, busy, mode = "verify" }: P
         setCamReady(true);
         setError("");
         setHint(t("preparing"));
-      } catch {
-        setError(t("camAllow"));
+      } catch (e) {
+        setError(e instanceof Error ? e.message : t("camAllow"));
         return;
       }
       try {
@@ -169,7 +173,7 @@ export function FaceCapture({ actionLabel, onCapture, busy, mode = "verify" }: P
       }
       running = false;
     };
-    timer = window.setInterval(tick, 320);
+    timer = window.setInterval(tick, isIosBrowser() ? 400 : 320);
     tick();
     return () => clearInterval(timer);
   }, [camReady, modelsReady, busy, mode, needHits, t]);
@@ -197,7 +201,7 @@ export function FaceCapture({ actionLabel, onCapture, busy, mode = "verify" }: P
         type="button"
         disabled={!camReady || !modelsReady || busy || firing.current}
         onClick={() => lastGood.current?.ok && submit(lastGood.current)}
-        className="rounded-full bg-teal px-8 py-3 font-semibold text-white shadow-card disabled:opacity-50"
+        className="rounded-full bg-teal px-8 py-3 font-semibold text-white shadow-card disabled:opacity-50 touch-manipulation"
       >
         {busy || firing.current ? t("unlocking") : !modelsReady ? t("preparing") : actionLabel}
       </button>

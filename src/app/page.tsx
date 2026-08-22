@@ -80,7 +80,7 @@ export default function HomePage() {
                 value={phone}
                 onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
                 placeholder={t("mobilePh")}
-                className="w-full rounded-2xl border border-navy/10 bg-sand/50 px-4 py-3 outline-none focus:border-teal"
+                className="w-full rounded-2xl border border-navy/10 bg-sand/50 px-4 py-3 text-base outline-none focus:border-teal"
               />
               {error && <p className="text-sm text-red-600">{error}</p>}
               <button disabled={busy || phone.length !== 10} className="w-full rounded-2xl bg-teal py-3 font-semibold text-white disabled:opacity-40">

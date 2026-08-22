@@ -7,6 +7,13 @@ import { BrandMark } from "@/components/BrandMark";
 import RouteMap from "@/components/RouteMapDynamic";
 import { formatDuration, formatKm, isPlausibleStep, pathDistance } from "@/lib/utils";
 import { loadFaceModels } from "@/lib/face";
+import {
+  captureGpsFix,
+  isIosBrowser,
+  locateDevice,
+  withTimeout,
+  type GpsFix,
+} from "@/lib/deviceGeo";
 import { LangToggle, useLang } from "@/lib/i18n";
 
 type User = {
@@ -21,7 +28,7 @@ type User = {
 };
 
 type Point = { lat: number; lng: number; recordedAt: string; accuracy?: number };
-type PunchGps = { lat: number; lng: number; accuracy: number | null; at: number };
+type PunchGps = GpsFix;
 type Attendance = {
   id: string;
   punchInAt: string;
@@ -34,66 +41,6 @@ type Attendance = {
   distanceMeters: number;
   points: Point[];
 };
-
-function geoFail(err: GeolocationPositionError | Error) {
-  const code = "code" in err ? err.code : 0;
-  if (code === 1) throw new Error("Location permission is blocked. Allow Location for this site in Safari/Chrome settings.");
-  if (code === 3) throw new Error("GPS timed out. Step outdoors with clear sky, then tap Punch In again.");
-  throw new Error("Location not found. Turn on Location Services, then tap Punch In again.");
-}
-
-function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const t = window.setTimeout(() => reject(new Error(message)), ms);
-    promise.then(
-      (v) => {
-        clearTimeout(t);
-        resolve(v);
-      },
-      (e) => {
-        clearTimeout(t);
-        reject(e);
-      }
-    );
-  });
-}
-
-/** Same user tap — quick network/cached fix (≤4s). */
-function getPositionQuick(): Promise<GeolocationPosition> {
-  return new Promise((resolve, reject) => {
-    if (!navigator.geolocation) {
-      reject(new Error("Location is off. Turn on Location in phone settings."));
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      resolve,
-      (e) => reject(geoFail(e)),
-      { enableHighAccuracy: false, timeout: 4000, maximumAge: 120000 }
-    );
-  });
-}
-
-/** Max ~8s total — never leave “Finding you…” spinning for 25s on iPhone. */
-async function locateDevice(): Promise<GeolocationPosition> {
-  if (!navigator.geolocation) {
-    throw new Error("Location is off. Turn on Location in phone settings.");
-  }
-  try {
-    return await withTimeout(getPositionQuick(), 5000, "Quick locate timed out");
-  } catch {
-    return withTimeout(
-      new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation!.getCurrentPosition(resolve, (e) => reject(geoFail(e)), {
-          enableHighAccuracy: true,
-          timeout: 8000,
-          maximumAge: 60000,
-        });
-      }),
-      9000,
-      "GPS timed out. Step outdoors, then tap the map location button."
-    );
-  }
-}
 
 /** Fast read for punch — never block on fresh GPS after face scan (iOS breaks without user tap). */
 function instantPunchLocation(
@@ -113,31 +60,6 @@ function instantPunchLocation(
     };
   }
   throw new Error("Location not ready. Tap “Show your location” on the map, then Punch In again.");
-}
-
-async function capturePunchInGps(
-  lastFix: { lat: number; lng: number } | null,
-  liveAccuracy: number
-): Promise<PunchGps> {
-  try {
-    const pos = await locateDevice();
-    return {
-      lat: pos.coords.latitude,
-      lng: pos.coords.longitude,
-      accuracy: pos.coords.accuracy ?? null,
-      at: Date.now(),
-    };
-  } catch {
-    if (lastFix) {
-      return {
-        lat: lastFix.lat,
-        lng: lastFix.lng,
-        accuracy: Number.isFinite(liveAccuracy) && liveAccuracy < 9000 ? liveAccuracy : null,
-        at: Date.now(),
-      };
-    }
-    throw new Error("Turn on Location and allow GPS for this site, then tap the map location button.");
-  }
 }
 
 export default function DashboardPage() {
@@ -192,13 +114,17 @@ export default function DashboardPage() {
   const startGeoTracking = useCallback(() => {
     if (geoStarted.current || !navigator.geolocation) return;
     geoStarted.current = true;
-    getPositionQuick()
+    locateDevice()
       .then((p) => applyPosition(p, true))
       .catch(() => {});
     geoWatchId.current = navigator.geolocation.watchPosition(
       (p) => applyPosition(p, true),
       () => {},
-      { enableHighAccuracy: true, maximumAge: 10000, timeout: 30000 }
+      {
+        enableHighAccuracy: true,
+        maximumAge: 15000,
+        timeout: isIosBrowser() ? 30000 : 20000,
+      }
     );
   }, [applyPosition]);
 
@@ -292,7 +218,8 @@ export default function DashboardPage() {
 
     const watch = navigator.geolocation.watchPosition(
       (pos) => {
-        if (pos.coords.accuracy > 200) return;
+        const accLimit = isIosBrowser() ? 500 : 200;
+        if (pos.coords.accuracy > accLimit) return;
         const next = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         setLivePos(next);
         if (lastFix.current && !isPlausibleStep(lastFix.current, next, pos.coords.accuracy)) return;
@@ -302,7 +229,7 @@ export default function DashboardPage() {
         setOpen((cur) => (cur ? { ...cur, points: [...cur.points, point] } : cur));
       },
       (err) => {
-        if (err.code === 1 || err.code === 2) autoPunchOutForGpsOff();
+        if (err.code === 1) autoPunchOutForGpsOff();
       },
       { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
     );
@@ -446,31 +373,40 @@ export default function DashboardPage() {
     }
   }
 
+  async function enableLocation() {
+    startGeoTracking();
+    await requestLiveLocation();
+  }
+
   async function beginPunchIn() {
     setMsg("");
     setOkMsg(false);
     startGeoTracking();
 
+    if (!lastFix.current && livePos) {
+      lastFix.current = livePos;
+    }
+
     if (lastFix.current || punchGpsRef.current) {
       setMode("in");
-      if (!punchGpsRef.current) {
-        capturePunchInGps(lastFix.current, liveAcc.current)
-          .then((gps) => {
-            punchGpsRef.current = gps;
-          })
-          .catch(() => {});
-      }
+      captureGpsFix(lastFix.current, liveAcc.current)
+        .then((gps) => {
+          punchGpsRef.current = gps;
+        })
+        .catch(() => {});
       return;
     }
 
     setLocating(true);
     try {
       const gps = await withTimeout(
-        capturePunchInGps(lastFix.current, liveAcc.current),
+        captureGpsFix(lastFix.current, liveAcc.current),
         8000,
-        "Could not find location. Allow Location, tap the map button, then Punch In."
+        "Could not find location. Tap Show my location below, allow Location, then Punch In."
       );
       punchGpsRef.current = gps;
+      lastFix.current = { lat: gps.lat, lng: gps.lng };
+      setLivePos({ lat: gps.lat, lng: gps.lng });
       setMode("in");
     } catch (e) {
       const text = e instanceof Error ? e.message : "Turn on GPS and try again.";
@@ -571,7 +507,10 @@ export default function DashboardPage() {
             {!user.faceRegisteredAt ? (
               <button
                 type="button"
-                onClick={() => setMode("register")}
+                onClick={() => {
+                  startGeoTracking();
+                  setMode("register");
+                }}
                 className="w-full rounded-2xl bg-navy px-5 py-4 text-base font-semibold text-white"
               >
                 {t("registerFace")}
@@ -612,9 +551,20 @@ export default function DashboardPage() {
         )}
 
         {!livePos && mode === "idle" && !open && (
-          <p className="mb-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-            Location required for punch. Tap <strong>Show your location</strong> on the map below, then Punch In.
-          </p>
+          <div className="mb-3 rounded-2xl border border-teal/25 bg-teal/5 p-4">
+            <p className="text-sm font-semibold text-navy">Step 1 — Enable location (required)</p>
+            <p className="mt-1 text-xs text-navy/60">
+              iPhone needs your tap to find GPS. Allow Location when asked, then Punch In.
+            </p>
+            <button
+              type="button"
+              onClick={enableLocation}
+              disabled={locating}
+              className="mt-3 w-full rounded-xl bg-teal px-4 py-3 text-sm font-semibold text-white disabled:opacity-70"
+            >
+              {locating ? "Finding location…" : "Show my location on map"}
+            </button>
+          </div>
         )}
 
         <div className="overflow-hidden rounded-[2rem] bg-white shadow-float">
@@ -626,7 +576,7 @@ export default function DashboardPage() {
                 liveLocation={livePos}
                 locating={locating}
                 locationError={gpsError}
-                onLocateMe={requestLiveLocation}
+                onLocateMe={enableLocation}
                 durationMs={live?.durationMs}
                 distanceMeters={open.distanceMeters}
               />
@@ -638,10 +588,7 @@ export default function DashboardPage() {
                 liveLocation={livePos}
                 locating={locating}
                 locationError={gpsError}
-                onLocateMe={() => {
-                  startGeoTracking();
-                  requestLiveLocation();
-                }}
+                onLocateMe={enableLocation}
               />
             </div>
           )}
