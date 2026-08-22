@@ -24,6 +24,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Face could not be captured. Try again in good light." }, { status: 400 });
   }
 
+  if (list.length < 3) {
+    return NextResponse.json(
+      { error: "Hold still with your full face in the circle for a few seconds, then try again." },
+      { status: 400 }
+    );
+  }
+
   // Store up to 3 samples so later punches work across light/angle/phone differences
   const toStore = list.slice(0, 3);
 

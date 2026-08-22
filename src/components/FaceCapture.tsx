@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { averageDescriptors, loadFaceModels, scanFace, type FaceScan } from "@/lib/face";
+import { averageDescriptors, loadFaceModels, scanFace, type FaceScan, type FaceScanError } from "@/lib/face";
 import { useLang } from "@/lib/i18n";
 import { jpegQuality, jpegSize } from "@/lib/network";
 
@@ -48,7 +48,16 @@ export function FaceCapture({ actionLabel, onCapture, busy, mode = "verify" }: P
   const [locked, setLocked] = useState(false);
   const [error, setError] = useState("");
   const [hint, setHint] = useState("");
-  const needHits = mode === "register" ? 4 : 2;
+  const needHits = mode === "register" ? 6 : 2;
+
+  function hintForError(err: FaceScanError) {
+    if (err === "too_far") return t("tooFar");
+    if (err === "multiple") return t("multiple");
+    if (err === "partial") return t("partialFace");
+    if (err === "off_center") return t("offCenterFace");
+    if (err === "low_quality") return t("lowQualityFace");
+    return t("noFace");
+  }
 
   useEffect(() => {
     setHint(t("camStarting"));
@@ -122,11 +131,11 @@ export function FaceCapture({ actionLabel, onCapture, busy, mode = "verify" }: P
     const tick = async () => {
       if (running || !videoRef.current || firing.current) return;
       running = true;
-      const result = await scanFace(videoRef.current);
+      const result = await scanFace(videoRef.current, { strict: mode === "register" });
       if (result.ok) {
         lastGood.current = result;
         hits.current += 1;
-        if (samples.current.length < 5) samples.current.push(result.descriptor);
+        if (samples.current.length < 6) samples.current.push(result.descriptor);
         if (mode === "register") {
           setHint(`${t("faceFound")} (${Math.min(hits.current, needHits)}/${needHits})`);
         } else {
@@ -136,9 +145,8 @@ export function FaceCapture({ actionLabel, onCapture, busy, mode = "verify" }: P
       } else {
         hits.current = 0;
         lastGood.current = null;
-        // Keep a couple samples if we briefly lost the face
         if (samples.current.length > 2) samples.current = samples.current.slice(-2);
-        setHint(result.error === "too_far" ? t("tooFar") : result.error === "multiple" ? t("multiple") : t("noFace"));
+        setHint(hintForError(result.error));
       }
       running = false;
     };
@@ -166,7 +174,7 @@ export function FaceCapture({ actionLabel, onCapture, busy, mode = "verify" }: P
       {!modelsReady && camReady && <p className="text-xs text-navy/50">{t("firstLoad")}</p>}
       {mode === "register" && (
         <p className="max-w-xs text-center text-xs text-navy/50">
-          Hold still in bright light for a few seconds. Do not tilt your head.
+          Center your full face in the circle — forehead, both eyes, nose and chin visible. Bright light, no turban-only shot.
         </p>
       )}
       <button
