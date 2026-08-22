@@ -36,6 +36,22 @@ function snapshot(video: HTMLVideoElement, box?: { x: number; y: number; width: 
   return canvas.toDataURL("image/jpeg", jpegQuality());
 }
 
+function waitVideoReady(video: HTMLVideoElement) {
+  return new Promise<void>((resolve) => {
+    if (video.videoWidth > 0 && video.readyState >= 2) {
+      resolve();
+      return;
+    }
+    const done = () => {
+      video.removeEventListener("loadedmetadata", done);
+      video.removeEventListener("loadeddata", done);
+      resolve();
+    };
+    video.addEventListener("loadedmetadata", done);
+    video.addEventListener("loadeddata", done);
+  });
+}
+
 export function FaceCapture({ actionLabel, onCapture, busy, mode = "verify" }: Props) {
   const { t } = useLang();
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -82,7 +98,9 @@ export function FaceCapture({ actionLabel, onCapture, busy, mode = "verify" }: P
         }
         videoRef.current.srcObject = stream;
         videoRef.current.setAttribute("playsinline", "true");
+        videoRef.current.setAttribute("webkit-playsinline", "true");
         await videoRef.current.play();
+        await waitVideoReady(videoRef.current);
         setCamReady(true);
         setError("");
         setHint(t("preparing"));

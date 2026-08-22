@@ -21,6 +21,7 @@ type User = {
 };
 
 type Point = { lat: number; lng: number; recordedAt: string; accuracy?: number };
+type PunchGps = { lat: number; lng: number; accuracy: number | null; at: number };
 type Attendance = {
   id: string;
   punchInAt: string;
@@ -36,9 +37,14 @@ type Attendance = {
 
 function geoFail(err: GeolocationPositionError | Error) {
   const code = "code" in err ? err.code : 0;
-  if (code === 1) throw new Error("Location permission is blocked. Allow it in Chrome site settings.");
-  if (code === 3) throw new Error("GPS timed out. Step outdoors with clear sky, then tap Confirm.");
-  throw new Error("Location not found. Turn on GPS and tap Confirm again.");
+  if (code === 1) throw new Error("Location permission is blocked. Allow Location for this site in Safari/Chrome settings.");
+  if (code === 3) throw new Error("GPS timed out. Step outdoors with clear sky, then tap Punch In again.");
+  throw new Error("Location not found. Turn on Location Services, then tap Punch In again.");
+}
+
+function isIosBrowser() {
+  if (typeof navigator === "undefined") return false;
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 }
 
 
@@ -59,8 +65,14 @@ function getFreshPosition(): Promise<GeolocationPosition> {
 
 async function resolvePunchInPosition(
   lastFix: { lat: number; lng: number } | null,
-  liveAccuracy: number
+  liveAccuracy: number,
+  prefetched: PunchGps | null
 ): Promise<{ lat: number; lng: number; accuracy: number | null }> {
+  const maxAge = isIosBrowser() ? 180_000 : 120_000;
+  if (prefetched && Date.now() - prefetched.at < maxAge) {
+    return { lat: prefetched.lat, lng: prefetched.lng, accuracy: prefetched.accuracy };
+  }
+  const accLimit = isIosBrowser() ? 250 : 120;
   try {
     const pos = await getFreshPosition();
     return {
@@ -69,10 +81,31 @@ async function resolvePunchInPosition(
       accuracy: pos.coords.accuracy ?? null,
     };
   } catch (freshErr) {
-    if (lastFix && liveAccuracy <= 120) {
+    if (lastFix && liveAccuracy <= accLimit) {
       return { lat: lastFix.lat, lng: lastFix.lng, accuracy: liveAccuracy };
     }
     throw freshErr;
+  }
+}
+
+async function capturePunchInGps(
+  lastFix: { lat: number; lng: number } | null,
+  liveAccuracy: number
+): Promise<PunchGps> {
+  try {
+    const pos = await getFreshPosition();
+    return {
+      lat: pos.coords.latitude,
+      lng: pos.coords.longitude,
+      accuracy: pos.coords.accuracy ?? null,
+      at: Date.now(),
+    };
+  } catch {
+    const accLimit = isIosBrowser() ? 250 : 120;
+    if (lastFix && liveAccuracy <= accLimit) {
+      return { lat: lastFix.lat, lng: lastFix.lng, accuracy: liveAccuracy, at: Date.now() };
+    }
+    throw new Error("Turn on Location and allow GPS for this site, then tap Punch In again.");
   }
 }
 
@@ -88,6 +121,7 @@ export default function DashboardPage() {
   const lastFix = useRef<{ lat: number; lng: number } | null>(null);
   const liveAcc = useRef<number>(Infinity);
   const pendingGps = useRef<Promise<GeolocationPosition | null> | null>(null);
+  const punchGpsRef = useRef<PunchGps | null>(null);
   const gpsOffLock = useRef(false);
   const [gpsOffFlag, setGpsOffFlag] = useState(false);
   const [livePos, setLivePos] = useState<{ lat: number; lng: number } | null>(null);
@@ -276,21 +310,21 @@ export default function DashboardPage() {
 
   async function onRegister(descriptor: number[], image: string, samples?: number[][]) {
     setBusy(true);
-    const res = await fetch("/api/face/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ descriptor, image, samples }),
-    });
-    setBusy(false);
-    if (!res.ok) {
+    try {
+      const res = await fetch("/api/face/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ descriptor, image, samples }),
+      });
       const data = await res.json();
-      setMsg(data.error);
-      return;
+      if (!res.ok) throw new Error(data.error || "Could not save face.");
+      setMode("idle");
+      setOkMsg(true);
+      setMsg(t("faceSaved"));
+      refresh();
+    } finally {
+      setBusy(false);
     }
-    setMode("idle");
-    setOkMsg(true);
-    setMsg(t("faceSaved"));
-    refresh();
   }
 
   async function punch(kind: "in" | "out", descriptor: number[], image: string) {
@@ -320,7 +354,7 @@ export default function DashboardPage() {
         lat = last.lat;
         lng = last.lng;
       } else {
-        const fix = await resolvePunchInPosition(lastFix.current, liveAcc.current);
+        const fix = await resolvePunchInPosition(lastFix.current, liveAcc.current, punchGpsRef.current);
         lat = fix.lat;
         lng = fix.lng;
         accuracy = fix.accuracy;
@@ -334,6 +368,7 @@ export default function DashboardPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not save punch.");
+      punchGpsRef.current = null;
       setMode("idle");
       setOkMsg(true);
       setGpsOffFlag(false);
@@ -349,6 +384,21 @@ export default function DashboardPage() {
             ? String((e as { message: string }).message)
             : "Punch failed. Try face and location again, then tap Confirm.";
       setMsg(text);
+      throw e instanceof Error ? e : new Error(text);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function beginPunchIn() {
+    setMsg("");
+    setOkMsg(false);
+    setBusy(true);
+    try {
+      punchGpsRef.current = await capturePunchInGps(lastFix.current, liveAcc.current);
+      setMode("in");
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Turn on Location, then try again.");
     } finally {
       setBusy(false);
     }
@@ -378,22 +428,22 @@ export default function DashboardPage() {
   }
 
   return (
-    <main className="min-h-screen bg-sand">
-      <div className="mx-auto max-w-6xl px-4 py-5">
-        <header className="mb-4 flex items-center justify-between gap-3 rounded-3xl bg-white px-4 py-3 shadow-card">
-          <div className="flex items-center gap-3">
+    <main className="min-h-screen overflow-x-hidden bg-sand">
+      <div className="mx-auto max-w-6xl px-4 py-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+        <header className="mb-4 flex flex-wrap items-start justify-between gap-2 rounded-3xl bg-white px-4 py-3 shadow-card">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
             <BrandMark size={56} />
-            <div>
-              <p className="text-xs uppercase tracking-wider text-navy/50">{t("aap")}</p>
-              <h1 className="font-semibold">{user.name}</h1>
-              <p className="text-sm text-navy/60">
+            <div className="min-w-0">
+              <p className="truncate text-xs uppercase tracking-wider text-navy/50">{t("aap")}</p>
+              <h1 className="truncate text-base font-semibold sm:text-lg">{user.name}</h1>
+              <p className="truncate text-sm text-navy/60">
                 {user.sectorAllotted} · {user.assemblyName}
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex shrink-0 items-center gap-2">
             <LangToggle tone="light" />
-            <button onClick={logout} className="text-sm text-navy/50">
+            <button onClick={logout} className="whitespace-nowrap text-sm text-navy/50">
               {t("logout")}
             </button>
           </div>
@@ -407,7 +457,7 @@ export default function DashboardPage() {
         )}
         {msg && (
           <p
-            className={`mb-3 rounded-2xl px-4 py-2 text-sm ${
+            className={`mb-3 break-words rounded-2xl px-4 py-2 text-sm ${
               okMsg ? "bg-white text-teal" : "bg-red-50 text-red-700"
             }`}
           >
@@ -416,7 +466,7 @@ export default function DashboardPage() {
         )}
 
         {mode !== "idle" && (
-          <div className="mb-4 rounded-[2rem] bg-white p-6 shadow-card">
+          <div className="mb-4 overflow-hidden rounded-[2rem] bg-white p-4 shadow-card sm:p-6">
             <FaceCapture
               busy={busy}
               mode={mode === "register" ? "register" : "verify"}
@@ -451,7 +501,7 @@ export default function DashboardPage() {
                 >
                   {t("punchOut")}
                 </button>
-                <span className="text-sm text-navy/60">
+                <span className="min-w-0 break-words text-sm text-navy/60">
                   {t("live")} · {formatDuration(live?.durationMs || 0)} ·{" "}
                   {formatKm(
                     Math.max(
@@ -465,8 +515,9 @@ export default function DashboardPage() {
               <div className="flex flex-col gap-2">
                 <button
                   type="button"
-                  onClick={() => setMode("in")}
-                  className="w-full rounded-2xl bg-teal px-5 py-4 text-base font-semibold text-white"
+                  onClick={beginPunchIn}
+                  disabled={busy}
+                  className="w-full rounded-2xl bg-teal px-5 py-4 text-base font-semibold text-white disabled:opacity-60"
                 >
                   {t("punchIn")}
                 </button>
