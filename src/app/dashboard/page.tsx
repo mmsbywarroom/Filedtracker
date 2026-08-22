@@ -34,31 +34,46 @@ type Attendance = {
   points: Point[];
 };
 
-function getPosition(): Promise<GeolocationPosition> {
+function geoFail(err: GeolocationPositionError | Error) {
+  const code = "code" in err ? err.code : 0;
+  if (code === 1) throw new Error("Location permission is blocked. Allow it in Chrome site settings.");
+  if (code === 3) throw new Error("GPS timed out. Step outdoors with clear sky, then tap Confirm.");
+  throw new Error("Location not found. Turn on GPS and tap Confirm again.");
+}
+
+
+/** Punch in/out geofence — always prefer a fresh high-accuracy GPS fix (no stale cache). */
+function getFreshPosition(): Promise<GeolocationPosition> {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) {
       reject(new Error("Location is off. Turn on Location in phone settings."));
       return;
     }
-    const fail = (err: GeolocationPositionError | Error) => {
-      const code = "code" in err ? err.code : 0;
-      if (code === 1) reject(new Error("Location permission is blocked. Allow it in Chrome site settings."));
-      else if (code === 3) reject(new Error("GPS timed out. Try outdoors, then tap Confirm."));
-      else reject(new Error("Location not found. Turn on GPS and tap Confirm again."));
-    };
-    // Prefer a quick cached/network fix first; fall back to high-accuracy GPS.
-    navigator.geolocation.getCurrentPosition(resolve, () => {
-      navigator.geolocation.getCurrentPosition(resolve, fail, {
-        enableHighAccuracy: true,
-        timeout: 20000,
-        maximumAge: 0,
-      });
-    }, {
-      enableHighAccuracy: false,
-      timeout: 4000,
-      maximumAge: 120000,
+    navigator.geolocation.getCurrentPosition(resolve, (e) => reject(geoFail(e)), {
+      enableHighAccuracy: true,
+      timeout: 25000,
+      maximumAge: 0,
     });
   });
+}
+
+async function resolvePunchInPosition(
+  lastFix: { lat: number; lng: number } | null,
+  liveAccuracy: number
+): Promise<{ lat: number; lng: number; accuracy: number | null }> {
+  try {
+    const pos = await getFreshPosition();
+    return {
+      lat: pos.coords.latitude,
+      lng: pos.coords.longitude,
+      accuracy: pos.coords.accuracy ?? null,
+    };
+  } catch (freshErr) {
+    if (lastFix && liveAccuracy <= 120) {
+      return { lat: lastFix.lat, lng: lastFix.lng, accuracy: liveAccuracy };
+    }
+    throw freshErr;
+  }
 }
 
 export default function DashboardPage() {
@@ -133,7 +148,9 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (mode === "in") {
-      pendingGps.current = getPosition().catch(() => null);
+      pendingGps.current = getFreshPosition().catch(() => null);
+    } else {
+      pendingGps.current = null;
     }
   }, [mode]);
 
@@ -303,15 +320,10 @@ export default function DashboardPage() {
         lat = last.lat;
         lng = last.lng;
       } else {
-        try {
-          const cached = pendingGps.current ? await pendingGps.current : null;
-          const pos = cached || (await getPosition());
-          lat = pos.coords.latitude;
-          lng = pos.coords.longitude;
-          accuracy = pos.coords.accuracy;
-        } catch (locErr) {
-          throw locErr;
-        }
+        const fix = await resolvePunchInPosition(lastFix.current, liveAcc.current);
+        lat = fix.lat;
+        lng = fix.lng;
+        accuracy = fix.accuracy;
       }
       const payload = { lat, lng, accuracy, image };
       const url = kind === "in" ? "/api/attendance" : "/api/attendance/punch-out";

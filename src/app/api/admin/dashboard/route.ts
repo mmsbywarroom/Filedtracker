@@ -5,21 +5,40 @@ import { userScopeWhere } from "@/lib/hierarchy";
 import { formatKm } from "@/lib/utils";
 
 function groupCounts(
-  users: { id: string; key: string; isActive: boolean }[],
+  users: { id: string; key: string; isActive: boolean; faceRegistered: boolean }[],
   punchedIds: Set<string>,
   liveIds: Set<string>,
   distByUser: Map<string, number>
 ) {
   const map = new Map<
     string,
-    { name: string; users: number; active: number; inactive: number; punched: number; live: number; distance: number }
+    {
+      name: string;
+      users: number;
+      active: number;
+      inactive: number;
+      faceRegistered: number;
+      punched: number;
+      live: number;
+      distance: number;
+    }
   >();
   for (const u of users) {
     const name = u.key || "—";
-    const row = map.get(name) || { name, users: 0, active: 0, inactive: 0, punched: 0, live: 0, distance: 0 };
+    const row = map.get(name) || {
+      name,
+      users: 0,
+      active: 0,
+      inactive: 0,
+      faceRegistered: 0,
+      punched: 0,
+      live: 0,
+      distance: 0,
+    };
     row.users += 1;
     if (u.isActive) row.active += 1;
     else row.inactive += 1;
+    if (u.faceRegistered) row.faceRegistered += 1;
     if (punchedIds.has(u.id)) row.punched += 1;
     if (liveIds.has(u.id)) row.live += 1;
     row.distance += distByUser.get(u.id) || 0;
@@ -28,7 +47,7 @@ function groupCounts(
   return Array.from(map.values()).sort((a, b) => b.users - a.users);
 }
 
-const METRICS = new Set(["total", "active", "inactive", "live", "punched", "distance"]);
+const METRICS = new Set(["total", "active", "inactive", "face", "live", "punched", "distance"]);
 const GROUP_BY = new Set(["designation", "zone", "district", "assembly", "cluster"]);
 const GROUP_FIELD: Record<string, "designation" | "zone" | "district" | "assemblyName" | "cluster"> = {
   designation: "designation",
@@ -76,6 +95,7 @@ export async function GET(req: Request) {
         sectorAllotted: true,
         cluster: true,
         isActive: true,
+        faceRegisteredAt: true,
       },
     });
 
@@ -99,11 +119,13 @@ export async function GET(req: Request) {
       if (!punchInByUser.has(p.userId)) punchInByUser.set(p.userId, p.punchInAt);
     }
     const activeUsers = users.filter((u) => u.isActive).length;
+    const faceRegisteredUsers = users.filter((u) => u.faceRegisteredAt).length;
 
     if (metric && METRICS.has(metric)) {
       let filtered = users;
       if (metric === "active") filtered = users.filter((u) => u.isActive);
       else if (metric === "inactive") filtered = users.filter((u) => !u.isActive);
+      else if (metric === "face") filtered = users.filter((u) => u.faceRegisteredAt);
       else if (metric === "live") filtered = users.filter((u) => liveIds.has(u.id));
       else if (metric === "punched") filtered = users.filter((u) => punchedIds.has(u.id));
       else if (metric === "distance") filtered = users.filter((u) => (distByUser.get(u.id) || 0) > 0);
@@ -125,6 +147,8 @@ export async function GET(req: Request) {
           district: u.district,
           cluster: u.cluster,
           isActive: u.isActive,
+          faceRegistered: Boolean(u.faceRegisteredAt),
+          faceRegisteredAt: u.faceRegisteredAt?.toISOString() || null,
           punchedToday: punchedIds.has(u.id),
           liveNow: liveIds.has(u.id),
           distanceMeters: distByUser.get(u.id) || 0,
@@ -148,7 +172,12 @@ export async function GET(req: Request) {
 
     const grouped = (key: "designation" | "zone" | "district" | "assemblyName" | "cluster") =>
       groupCounts(
-        users.map((u) => ({ id: u.id, key: u[key] || "", isActive: u.isActive })),
+        users.map((u) => ({
+          id: u.id,
+          key: u[key] || "",
+          isActive: u.isActive,
+          faceRegistered: Boolean(u.faceRegisteredAt),
+        })),
         punchedIds,
         liveIds,
         distByUser
@@ -159,6 +188,7 @@ export async function GET(req: Request) {
       totalUsers: users.length,
       activeUsers,
       inactiveUsers: users.length - activeUsers,
+      faceRegisteredUsers,
       activeToday: punchedIds.size,
       liveNow: liveIds.size,
       punches: punches.length,

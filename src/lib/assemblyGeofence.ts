@@ -362,7 +362,7 @@ function checkSingleAssembly(
   return {
     ok: false,
     code: "OUTSIDE",
-    error: `You are outside your assigned assembly (${match.acName}). Punch is allowed only inside that assembly (within ${buffer} m of the boundary).`,
+    error: `You are outside your assigned assembly (${match.acName}) — about ${Math.round(distanceMeters)} m from the boundary. Move inside the assembly or enable high-accuracy GPS, then try again (within ${buffer} m of the boundary).`,
   };
 }
 

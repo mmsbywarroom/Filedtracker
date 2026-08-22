@@ -10,6 +10,7 @@ type Group = {
   users: number;
   active: number;
   inactive: number;
+  faceRegistered: number;
   punched: number;
   live: number;
   distance: number;
@@ -20,6 +21,7 @@ type Dash = {
   totalUsers: number;
   activeUsers: number;
   inactiveUsers: number;
+  faceRegisteredUsers: number;
   activeToday: number;
   liveNow: number;
   punches: number;
@@ -45,15 +47,18 @@ type DetailRow = {
   liveNow: boolean;
   distanceLabel: string;
   punchInAt: string | null;
+  faceRegistered?: boolean;
+  faceRegisteredAt?: string | null;
 };
 
-type Metric = "total" | "active" | "inactive" | "live" | "punched" | "distance";
+type Metric = "total" | "active" | "inactive" | "face" | "live" | "punched" | "distance";
 type GroupBy = "designation" | "zone" | "district" | "assembly";
 
 const METRIC_LABELS: Record<Metric, string> = {
   total: "Total users",
   active: "Active users",
   inactive: "Inactive users",
+  face: "Face registered",
   live: "Live now",
   punched: "Punched today",
   distance: "Travel today",
@@ -70,6 +75,7 @@ const METRIC_COLUMNS: { key: Metric; field: keyof Group; className?: string }[] 
   { key: "total", field: "users" },
   { key: "active", field: "active", className: "text-teal" },
   { key: "inactive", field: "inactive", className: "text-navy/50" },
+  { key: "face", field: "faceRegistered", className: "text-violet-700" },
   { key: "punched", field: "punched", className: "text-[#c45c12]" },
   { key: "live", field: "live", className: "text-emerald-600" },
   { key: "distance", field: "distance", className: "font-semibold text-ink" },
@@ -162,6 +168,7 @@ function GroupTable({
               <th className="px-4 py-2">Users</th>
               <th className="px-4 py-2">Active</th>
               <th className="px-4 py-2">Inactive</th>
+              <th className="px-4 py-2">Face reg</th>
               <th className="px-4 py-2">Punched</th>
               <th className="px-4 py-2">Live</th>
               <th className="px-4 py-2">Distance</th>
@@ -342,7 +349,7 @@ export default function AdminDashboardPage() {
         </label>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
         <Stat
           className="bg-ink"
           label="Total users"
@@ -366,6 +373,14 @@ export default function AdminDashboardPage() {
           hint="Tap to view list"
           active={metric === "inactive" && !groupFilter}
           onClick={() => loadMetric("inactive")}
+        />
+        <Stat
+          className="bg-violet-600"
+          label="Face registered"
+          value={data?.faceRegisteredUsers || 0}
+          hint="Tap to view list"
+          active={metric === "face" && !groupFilter}
+          onClick={() => loadMetric("face")}
         />
         <Stat
           className="bg-emerald-600"
@@ -467,6 +482,7 @@ export default function AdminDashboardPage() {
                     <th className="px-4 py-2">Assembly / Sector</th>
                     <th className="px-4 py-2">Zone</th>
                     {metric === "distance" && <th className="px-4 py-2">Distance</th>}
+                    {metric === "face" && <th className="px-4 py-2">Face registered</th>}
                     {(metric === "live" || metric === "punched") && <th className="px-4 py-2">Punch in</th>}
                     {metric === "live" && <th className="px-4 py-2">Status</th>}
                   </tr>
@@ -485,6 +501,13 @@ export default function AdminDashboardPage() {
                       </td>
                       <td className="px-4 py-2">{r.zone}</td>
                       {metric === "distance" && <td className="px-4 py-2 font-semibold">{r.distanceLabel}</td>}
+                      {metric === "face" && (
+                        <td className="px-4 py-2 text-xs">
+                          {r.faceRegisteredAt
+                            ? new Date(r.faceRegisteredAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+                            : "—"}
+                        </td>
+                      )}
                       {(metric === "live" || metric === "punched") && (
                         <td className="px-4 py-2 text-xs">
                           {r.punchInAt
