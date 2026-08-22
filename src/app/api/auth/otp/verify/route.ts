@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { setSessionCookie } from "@/lib/auth";
+import { setUserSessionCookie } from "@/lib/auth";
 import { hashOtp, normalizePhone, rateLimit, safeEqual } from "@/lib/security";
 
 export async function POST(req: Request) {
@@ -44,6 +44,6 @@ export async function POST(req: Request) {
   }
 
   await prisma.otpChallenge.delete({ where: { id: challenge.id } });
-  await setSessionCookie({ sub: user.id, role: "user", phone: user.phone, name: user.name });
+  await setUserSessionCookie({ sub: user.id, phone: user.phone, name: user.name });
   return NextResponse.json({ ok: true });
 }

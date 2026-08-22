@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
-import { setSessionCookie } from "@/lib/auth";
+import { setAdminSessionCookie } from "@/lib/auth";
 import { rateLimit } from "@/lib/security";
 
 export async function POST(req: Request) {
@@ -21,6 +21,6 @@ export async function POST(req: Request) {
   const match = await bcrypt.compare(password, admin.passwordHash);
   if (!match) return NextResponse.json({ error: "Invalid credentials." }, { status: 401 });
 
-  await setSessionCookie({ sub: admin.id, role: "admin", name: admin.name || "Admin" });
+  await setAdminSessionCookie({ sub: admin.id, name: admin.name || "Admin" });
   return NextResponse.json({ ok: true });
 }

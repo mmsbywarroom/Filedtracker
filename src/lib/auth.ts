@@ -3,7 +3,10 @@ import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import type { AdminScope } from "@/lib/hierarchy";
 
-const COOKIE = "ft_session";
+const USER_COOKIE = "ft_user_session";
+const ADMIN_COOKIE = "ft_admin_session";
+/** @deprecated legacy single cookie — cleared on new login */
+const LEGACY_COOKIE = "ft_session";
 
 function secret() {
   const s = process.env.JWT_SECRET;
@@ -26,29 +29,26 @@ export async function signSession(payload: SessionPayload) {
     .sign(secret());
 }
 
-export async function setSessionCookie(payload: SessionPayload) {
-  const token = await signSession(payload);
-  cookies().set(COOKIE, token, {
+function cookieOpts(maxAge: number) {
+  return {
     httpOnly: true,
-    sameSite: "lax",
+    sameSite: "lax" as const,
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    maxAge: 60 * 60 * 24 * 30,
-  });
+    maxAge,
+  };
 }
 
-export async function clearSession() {
-  cookies().set(COOKIE, "", {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: 0,
-  });
+async function writeCookie(name: string, token: string) {
+  cookies().set(name, token, cookieOpts(60 * 60 * 24 * 30));
 }
 
-export async function getSession(): Promise<SessionPayload | null> {
-  const token = cookies().get(COOKIE)?.value;
+async function eraseCookie(name: string) {
+  cookies().set(name, "", cookieOpts(0));
+}
+
+async function readSessionCookie(name: string): Promise<SessionPayload | null> {
+  const token = cookies().get(name)?.value;
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, secret());
@@ -58,14 +58,73 @@ export async function getSession(): Promise<SessionPayload | null> {
   }
 }
 
+async function legacySession(): Promise<SessionPayload | null> {
+  return readSessionCookie(LEGACY_COOKIE);
+}
+
+export async function setUserSessionCookie(payload: Omit<SessionPayload, "role">) {
+  const token = await signSession({ ...payload, role: "user" });
+  await writeCookie(USER_COOKIE, token);
+  await eraseCookie(LEGACY_COOKIE);
+}
+
+export async function setAdminSessionCookie(payload: Omit<SessionPayload, "role">) {
+  const token = await signSession({ ...payload, role: "admin" });
+  await writeCookie(ADMIN_COOKIE, token);
+  await eraseCookie(LEGACY_COOKIE);
+}
+
+/** @deprecated use setUserSessionCookie or setAdminSessionCookie */
+export async function setSessionCookie(payload: SessionPayload) {
+  if (payload.role === "admin") await setAdminSessionCookie(payload);
+  else await setUserSessionCookie(payload);
+}
+
+export async function clearUserSession() {
+  await eraseCookie(USER_COOKIE);
+  await eraseCookie(LEGACY_COOKIE);
+}
+
+export async function clearAdminSession() {
+  await eraseCookie(ADMIN_COOKIE);
+  await eraseCookie(LEGACY_COOKIE);
+}
+
+/** @deprecated use clearUserSession or clearAdminSession */
+export async function clearSession() {
+  await clearUserSession();
+  await clearAdminSession();
+}
+
+export async function getUserSession(): Promise<SessionPayload | null> {
+  const direct = await readSessionCookie(USER_COOKIE);
+  if (direct?.role === "user") return direct;
+  const legacy = await legacySession();
+  if (legacy?.role === "user") return legacy;
+  return null;
+}
+
+export async function getAdminSession(): Promise<SessionPayload | null> {
+  const direct = await readSessionCookie(ADMIN_COOKIE);
+  if (direct?.role === "admin") return direct;
+  const legacy = await legacySession();
+  if (legacy?.role === "admin") return legacy;
+  return null;
+}
+
+/** User app session only (admin panel uses getAdminSession). */
+export async function getSession(): Promise<SessionPayload | null> {
+  return getUserSession();
+}
+
 export async function requireUser() {
-  const s = await getSession();
+  const s = await getUserSession();
   if (!s || s.role !== "user") return null;
   return s;
 }
 
 export async function requireAdmin() {
-  const s = await getSession();
+  const s = await getAdminSession();
   if (!s || s.role !== "admin") return null;
   const admin = await prisma.admin.findUnique({ where: { id: s.sub } });
   if (!admin) return null;

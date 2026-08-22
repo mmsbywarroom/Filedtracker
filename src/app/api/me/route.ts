@@ -1,13 +1,10 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { getUserSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export async function GET() {
-  const s = await getSession();
+  const s = await getUserSession();
   if (!s) return NextResponse.json({ user: null });
-  if (s.role === "admin") {
-    return NextResponse.json({ user: { role: "admin", name: "Admin" } });
-  }
   const user = await prisma.user.findUnique({
     where: { id: s.sub },
     select: {

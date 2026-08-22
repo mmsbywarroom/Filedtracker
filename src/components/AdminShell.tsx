@@ -48,7 +48,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
   ];
 
   async function logout() {
-    await fetch("/api/auth/logout", { method: "POST" });
+    await fetch("/api/auth/logout?scope=admin", { method: "POST" });
     window.location.href = "/admin/login";
   }
 

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSession } from "@/lib/auth";
+import { getUserSession } from "@/lib/auth";
 import { haversineMeters, splitTrack } from "@/lib/utils";
 import { googleMapsKey } from "@/lib/runtimeEnv";
 
@@ -36,7 +36,7 @@ async function snapSegment(key: string, points: Pt[]) {
 }
 
 export async function POST(req: Request) {
-  if (!(await getSession())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await getUserSession())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const key = googleMapsKey();
   if (!key) return NextResponse.json({ segments: [] });
   const body = await req.json().catch(() => null);
