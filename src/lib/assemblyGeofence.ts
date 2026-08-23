@@ -104,6 +104,14 @@ const ALIASES: Record<string, string> = {
   "morinda": "Chamkaur Sahib",
   "nangal": "Anandpur Sahib",
   "talwandi sabo": "Talwandi Sabo",
+
+  // ECI 2008: Dhariwal (MCl) is in Qadian AC-6 (public GIS wrongly put it in Gurdaspur)
+  dhariwal: "Qadian",
+  sanaur: "Sanour",
+  sanour: "Sanour",
+  "nihal singh wala": "Nihal Singhwala",
+  "nihal singhwala": "Nihal Singhwala",
+  "rampura phul": "Rampura Phul",
 };
 
 export function normalizeAssemblyName(raw: string) {
