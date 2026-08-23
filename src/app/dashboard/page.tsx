@@ -6,7 +6,6 @@ import { FaceCapture } from "@/components/FaceCapture";
 import { BrandMark } from "@/components/BrandMark";
 import RouteMap from "@/components/RouteMapDynamic";
 import { formatDuration, formatKm, isPlausibleStep, pathDistance } from "@/lib/utils";
-import { loadFaceModels } from "@/lib/face";
 import {
   captureGpsFix,
   isIosBrowser,
@@ -83,6 +82,8 @@ export default function DashboardPage() {
   const [livePos, setLivePos] = useState<{ lat: number; lng: number } | null>(null);
   const [locating, setLocating] = useState(false);
   const [gpsError, setGpsError] = useState("");
+  const [bootError, setBootError] = useState("");
+  const [booting, setBooting] = useState(true);
 
   const applyPosition = useCallback((pos: GeolocationPosition, force = false) => {
     const acc = pos.coords.accuracy || 9999;
@@ -131,28 +132,51 @@ export default function DashboardPage() {
   }, [applyPosition]);
 
   async function refresh() {
-    const me = await fetch("/api/me").then((r) => r.json());
-    if (!me.user || me.user.role !== "user") {
-      window.location.href = "/";
-      return;
-    }
-    setUser(me.user);
-    const att = await fetch("/api/attendance").then((r) => r.json());
-    setOpen(att.open);
-    const last = att.history?.[0];
-    if (!att.open && last?.punchOutReason === "gps_off") setGpsOffFlag(true);
-    if (!att.open && last?.punchOutReason === "auto_12h" && last.punchOutAt) {
-      const age = Date.now() - new Date(last.punchOutAt).getTime();
-      if (age >= 0 && age < 10 * 60 * 1000) {
-        setOkMsg(true);
-        setMsg("Auto punched out after 12 hours (no punch-out).");
+    setBootError("");
+    try {
+      const meRes = await withTimeout(
+        fetch("/api/me", { cache: "no-store" }),
+        12000,
+        "Server slow to respond. Check network and try again."
+      );
+      const me = await meRes.json().catch(() => ({}));
+      if (!me.user || me.user.role !== "user") {
+        window.location.href = "/";
+        return;
       }
+      setUser(me.user);
+      setBooting(false);
+
+      const attRes = await withTimeout(
+        fetch("/api/attendance", { cache: "no-store" }),
+        15000,
+        "Attendance load timed out."
+      );
+      const att = await attRes.json().catch(() => ({}));
+      if (attRes.ok) {
+        setOpen(att.open ?? null);
+        const last = att.history?.[0];
+        if (!att.open && last?.punchOutReason === "gps_off") setGpsOffFlag(true);
+        if (!att.open && last?.punchOutReason === "auto_12h" && last.punchOutAt) {
+          const age = Date.now() - new Date(last.punchOutAt).getTime();
+          if (age >= 0 && age < 10 * 60 * 1000) {
+            setOkMsg(true);
+            setMsg("Auto punched out after 12 hours (no punch-out).");
+          }
+        }
+      }
+    } catch (e) {
+      setBooting(false);
+      setBootError(e instanceof Error ? e.message : "Could not load dashboard.");
     }
   }
 
   useEffect(() => {
-    refresh();
-    loadFaceModels().catch(() => {});
+    void refresh();
+    // Load face models in the background — never block dashboard open
+    void import("@/lib/face")
+      .then((m) => m.loadFaceModels())
+      .catch(() => {});
   }, []);
 
   /** While punched in: re-check server often so 12h auto punch-out applies even if GPS stops. */
@@ -479,9 +503,29 @@ export default function DashboardPage() {
 
   if (!user) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-3">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 px-6 text-center">
         <BrandMark size={80} />
-        <p>{t("loading")}</p>
+        {bootError ? (
+          <>
+            <p className="max-w-sm text-sm text-red-700">{bootError}</p>
+            <button
+              type="button"
+              onClick={() => {
+                setBooting(true);
+                setBootError("");
+                void refresh();
+              }}
+              className="rounded-xl bg-teal px-5 py-2.5 text-sm font-semibold text-white"
+            >
+              Try again
+            </button>
+            <button type="button" onClick={logout} className="text-sm text-navy/50">
+              {t("logout")}
+            </button>
+          </>
+        ) : (
+          <p>{booting ? t("loading") : t("loading")}</p>
+        )}
       </div>
     );
   }

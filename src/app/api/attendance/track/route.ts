@@ -8,7 +8,7 @@ export async function POST(req: Request) {
   const s = await requireUser();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const closed = await autoPunchOutIfStale(s.sub);
+  const closed = await autoPunchOutIfStale(s.sub).catch(() => null);
   if (closed) {
     return NextResponse.json(
       { error: "Session auto punched out after 12 hours.", code: "AUTO_12H", attendance: closed },
@@ -23,6 +23,14 @@ export async function POST(req: Request) {
     include: { points: { orderBy: { recordedAt: "desc" }, take: 1 } },
   });
   if (!open) return NextResponse.json({ error: "No active session." }, { status: 400 });
+  // Stale open session: refuse track and let client refresh (background closer may still run)
+  if (Date.now() - open.punchInAt.getTime() >= 12 * 60 * 60 * 1000) {
+    void autoPunchOutIfStale(s.sub).catch(() => {});
+    return NextResponse.json(
+      { error: "Session auto punched out after 12 hours.", code: "AUTO_12H" },
+      { status: 409 }
+    );
+  }
 
   const cleaned: { lat: number; lng: number; recordedAt: Date; accuracy: number | null }[] = [];
   let prev = open.points[0] ? { lat: open.points[0].lat, lng: open.points[0].lng } : null;

@@ -1,22 +1,28 @@
 /**
  * Runs once when the Node server starts (Docker/EC2).
- * Vercel crons do not apply here — we schedule auto punch-out in-process.
+ * Keep batches small so DB pool is not exhausted (dashboard /api/me must stay fast).
  */
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
 
   const INTERVAL_MS = 15 * 60 * 1000;
-  const BOOT_DELAY_MS = 20_000;
+  const BOOT_DELAY_MS = 45_000;
 
+  let running = false;
   const tick = async () => {
+    if (running) return;
+    running = true;
     try {
       const { autoPunchOutAllStale } = await import("@/lib/punchOut");
-      const closed = await autoPunchOutAllStale(300);
+      // Small batches — cron / next tick will continue
+      const closed = await autoPunchOutAllStale(40);
       if (closed.length) {
         console.info(`[auto-punch-out] closed ${closed.length} stale session(s)`);
       }
     } catch (e) {
       console.error("[auto-punch-out] scheduler failed", e);
+    } finally {
+      running = false;
     }
   };
 

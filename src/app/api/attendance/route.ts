@@ -18,23 +18,30 @@ export async function GET() {
   const s = await requireUser();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  // Close session if punch-in is older than 12 hours
-  await autoPunchOutIfStale(s.sub);
+  // Don't block dashboard open on auto punch-out (can lock DB under load)
+  void autoPunchOutIfStale(s.sub).catch(() => {});
 
   const open = await prisma.attendance.findFirst({
     where: { userId: s.sub, punchOutAt: null },
     include: { points: { orderBy: { recordedAt: "desc" }, take: 400 } },
     orderBy: { punchInAt: "desc" },
   });
+  // If session is already past 12h, hide as closed even if background close is still running
+  const openFresh =
+    open && Date.now() - open.punchInAt.getTime() < 12 * 60 * 60 * 1000 ? open : null;
+  if (open && !openFresh) {
+    void autoPunchOutIfStale(s.sub).catch(() => {});
+  }
+
   const history = await prisma.attendance.findMany({
     where: { userId: s.sub },
     orderBy: { punchInAt: "desc" },
     take: 1,
   });
-  const mapId = open?.id || history[0]?.id;
-  const openPts = [...(open?.points || [])].reverse();
+  const mapId = openFresh?.id || history[0]?.id;
+  const openPts = [...(openFresh?.points || [])].reverse();
   let mapPoints: { lat: number; lng: number; recordedAt: Date }[] = [];
-  if (open && open.id === mapId) {
+  if (openFresh && openFresh.id === mapId) {
     mapPoints = downsample(openPts, 280);
   } else if (mapId) {
     const pts = await prisma.trackPoint.findMany({
@@ -45,7 +52,7 @@ export async function GET() {
     mapPoints = downsample([...pts].reverse(), 280);
   }
   return NextResponse.json({
-    open: open ? { ...open, points: mapPoints } : null,
+    open: openFresh ? { ...openFresh, points: mapPoints } : null,
     history: history.map((h) => ({ ...h, points: h.id === mapId ? mapPoints : [] })),
   });
 }
