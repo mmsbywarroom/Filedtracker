@@ -139,11 +139,25 @@ export default function DashboardPage() {
         12000,
         "Server slow to respond. Check network and try again."
       );
-      const me = await meRes.json().catch(() => ({}));
-      if (!me.user || me.user.role !== "user") {
-        window.location.href = "/";
+      const me = await meRes.json().catch(() => ({} as { user?: null; error?: string }));
+
+      // Server/DB down — do NOT redirect (that caused infinite refresh loop with middleware)
+      if (!meRes.ok) {
+        setBooting(false);
+        setBootError(
+          me.error ||
+            `Server error (${meRes.status}). Disk may be full or app is restarting — wait 1 min and try again.`
+        );
         return;
       }
+
+      if (!me.user || me.user.role !== "user") {
+        // Clear cookie first so middleware does not bounce / → /dashboard forever
+        await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+        window.location.replace("/?relogin=1");
+        return;
+      }
+
       setUser(me.user);
       setBooting(false);
 

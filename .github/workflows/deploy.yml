@@ -66,12 +66,15 @@ jobs:
               sudo dnf install -y cronie
             fi
             sudo mkdir -p /etc/cron.d
-            echo '15 4 * * * root /opt/filedtracker/disk-cleanup.sh >> /var/log/filedtracker-cleanup.log 2>&1' | sudo tee /etc/cron.d/filedtracker-cleanup >/dev/null
+            # Every 6 hours + daily 4:15 — keep disk/logs from filling EC2
+            echo '15 */6 * * * root /opt/filedtracker/disk-cleanup.sh >> /var/log/filedtracker-cleanup.log 2>&1' | sudo tee /etc/cron.d/filedtracker-cleanup >/dev/null
             sudo chmod 644 /etc/cron.d/filedtracker-cleanup
             # Every 15 minutes: auto punch-out sessions open > 12 hours
             echo '*/15 * * * * root /opt/filedtracker/auto-punch-out.sh >> /var/log/filedtracker-auto-punch.log 2>&1' | sudo tee /etc/cron.d/filedtracker-auto-punch >/dev/null
             sudo chmod 644 /etc/cron.d/filedtracker-auto-punch
             sudo systemctl enable --now crond
+            # Free disk immediately on every deploy
+            sudo /opt/filedtracker/disk-cleanup.sh >> /var/log/filedtracker-cleanup.log 2>&1 || true
             # Close any already-stale sessions right after deploy
             sudo /opt/filedtracker/auto-punch-out.sh >> /var/log/filedtracker-auto-punch.log 2>&1 || true
             sudo docker compose -f docker-compose.prod.yml ps

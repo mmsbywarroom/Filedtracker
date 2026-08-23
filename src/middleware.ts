@@ -46,7 +46,10 @@ export async function middleware(req: NextRequest) {
   }
 
   if (pathname === "/") {
-    if (userRole === "user") return NextResponse.redirect(new URL("/dashboard", req.url));
+    // ?relogin=1 skips bounce while session is being cleared
+    if (userRole === "user" && !req.nextUrl.searchParams.has("relogin")) {
+      return NextResponse.redirect(new URL("/dashboard", req.url));
+    }
     return NextResponse.next();
   }
 

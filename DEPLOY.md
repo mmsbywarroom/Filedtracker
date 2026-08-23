@@ -18,20 +18,22 @@ Inbound:
 | HTTP | 80 | 0.0.0.0/0 |
 | HTTPS | 443 | 0.0.0.0/0 (optional later) |
 
-# Auto punch-out (12h)
-Every 15 minutes the app closes open sessions older than 12 hours and stores reason `auto_12h` (see Admin → Auto punch-out).
+## Disk / logs (important on t3.micro)
 
-On EC2 this runs via:
-1. In-process scheduler inside the Docker app (`src/instrumentation.ts`)
-2. Host cron: `/opt/filedtracker/auto-punch-out.sh` → `GET /api/cron/auto-punch-out`
+`deploy/disk-cleanup.sh` runs:
 
-Optional in `/opt/filedtracker/.env`:
+- every **6 hours** via cron
+- after every deploy
 
+It truncates large Docker/nginx/app logs, vacuums journald, and prunes unused Docker images. Compose also caps container logs at **10MB × 3** files.
+
+If the site sticks on Loading / auto-refreshes, SSH and run:
+
+```bash
+sudo /opt/filedtracker/disk-cleanup.sh
+df -h /
+sudo docker compose -f /opt/filedtracker/docker-compose.prod.yml restart
 ```
-CRON_SECRET=some-long-random-string
-```
-
-If set, the host cron script sends `?secret=...`. If unset, it uses header `x-filedtracker-cron: 1`.
 
 
 ## 2. One-time server setup
