@@ -2,6 +2,7 @@ import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import type { AdminScope } from "@/lib/hierarchy";
+import { normalizeAccessLevel } from "@/lib/hierarchy";
 
 const USER_COOKIE = "ft_user_session";
 const ADMIN_COOKIE = "ft_admin_session";
@@ -132,7 +133,7 @@ export async function requireAdmin() {
     id: admin.id,
     email: admin.email,
     name: admin.name,
-    accessLevel: admin.accessLevel,
+    accessLevel: normalizeAccessLevel(admin.accessLevel) || admin.accessLevel,
     isSuper: admin.isSuper,
     designations: admin.designations,
     zone: admin.zone,

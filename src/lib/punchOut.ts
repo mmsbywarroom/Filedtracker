@@ -100,18 +100,22 @@ export async function autoPunchOutAllStale(limit = 200) {
 
   const closed = [];
   for (const row of stale) {
-    const deadline = new Date(row.punchInAt.getTime() + AUTO_PUNCH_OUT_MS);
-    const last = row.points[0];
-    const result = await closeOpenAttendance({
-      userId: row.userId,
-      lat: last?.lat ?? row.punchInLat,
-      lng: last?.lng ?? row.punchInLng,
-      accuracy: last?.accuracy ?? null,
-      reason: "auto_12h",
-      punchOutAt: deadline,
-      address: "Auto punch-out after 12 hours without punch-out",
-    });
-    if (result) closed.push(result);
+    try {
+      const deadline = new Date(row.punchInAt.getTime() + AUTO_PUNCH_OUT_MS);
+      const last = row.points[0];
+      const result = await closeOpenAttendance({
+        userId: row.userId,
+        lat: last?.lat ?? row.punchInLat,
+        lng: last?.lng ?? row.punchInLng,
+        accuracy: last?.accuracy ?? null,
+        reason: "auto_12h",
+        punchOutAt: deadline,
+        address: "Auto punch-out after 12 hours without punch-out",
+      });
+      if (result) closed.push(result);
+    } catch (e) {
+      console.error("[auto-punch-out] failed for", row.id, e);
+    }
   }
   return closed;
 }

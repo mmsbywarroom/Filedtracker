@@ -2,13 +2,11 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { userScopeWhere } from "@/lib/hierarchy";
-import { formatKm } from "@/lib/utils";
 
 function groupCounts(
   users: { id: string; key: string; isActive: boolean; faceRegistered: boolean }[],
   punchedIds: Set<string>,
-  liveIds: Set<string>,
-  distByUser: Map<string, number>
+  liveIds: Set<string>
 ) {
   const map = new Map<
     string,
@@ -20,7 +18,9 @@ function groupCounts(
       faceRegistered: number;
       punched: number;
       live: number;
-      distance: number;
+      pendingPunchIn: number;
+      pendingFace: number;
+      pendingLive: number;
     }
   >();
   for (const u of users) {
@@ -33,21 +33,35 @@ function groupCounts(
       faceRegistered: 0,
       punched: 0,
       live: 0,
-      distance: 0,
+      pendingPunchIn: 0,
+      pendingFace: 0,
+      pendingLive: 0,
     };
     row.users += 1;
     if (u.isActive) row.active += 1;
     else row.inactive += 1;
     if (u.faceRegistered) row.faceRegistered += 1;
+    else if (u.isActive) row.pendingFace += 1;
     if (punchedIds.has(u.id)) row.punched += 1;
+    else if (u.isActive) row.pendingPunchIn += 1;
     if (liveIds.has(u.id)) row.live += 1;
-    row.distance += distByUser.get(u.id) || 0;
+    else if (u.isActive && punchedIds.has(u.id)) row.pendingLive += 1;
     map.set(name, row);
   }
   return Array.from(map.values()).sort((a, b) => b.users - a.users);
 }
 
-const METRICS = new Set(["total", "active", "inactive", "face", "live", "punched", "distance"]);
+const METRICS = new Set([
+  "total",
+  "active",
+  "inactive",
+  "face",
+  "live",
+  "punched",
+  "pendingPunchIn",
+  "pendingFace",
+  "pendingLive",
+]);
 const GROUP_BY = new Set(["designation", "zone", "district", "assembly", "cluster"]);
 const GROUP_FIELD: Record<string, "designation" | "zone" | "district" | "assemblyName" | "cluster"> = {
   designation: "designation",
@@ -104,22 +118,20 @@ export async function GET(req: Request) {
         punchInAt: { gte: start, lte: end },
         user: userWhere,
       },
-      select: { userId: true, punchOutAt: true, distanceMeters: true, punchInAt: true },
+      select: { userId: true, punchOutAt: true, punchInAt: true },
     });
 
     const punchedIds = new Set(punches.map((p) => p.userId));
     const liveIds = new Set(punches.filter((p) => !p.punchOutAt).map((p) => p.userId));
-    const distByUser = new Map<string, number>();
     const punchInByUser = new Map<string, Date>();
-    let totalDistance = 0;
     for (const p of punches) {
-      const add = p.distanceMeters || 0;
-      totalDistance += add;
-      distByUser.set(p.userId, (distByUser.get(p.userId) || 0) + add);
       if (!punchInByUser.has(p.userId)) punchInByUser.set(p.userId, p.punchInAt);
     }
     const activeUsers = users.filter((u) => u.isActive).length;
     const faceRegisteredUsers = users.filter((u) => u.faceRegisteredAt).length;
+    const pendingPunchIn = users.filter((u) => u.isActive && !punchedIds.has(u.id)).length;
+    const pendingFace = users.filter((u) => u.isActive && !u.faceRegisteredAt).length;
+    const pendingLive = users.filter((u) => u.isActive && punchedIds.has(u.id) && !liveIds.has(u.id)).length;
 
     if (metric && METRICS.has(metric)) {
       let filtered = users;
@@ -128,7 +140,11 @@ export async function GET(req: Request) {
       else if (metric === "face") filtered = users.filter((u) => u.faceRegisteredAt);
       else if (metric === "live") filtered = users.filter((u) => liveIds.has(u.id));
       else if (metric === "punched") filtered = users.filter((u) => punchedIds.has(u.id));
-      else if (metric === "distance") filtered = users.filter((u) => (distByUser.get(u.id) || 0) > 0);
+      else if (metric === "pendingPunchIn") filtered = users.filter((u) => u.isActive && !punchedIds.has(u.id));
+      else if (metric === "pendingFace") filtered = users.filter((u) => u.isActive && !u.faceRegisteredAt);
+      else if (metric === "pendingLive") {
+        filtered = users.filter((u) => u.isActive && punchedIds.has(u.id) && !liveIds.has(u.id));
+      }
 
       if (groupBy && GROUP_BY.has(groupBy)) {
         const field = GROUP_FIELD[groupBy];
@@ -151,14 +167,9 @@ export async function GET(req: Request) {
           faceRegisteredAt: u.faceRegisteredAt?.toISOString() || null,
           punchedToday: punchedIds.has(u.id),
           liveNow: liveIds.has(u.id),
-          distanceMeters: distByUser.get(u.id) || 0,
-          distanceLabel: formatKm(distByUser.get(u.id) || 0),
           punchInAt: punchInByUser.get(u.id)?.toISOString() || null,
         }))
-        .sort((a, b) => {
-          if (metric === "distance") return b.distanceMeters - a.distanceMeters;
-          return a.name.localeCompare(b.name);
-        });
+        .sort((a, b) => a.name.localeCompare(b.name));
 
       return NextResponse.json({
         date,
@@ -179,8 +190,7 @@ export async function GET(req: Request) {
           faceRegistered: Boolean(u.faceRegisteredAt),
         })),
         punchedIds,
-        liveIds,
-        distByUser
+        liveIds
       );
 
     return NextResponse.json({
@@ -192,7 +202,9 @@ export async function GET(req: Request) {
       activeToday: punchedIds.size,
       liveNow: liveIds.size,
       punches: punches.length,
-      totalDistance,
+      pendingPunchIn,
+      pendingFace,
+      pendingLive,
       byDesignation: grouped("designation"),
       byZone: grouped("zone"),
       byDistrict: grouped("district"),

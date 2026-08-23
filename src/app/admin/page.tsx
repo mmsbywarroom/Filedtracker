@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import { BrandMark } from "@/components/BrandMark";
 import { DESIGNATIONS, cleanScope } from "@/lib/hierarchy";
-import { formatKm } from "@/lib/utils";
 
 type Group = {
   name: string;
@@ -13,7 +12,9 @@ type Group = {
   faceRegistered: number;
   punched: number;
   live: number;
-  distance: number;
+  pendingPunchIn: number;
+  pendingFace: number;
+  pendingLive: number;
 };
 
 type Dash = {
@@ -25,7 +26,9 @@ type Dash = {
   activeToday: number;
   liveNow: number;
   punches: number;
-  totalDistance: number;
+  pendingPunchIn: number;
+  pendingFace: number;
+  pendingLive: number;
   byDesignation: Group[];
   byZone: Group[];
   byDistrict: Group[];
@@ -45,13 +48,21 @@ type DetailRow = {
   isActive: boolean;
   punchedToday: boolean;
   liveNow: boolean;
-  distanceLabel: string;
   punchInAt: string | null;
   faceRegistered?: boolean;
   faceRegisteredAt?: string | null;
 };
 
-type Metric = "total" | "active" | "inactive" | "face" | "live" | "punched" | "distance";
+type Metric =
+  | "total"
+  | "active"
+  | "inactive"
+  | "face"
+  | "live"
+  | "punched"
+  | "pendingPunchIn"
+  | "pendingFace"
+  | "pendingLive";
 type GroupBy = "designation" | "zone" | "district" | "assembly";
 
 const METRIC_LABELS: Record<Metric, string> = {
@@ -61,7 +72,9 @@ const METRIC_LABELS: Record<Metric, string> = {
   face: "Face registered",
   live: "Live now",
   punched: "Punched today",
-  distance: "Travel today",
+  pendingPunchIn: "Pending punch-in",
+  pendingFace: "Pending face recog",
+  pendingLive: "Pending live",
 };
 
 const GROUP_BY_LABELS: Record<GroupBy, string> = {
@@ -78,7 +91,9 @@ const METRIC_COLUMNS: { key: Metric; field: keyof Group; className?: string }[] 
   { key: "face", field: "faceRegistered", className: "text-violet-700" },
   { key: "punched", field: "punched", className: "text-[#c45c12]" },
   { key: "live", field: "live", className: "text-emerald-600" },
-  { key: "distance", field: "distance", className: "font-semibold text-ink" },
+  { key: "pendingPunchIn", field: "pendingPunchIn", className: "text-amber-700" },
+  { key: "pendingFace", field: "pendingFace", className: "text-rose-700" },
+  { key: "pendingLive", field: "pendingLive", className: "text-sky-700" },
 ];
 
 function todayIst() {
@@ -118,13 +133,11 @@ function CellBtn({
   className,
   active,
   onClick,
-  format,
 }: {
   value: number;
   className?: string;
   active?: boolean;
   onClick: () => void;
-  format?: (n: number) => string;
 }) {
   return (
     <button
@@ -132,7 +145,7 @@ function CellBtn({
       onClick={onClick}
       className={`rounded px-1 py-0.5 underline-offset-2 transition hover:underline focus:outline-none focus:ring-2 focus:ring-teal/40 ${active ? "bg-teal/10 font-semibold underline ring-1 ring-teal/30" : ""} ${className || ""}`}
     >
-      {format ? format(value) : value}
+      {value}
     </button>
   );
 }
@@ -171,7 +184,9 @@ function GroupTable({
               <th className="px-4 py-2">Face reg</th>
               <th className="px-4 py-2">Punched</th>
               <th className="px-4 py-2">Live</th>
-              <th className="px-4 py-2">Distance</th>
+              <th className="px-4 py-2">Pending punchin</th>
+              <th className="px-4 py-2">Pending face recog</th>
+              <th className="px-4 py-2">Pending live</th>
             </tr>
           </thead>
           <tbody>
@@ -179,7 +194,7 @@ function GroupTable({
               <tr key={r.name} className={`border-t border-navy/5 ${i % 2 ? "bg-sand/40" : "bg-white"}`}>
                 <td className="px-4 py-2 font-medium">{r.name}</td>
                 {METRIC_COLUMNS.map((col) => {
-                  const val = r[col.field] as number;
+                  const val = Number(r[col.field] ?? 0);
                   const isActive =
                     activeMetric === col.key &&
                     activeGroup?.groupBy === groupBy &&
@@ -191,7 +206,6 @@ function GroupTable({
                         className={col.className}
                         active={isActive}
                         onClick={() => onCellClick(col.key, r.name)}
-                        format={col.key === "distance" ? formatKm : undefined}
                       />
                     </td>
                   );
@@ -291,7 +305,7 @@ export default function AdminDashboardPage() {
     ? "Full organisation"
     : level === "ALC" && !cleanScope(scope.assemblyName)
       ? "No assembly assigned — no users visible"
-      : (level === "ZLC" || level === "Zone Coordinator") && !cleanScope(scope.zone)
+      : (level === "ZLC" || level === "Zone Coordinator") && !cleanScope(scope.zone) && !mappedAssemblies.length
         ? "No zone assigned — no users visible"
         : level === "DLC" && !cleanScope(scope.district) && !mappedAssemblies.length
           ? "No district assigned — no users visible"
@@ -349,7 +363,7 @@ export default function AdminDashboardPage() {
         </label>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <Stat
           className="bg-ink"
           label="Total users"
@@ -399,12 +413,28 @@ export default function AdminDashboardPage() {
           onClick={() => loadMetric("punched")}
         />
         <Stat
-          className="bg-[#0f766e]"
-          label="Distance"
-          value={formatKm(data?.totalDistance || 0)}
-          hint="Tap to view list"
-          active={metric === "distance" && !groupFilter}
-          onClick={() => loadMetric("distance")}
+          className="bg-amber-600"
+          label="Pending punchin"
+          value={data?.pendingPunchIn || 0}
+          hint="Active, not punched today"
+          active={metric === "pendingPunchIn" && !groupFilter}
+          onClick={() => loadMetric("pendingPunchIn")}
+        />
+        <Stat
+          className="bg-rose-600"
+          label="Pending face recog"
+          value={data?.pendingFace || 0}
+          hint="Active, face not registered"
+          active={metric === "pendingFace" && !groupFilter}
+          onClick={() => loadMetric("pendingFace")}
+        />
+        <Stat
+          className="bg-sky-700"
+          label="Pending live"
+          value={data?.pendingLive || 0}
+          hint="Punched today, not live now"
+          active={metric === "pendingLive" && !groupFilter}
+          onClick={() => loadMetric("pendingLive")}
         />
       </div>
 
@@ -481,10 +511,12 @@ export default function AdminDashboardPage() {
                     <th className="px-4 py-2">Designation</th>
                     <th className="px-4 py-2">Assembly / Sector</th>
                     <th className="px-4 py-2">Zone</th>
-                    {metric === "distance" && <th className="px-4 py-2">Distance</th>}
-                    {metric === "face" && <th className="px-4 py-2">Face registered</th>}
-                    {(metric === "live" || metric === "punched") && <th className="px-4 py-2">Punch in</th>}
-                    {metric === "live" && <th className="px-4 py-2">Status</th>}
+                    {metric === "face" || metric === "pendingFace" ? <th className="px-4 py-2">Face registered</th> : null}
+                    {(metric === "live" ||
+                      metric === "punched" ||
+                      metric === "pendingPunchIn" ||
+                      metric === "pendingLive") && <th className="px-4 py-2">Punch in</th>}
+                    {(metric === "live" || metric === "pendingLive") && <th className="px-4 py-2">Status</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -500,15 +532,17 @@ export default function AdminDashboardPage() {
                         <p className="text-xs text-navy/50">{r.sectorAllotted}</p>
                       </td>
                       <td className="px-4 py-2">{r.zone}</td>
-                      {metric === "distance" && <td className="px-4 py-2 font-semibold">{r.distanceLabel}</td>}
-                      {metric === "face" && (
+                      {(metric === "face" || metric === "pendingFace") && (
                         <td className="px-4 py-2 text-xs">
                           {r.faceRegisteredAt
                             ? new Date(r.faceRegisteredAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
-                            : "—"}
+                            : "Not registered"}
                         </td>
                       )}
-                      {(metric === "live" || metric === "punched") && (
+                      {(metric === "live" ||
+                        metric === "punched" ||
+                        metric === "pendingPunchIn" ||
+                        metric === "pendingLive") && (
                         <td className="px-4 py-2 text-xs">
                           {r.punchInAt
                             ? new Date(r.punchInAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
@@ -519,6 +553,13 @@ export default function AdminDashboardPage() {
                         <td className="px-4 py-2">
                           <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">
                             Live
+                          </span>
+                        </td>
+                      )}
+                      {metric === "pendingLive" && (
+                        <td className="px-4 py-2">
+                          <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-800">
+                            Punched out / not live
                           </span>
                         </td>
                       )}

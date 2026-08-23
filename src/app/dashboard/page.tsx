@@ -16,6 +16,8 @@ import {
 } from "@/lib/deviceGeo";
 import { LangToggle, useLang } from "@/lib/i18n";
 
+const AUTO_12H_MS = 12 * 60 * 60 * 1000;
+
 type User = {
   id: string;
   name: string;
@@ -139,12 +141,35 @@ export default function DashboardPage() {
     setOpen(att.open);
     const last = att.history?.[0];
     if (!att.open && last?.punchOutReason === "gps_off") setGpsOffFlag(true);
+    if (!att.open && last?.punchOutReason === "auto_12h" && last.punchOutAt) {
+      const age = Date.now() - new Date(last.punchOutAt).getTime();
+      if (age >= 0 && age < 10 * 60 * 1000) {
+        setOkMsg(true);
+        setMsg("Auto punched out after 12 hours (no punch-out).");
+      }
+    }
   }
 
   useEffect(() => {
     refresh();
     loadFaceModels().catch(() => {});
   }, []);
+
+  /** While punched in: re-check server often so 12h auto punch-out applies even if GPS stops. */
+  useEffect(() => {
+    if (!open) return;
+    const poll = window.setInterval(() => {
+      refresh();
+    }, 60_000);
+    const overdue = window.setInterval(() => {
+      const start = new Date(open.punchInAt).getTime();
+      if (Date.now() - start >= AUTO_12H_MS) refresh();
+    }, 15_000);
+    return () => {
+      clearInterval(poll);
+      clearInterval(overdue);
+    };
+  }, [open?.id, open?.punchInAt]);
 
   useEffect(() => {
     const onGesture = () => startGeoTracking();
@@ -204,16 +229,30 @@ export default function DashboardPage() {
     }).catch(() => {});
 
     const flush = async () => {
-      if (!buffer.current.length) return;
       const batch = buffer.current.splice(0, buffer.current.length);
-      await fetch("/api/attendance/track", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        keepalive: true,
-        body: JSON.stringify({
-          points: batch,
-        }),
-      });
+      try {
+        const res = await fetch("/api/attendance/track", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          keepalive: true,
+          body: JSON.stringify({ points: batch }),
+        });
+        if (res.status === 409) {
+          const data = await res.json().catch(() => ({}));
+          if (data?.code === "AUTO_12H") {
+            setOpen(null);
+            setMode("idle");
+            setOkMsg(true);
+            setMsg("Auto punched out after 12 hours (no punch-out).");
+            refresh();
+          }
+        } else if (res.status === 400 && batch.length === 0) {
+          // Session may already have been closed by server cron
+          refresh();
+        }
+      } catch {
+        /* ignore network blips */
+      }
     };
 
     const watch = navigator.geolocation.watchPosition(

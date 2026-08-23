@@ -10,6 +10,8 @@ function authorized(req: Request) {
   if (secret && (bearer === secret || q === secret)) return true;
   // Vercel Cron invokes with this header when CRON_SECRET is not required
   if (req.headers.get("x-vercel-cron") === "1") return true;
+  // EC2 host cron (deploy/auto-punch-out.sh) when CRON_SECRET is unset
+  if (!secret && req.headers.get("x-filedtracker-cron") === "1") return true;
   if (!secret && process.env.NODE_ENV !== "production") return true;
   return false;
 }

@@ -68,7 +68,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
       </header>
 
       <aside
-        className={`${open ? "flex" : "hidden"} z-20 w-full flex-col overflow-hidden bg-ink text-white md:sticky md:top-0 md:flex md:h-screen md:w-60 md:shrink-0`}
+        className={`${open ? "flex" : "hidden"} z-40 w-full flex-col overflow-y-auto bg-ink text-white md:fixed md:inset-y-0 md:left-0 md:flex md:h-screen md:w-60 md:shrink-0`}
       >
         <div className="hidden border-b border-white/10 px-4 py-5 md:block">
           <Link href="/admin" onClick={() => setOpen(false)} className="block overflow-hidden">
@@ -105,7 +105,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
-      <div className="min-h-screen min-w-0 flex-1">{children}</div>
+      <div className="min-h-screen min-w-0 flex-1 md:pl-60">{children}</div>
     </div>
   );
 }

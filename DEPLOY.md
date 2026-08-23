@@ -18,7 +18,21 @@ Inbound:
 | HTTP | 80 | 0.0.0.0/0 |
 | HTTPS | 443 | 0.0.0.0/0 (optional later) |
 
-Do **not** open Postgres 5432 to the internet.
+# Auto punch-out (12h)
+Every 15 minutes the app closes open sessions older than 12 hours and stores reason `auto_12h` (see Admin → Auto punch-out).
+
+On EC2 this runs via:
+1. In-process scheduler inside the Docker app (`src/instrumentation.ts`)
+2. Host cron: `/opt/filedtracker/auto-punch-out.sh` → `GET /api/cron/auto-punch-out`
+
+Optional in `/opt/filedtracker/.env`:
+
+```
+CRON_SECRET=some-long-random-string
+```
+
+If set, the host cron script sends `?secret=...`. If unset, it uses header `x-filedtracker-cron: 1`.
+
 
 ## 2. One-time server setup
 
