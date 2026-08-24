@@ -6,21 +6,26 @@ import { ReactNode, useEffect, useState } from "react";
 import { BrandMark } from "@/components/BrandMark";
 import { LangToggle, useLang } from "@/lib/i18n";
 
-const SUPER_ONLY = ["/admin/create", "/admin/records", "/admin/admins"];
+const SUPER_ONLY = ["/admin/records", "/admin/admins"];
 
 export default function AdminShell({ children }: { children: ReactNode }) {
   const { t } = useLang();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [isSuper, setIsSuper] = useState(false);
+  const [canCreateUsers, setCanCreateUsers] = useState(false);
 
   useEffect(() => {
     fetch("/api/admin/me")
       .then((r) => r.json())
       .then((d) => {
         const superAdmin = Boolean(d.admin?.isSuper);
+        const createUsers = Boolean(d.admin?.canCreateUsers);
         setIsSuper(superAdmin);
+        setCanCreateUsers(createUsers);
         if (!superAdmin && SUPER_ONLY.some((p) => pathname.startsWith(p))) {
+          window.location.replace("/admin");
+        } else if (!superAdmin && !createUsers && pathname.startsWith("/admin/create")) {
           window.location.replace("/admin");
         }
       })
@@ -38,9 +43,11 @@ export default function AdminShell({ children }: { children: ReactNode }) {
     },
     { href: "/admin/leaves", label: t("leaveModule"), match: (p: string) => p.startsWith("/admin/leaves") },
     { href: "/admin/attendance", label: t("attendanceModule"), match: (p: string) => p.startsWith("/admin/attendance") },
+    ...((isSuper || canCreateUsers)
+      ? [{ href: "/admin/create", label: t("createUser"), match: (p: string) => p.startsWith("/admin/create") }]
+      : []),
     ...(isSuper
       ? [
-          { href: "/admin/create", label: t("createUser"), match: (p: string) => p.startsWith("/admin/create") },
           { href: "/admin/records", label: t("dailyRecords"), match: (p: string) => p.startsWith("/admin/records") },
           { href: "/admin/admins", label: t("admins"), match: (p: string) => p.startsWith("/admin/admins") },
         ]

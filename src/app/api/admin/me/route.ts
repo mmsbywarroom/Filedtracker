@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
-import { canManageAdmins, isSuperAdmin, visibleDesignationsFor } from "@/lib/hierarchy";
+import { canCreateFieldUsers, canManageAdmins, isClusterAdmin, isSuperAdmin, visibleDesignationsFor } from "@/lib/hierarchy";
 
 export async function GET() {
   const s = await requireAdmin();
@@ -9,6 +9,8 @@ export async function GET() {
     admin: {
       ...s.admin,
       isSuper: isSuperAdmin(s.admin),
+      isCluster: isClusterAdmin(s.admin),
+      canCreateUsers: canCreateFieldUsers(s.admin),
       canManageAdmins: canManageAdmins(s.admin),
       visibleDesignations: visibleDesignationsFor(s.admin),
     },

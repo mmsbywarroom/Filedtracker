@@ -120,8 +120,83 @@ export function isSuperAdmin(admin: Pick<AdminScope, "isSuper">) {
   return Boolean(admin.isSuper);
 }
 
+export function isClusterAdmin(admin: Pick<AdminScope, "accessLevel">) {
+  return normalizeAccessLevel(admin.accessLevel) === "Cluster";
+}
+
+/** Super can create anyone. Cluster can create Sector Incharge only (manual, not CSV). */
+export function canCreateFieldUsers(admin: Pick<AdminScope, "isSuper" | "accessLevel">) {
+  return isSuperAdmin(admin) || isClusterAdmin(admin);
+}
+
 export function canManageAdmins(admin: Pick<AdminScope, "isSuper">) {
   return isSuperAdmin(admin);
+}
+
+/**
+ * Cluster admins may only edit/delete Sector Incharge users in their mapped assemblies/cluster.
+ * Super can manage anyone.
+ */
+export function canManageFieldUser(
+  admin: AdminScope,
+  user: { designation?: string | null; zone: string; district: string; assemblyName: string; cluster?: string | null }
+) {
+  if (isSuperAdmin(admin)) return true;
+  if (!isClusterAdmin(admin)) return false;
+  if ((user.designation || "") !== "Sector Incharge") return false;
+  return canSeeUser(admin, user);
+}
+
+/** Lock Cluster-created/updated users to Sector Incharge inside that admin's geography. */
+export function clusterUserPayload(
+  admin: AdminScope,
+  data: {
+    assemblyName: string;
+    zone: string;
+    district: string;
+    cluster?: string;
+    designation?: string;
+  }
+):
+  | {
+      ok: true;
+      payload: { designation: string; assemblyName: string; zone: string; district: string; cluster: string };
+    }
+  | { ok: false; error: string } {
+  if ((data.designation || "Sector Incharge") !== "Sector Incharge") {
+    return { ok: false, error: "Cluster admins can only manage Sector Incharge users." };
+  }
+  const assemblies = adminAssemblies(admin);
+  const adminCluster = cleanScope(admin.cluster);
+  const assemblyName = (data.assemblyName || "").trim();
+  if (!assemblyName) return { ok: false, error: "Assembly is required." };
+
+  if (assemblies.length) {
+    const allowed = assemblies.some((a) => a.toLowerCase() === assemblyName.toLowerCase());
+    if (!allowed) return { ok: false, error: "Assembly is outside your cluster mapping." };
+  } else if (adminCluster) {
+    const userCluster = (data.cluster || "").trim();
+    if (userCluster.toLowerCase() !== adminCluster.toLowerCase()) {
+      return { ok: false, error: "User must belong to your cluster." };
+    }
+  } else {
+    return { ok: false, error: "No cluster / assemblies assigned." };
+  }
+
+  const zone = cleanScope(admin.zone) || (data.zone || "").trim();
+  const district = cleanScope(admin.district) || (data.district || "").trim();
+  if (!zone || !district) return { ok: false, error: "Zone and district are required." };
+
+  return {
+    ok: true,
+    payload: {
+      designation: "Sector Incharge",
+      assemblyName,
+      zone,
+      district,
+      cluster: adminCluster || (data.cluster || "").trim(),
+    },
+  };
 }
 
 /** Parse assemblies list from admin record (array or pipe-separated assemblyName). */

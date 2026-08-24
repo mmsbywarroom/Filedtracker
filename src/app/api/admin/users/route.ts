@@ -3,7 +3,14 @@ import { z } from "zod";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { normalizePhone } from "@/lib/security";
-import { DESIGNATIONS, isSuperAdmin, userScopeWhere } from "@/lib/hierarchy";
+import {
+  DESIGNATIONS,
+  canCreateFieldUsers,
+  clusterUserPayload,
+  isClusterAdmin,
+  isSuperAdmin,
+  userScopeWhere,
+} from "@/lib/hierarchy";
 import { normalizeUserAssemblies } from "@/lib/userAssemblies";
 
 const userSchema = z.object({
@@ -77,20 +84,35 @@ export async function GET() {
 export async function POST(req: Request) {
   const s = await requireAdmin();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!isSuperAdmin(s.admin)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!canCreateFieldUsers(s.admin)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const parsed = userSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Invalid details." }, { status: 400 });
   const phone = normalizePhone(parsed.data.phone);
   if (!phone) return NextResponse.json({ error: "Invalid mobile number." }, { status: 400 });
-  const designation = DESIGNATIONS.includes(parsed.data.designation as (typeof DESIGNATIONS)[number])
+  let designation = DESIGNATIONS.includes(parsed.data.designation as (typeof DESIGNATIONS)[number])
     ? parsed.data.designation!
     : "Sector Incharge";
-  const { assemblyName, assemblies } = normalizeUserAssemblies(
-    designation,
-    parsed.data.assemblyName,
-    parsed.data.assemblies
-  );
-  if (designation === "ALC" && assemblies.length < 1) {
+  let assemblyName = parsed.data.assemblyName;
+  let zone = parsed.data.zone;
+  let district = parsed.data.district;
+  let cluster = parsed.data.cluster?.trim() || "";
+  if (isClusterAdmin(s.admin)) {
+    const scoped = clusterUserPayload(s.admin, {
+      designation,
+      assemblyName,
+      zone,
+      district,
+      cluster,
+    });
+    if (!scoped.ok) return NextResponse.json({ error: scoped.error }, { status: 403 });
+    designation = scoped.payload.designation;
+    assemblyName = scoped.payload.assemblyName;
+    zone = scoped.payload.zone;
+    district = scoped.payload.district;
+    cluster = scoped.payload.cluster;
+  }
+  const normalized = normalizeUserAssemblies(designation, assemblyName, parsed.data.assemblies);
+  if (designation === "ALC" && normalized.assemblies.length < 1) {
     return NextResponse.json({ error: "ALC users need at least one mapped assembly." }, { status: 400 });
   }
   try {
@@ -99,12 +121,12 @@ export async function POST(req: Request) {
         name: parsed.data.name,
         phone,
         designation,
-        assemblyName,
-        assemblies,
+        assemblyName: normalized.assemblyName,
+        assemblies: normalized.assemblies,
         sectorAllotted: parsed.data.sectorAllotted,
-        zone: parsed.data.zone,
-        district: parsed.data.district,
-        cluster: parsed.data.cluster?.trim() || "",
+        zone,
+        district,
+        cluster,
         isActive: parsed.data.isActive ?? true,
       },
     });
