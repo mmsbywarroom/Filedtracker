@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { BrandMark } from "@/components/BrandMark";
 import { DESIGNATIONS, cleanScope } from "@/lib/hierarchy";
+import { downloadCsv, downloadPdf } from "@/lib/reportExport";
 
 type Group = {
   name: string;
@@ -83,6 +84,64 @@ const GROUP_BY_LABELS: Record<GroupBy, string> = {
   district: "District",
   assembly: "Assembly",
 };
+
+function formatKolkata(iso: string | null | undefined) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
+}
+
+function buildDetailExport(
+  metric: Metric,
+  date: string,
+  groupFilter: { groupBy: GroupBy; groupValue: string } | null,
+  rows: DetailRow[]
+) {
+  const titleParts = [METRIC_LABELS[metric], date];
+  if (groupFilter) {
+    titleParts.push(`${GROUP_BY_LABELS[groupFilter.groupBy]}: ${groupFilter.groupValue}`);
+  }
+  const title = titleParts.join(" · ");
+
+  const filename = [
+    "dashboard",
+    metric,
+    date,
+    groupFilter ? `${groupFilter.groupBy}-${groupFilter.groupValue}` : "all",
+  ]
+    .join("-")
+    .replace(/[^a-zA-Z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .toLowerCase();
+
+  const headers = ["Name", "Phone", "Designation", "Assembly", "Sector", "Zone", "District"];
+  if (metric === "face" || metric === "pendingFace") headers.push("Face registered");
+  else if (metric === "live" || metric === "punched" || metric === "pendingPunchIn" || metric === "pendingLive") {
+    headers.push("Punch in");
+    if (metric === "live" || metric === "pendingLive") headers.push("Status");
+  }
+
+  const data = rows.map((r) => {
+    const row: (string | number | null | undefined)[] = [
+      r.name,
+      r.phone,
+      r.designation,
+      r.assemblyName,
+      r.sectorAllotted,
+      r.zone,
+      r.district,
+    ];
+    if (metric === "face" || metric === "pendingFace") {
+      row.push(r.faceRegisteredAt ? formatKolkata(r.faceRegisteredAt) : "Not registered");
+    } else if (metric === "live" || metric === "punched" || metric === "pendingPunchIn" || metric === "pendingLive") {
+      row.push(formatKolkata(r.punchInAt));
+      if (metric === "live") row.push("Live");
+      else if (metric === "pendingLive") row.push("Punched out / not live");
+    }
+    return row;
+  });
+
+  return { title, filename, headers, data };
+}
 
 const METRIC_COLUMNS: { key: Metric; field: keyof Group; className?: string }[] = [
   { key: "total", field: "users" },
@@ -489,16 +548,42 @@ export default function AdminDashboardPage() {
                 </span>
               )}
             </h2>
-            <button
-              type="button"
-              onClick={() => {
-                setMetric(null);
-                setGroupFilter(null);
-              }}
-              className="text-sm text-white/80 hover:text-white"
-            >
-              Close
-            </button>
+            <div className="flex items-center gap-2">
+              {!detailLoading && detailRows.length > 0 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const { filename, headers, data } = buildDetailExport(metric, date, groupFilter, detailRows);
+                      downloadCsv(filename, headers, data);
+                    }}
+                    className="rounded-lg border border-white/30 px-3 py-1.5 text-sm font-semibold text-white hover:bg-white/10"
+                  >
+                    Download CSV
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const { title, headers, data } = buildDetailExport(metric, date, groupFilter, detailRows);
+                      downloadPdf(title, headers, data);
+                    }}
+                    className="rounded-lg border border-white/30 px-3 py-1.5 text-sm font-semibold text-white hover:bg-white/10"
+                  >
+                    PDF
+                  </button>
+                </>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setMetric(null);
+                  setGroupFilter(null);
+                }}
+                className="text-sm text-white/80 hover:text-white"
+              >
+                Close
+              </button>
+            </div>
           </div>
           <div className="max-h-[420px] overflow-auto">
             {detailLoading ? (

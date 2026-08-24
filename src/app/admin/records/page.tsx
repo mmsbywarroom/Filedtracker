@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { FacePhoto } from "@/components/FacePhoto";
+import { AdminReportToolbar } from "@/components/AdminReportToolbar";
+import { downloadCsv, downloadPdf, reasonLabel, uniqueSorted } from "@/lib/reportExport";
 import { formatKm } from "@/lib/utils";
 
 type Row = {
@@ -25,18 +27,32 @@ type Row = {
   distanceMeters: number;
   marks: number;
   status: string;
+  punchOutReason?: string | null;
 };
 
 function todayIst() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 }
 
+function whenIst(iso: string | null) {
+  return iso ? new Date(iso).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : "—";
+}
+
+function rowReason(r: Row) {
+  if (!r.punchOutAt) return "live";
+  if (r.punchOutReason === "gps_off") return "gps_off";
+  if (r.punchOutReason === "auto_12h") return "auto_12h";
+  return "manual";
+}
+
 export default function DailyRecordsPage() {
   const [date, setDate] = useState(todayIst);
   const [rows, setRows] = useState<Row[]>([]);
   const [q, setQ] = useState("");
-  const [status, setStatus] = useState("");
   const [zone, setZone] = useState("");
+  const [district, setDistrict] = useState("");
+  const [designation, setDesignation] = useState("");
+  const [reason, setReason] = useState("");
 
   async function load(d: string) {
     const res = await fetch(`/api/admin/attendance?date=${d}`);
@@ -52,18 +68,60 @@ export default function DailyRecordsPage() {
     load(date);
   }, [date]);
 
+  const zones = useMemo(() => uniqueSorted(rows.map((r) => r.zone)), [rows]);
+  const districts = useMemo(
+    () => uniqueSorted(rows.filter((r) => !zone || r.zone === zone).map((r) => r.district)),
+    [rows, zone]
+  );
+  const designations = useMemo(() => uniqueSorted(rows.map((r) => r.designation)), [rows]);
+
   const filtered = useMemo(() => {
     return rows.filter((r) => {
-      const text = [r.name, r.phone, r.assemblyName, r.sectorAllotted, r.zone, r.district, r.designation].join(" ").toLowerCase();
+      const text = [r.name, r.phone, r.assemblyName, r.sectorAllotted, r.zone, r.district, r.designation]
+        .join(" ")
+        .toLowerCase();
       if (q && !text.includes(q.toLowerCase())) return false;
-      if (status && r.status !== status) return false;
       if (zone && r.zone !== zone) return false;
+      if (district && r.district !== district) return false;
+      if (designation && r.designation !== designation) return false;
+      if (reason && rowReason(r) !== reason) return false;
       return true;
     });
-  }, [rows, q, status, zone]);
+  }, [rows, q, zone, district, designation, reason]);
 
   const live = rows.filter((r) => r.status === "Live").length;
   const done = rows.filter((r) => r.status === "Completed").length;
+
+  const exportHeaders = [
+    "Name",
+    "Phone",
+    "Zone",
+    "District",
+    "Designation",
+    "Assembly",
+    "Sector",
+    "Punch in",
+    "Punch out",
+    "Distance",
+    "Marks",
+    "Status",
+    "Reason",
+  ];
+  const exportRows = filtered.map((r) => [
+    r.name,
+    r.phone,
+    r.zone,
+    r.district,
+    r.designation,
+    r.assemblyName,
+    r.sectorAllotted,
+    whenIst(r.punchInAt),
+    whenIst(r.punchOutAt),
+    formatKm(r.distanceMeters || 0),
+    r.marks,
+    r.status,
+    reasonLabel(r.punchOutReason, r.punchOutAt),
+  ]);
 
   return (
     <main className="px-4 py-6 md:px-8">
@@ -73,21 +131,35 @@ export default function DailyRecordsPage() {
         {rows.length} punches · {live} live · {done} completed
       </p>
 
-      <div className="mt-4 mb-4 flex flex-wrap gap-3">
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="rounded-xl border border-navy/10 bg-white px-3 py-2 text-sm" />
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search user…" className="rounded-xl border border-navy/10 bg-white px-3 py-2 text-sm" />
-        <select value={zone} onChange={(e) => setZone(e.target.value)} className="rounded-xl border border-navy/10 bg-white px-3 py-2 text-sm">
-          <option value="">All zones</option>
-          {Array.from(new Set(rows.map((r) => r.zone).filter(Boolean))).sort().map((z) => (
-            <option key={z}>{z}</option>
-          ))}
-        </select>
-        <select value={status} onChange={(e) => setStatus(e.target.value)} className="rounded-xl border border-navy/10 bg-white px-3 py-2 text-sm">
-          <option value="">All status</option>
-          <option value="Live">Live</option>
-          <option value="Completed">Completed</option>
-        </select>
-      </div>
+      <AdminReportToolbar
+        date={date}
+        onDate={setDate}
+        q={q}
+        onQ={setQ}
+        qPlaceholder="Search user…"
+        zone={zone}
+        onZone={(v) => {
+          setZone(v);
+          setDistrict("");
+        }}
+        zones={zones}
+        district={district}
+        onDistrict={setDistrict}
+        districts={districts}
+        designation={designation}
+        onDesignation={setDesignation}
+        designations={designations}
+        reason={reason}
+        onReason={setReason}
+        reasons={[
+          { value: "live", label: "Live (no punch-out)" },
+          { value: "manual", label: "Manual punch-out" },
+          { value: "gps_off", label: "GPS off" },
+          { value: "auto_12h", label: "Auto · 12 hours" },
+        ]}
+        onCsv={() => downloadCsv(`daily-records-${date}`, exportHeaders, exportRows)}
+        onPdf={() => downloadPdf(`Daily records · ${date}`, exportHeaders, exportRows)}
+      />
 
       <section className="overflow-hidden rounded-[1.75rem] bg-white shadow-card">
         <div className="overflow-x-auto">
@@ -97,6 +169,7 @@ export default function DailyRecordsPage() {
                 <th className="px-3 py-3">Name</th>
                 <th className="px-3 py-3">Number</th>
                 <th className="px-3 py-3">Zone</th>
+                <th className="px-3 py-3">District</th>
                 <th className="px-3 py-3">Designation</th>
                 <th className="px-3 py-3">Sector</th>
                 <th className="px-3 py-3">Registered</th>
@@ -107,6 +180,7 @@ export default function DailyRecordsPage() {
                 <th className="px-3 py-3">Distance</th>
                 <th className="px-3 py-3">Marks</th>
                 <th className="px-3 py-3">Status</th>
+                <th className="px-3 py-3">Reason</th>
                 <th className="px-3 py-3">Map</th>
               </tr>
             </thead>
@@ -116,6 +190,7 @@ export default function DailyRecordsPage() {
                   <td className="px-3 py-3 font-medium">{r.name}</td>
                   <td className="px-3 py-3">{r.phone}</td>
                   <td className="px-3 py-3">{r.zone}</td>
+                  <td className="px-3 py-3">{r.district}</td>
                   <td className="px-3 py-3">{r.designation}</td>
                   <td className="px-3 py-3">{r.sectorAllotted}</td>
                   <td className="px-3 py-3">
@@ -140,6 +215,7 @@ export default function DailyRecordsPage() {
                   <td className="px-3 py-3">{formatKm(r.distanceMeters || 0)}</td>
                   <td className="px-3 py-3">{r.marks}</td>
                   <td className="px-3 py-3">{r.status}</td>
+                  <td className="px-3 py-3 text-xs">{reasonLabel(r.punchOutReason, r.punchOutAt)}</td>
                   <td className="px-3 py-3">
                     <Link href={`/admin/users/${r.userId}`} className="text-teal">
                       Footprint

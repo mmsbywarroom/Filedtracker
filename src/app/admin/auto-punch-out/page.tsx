@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PaginationBar } from "@/components/PaginationBar";
+import { AdminReportToolbar } from "@/components/AdminReportToolbar";
+import { downloadCsv, downloadPdf, uniqueSorted } from "@/lib/reportExport";
 
 type Log = {
   id: string;
@@ -19,16 +21,25 @@ type Log = {
   lng: number | null;
   place: string;
   why: string;
+  reason?: string | null;
 };
 
 function todayIst() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 }
 
+function whenIst(iso: string | null) {
+  return iso ? new Date(iso).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : "—";
+}
+
 export default function AutoPunchOutLogsPage() {
   const [date, setDate] = useState(todayIst);
   const [q, setQ] = useState("");
   const [logs, setLogs] = useState<Log[]>([]);
+  const [zone, setZone] = useState("");
+  const [district, setDistrict] = useState("");
+  const [designation, setDesignation] = useState("");
+  const [reason, setReason] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
 
@@ -50,36 +61,95 @@ export default function AutoPunchOutLogsPage() {
     load();
   }, []);
 
-  const pageRows = logs.slice((page - 1) * pageSize, (page - 1) * pageSize + pageSize);
+  const zones = useMemo(() => uniqueSorted(logs.map((r) => r.zone)), [logs]);
+  const districts = useMemo(
+    () => uniqueSorted(logs.filter((r) => !zone || r.zone === zone).map((r) => r.district)),
+    [logs, zone]
+  );
+  const designations = useMemo(() => uniqueSorted(logs.map((r) => r.designation)), [logs]);
+
+  const filtered = useMemo(() => {
+    return logs.filter((r) => {
+      if (zone && r.zone !== zone) return false;
+      if (district && r.district !== district) return false;
+      if (designation && r.designation !== designation) return false;
+      if (reason && (r.reason || "auto_12h") !== reason) return false;
+      return true;
+    });
+  }, [logs, zone, district, designation, reason]);
+
+  const pageRows = filtered.slice((page - 1) * pageSize, (page - 1) * pageSize + pageSize);
+
+  const exportHeaders = [
+    "Name",
+    "Phone",
+    "Designation",
+    "Assembly",
+    "Sector",
+    "Zone",
+    "District",
+    "Punch in",
+    "Auto punch out",
+    "Last GPS",
+    "Reason",
+  ];
+  const exportRows = filtered.map((r) => [
+    r.name,
+    r.phone,
+    r.designation,
+    r.assemblyName,
+    r.sectorAllotted,
+    r.zone,
+    r.district,
+    whenIst(r.punchInAt),
+    whenIst(r.punchOutAt),
+    r.lat != null && r.lng != null ? `${r.lat}, ${r.lng}` : "",
+    r.why || "Auto · 12 hours",
+  ]);
 
   return (
     <main className="px-4 py-6 md:px-8">
       <p className="text-xs uppercase tracking-[0.2em] text-teal">Alerts</p>
       <h1 className="text-2xl font-semibold">Auto punch-out logs</h1>
       <p className="mt-1 text-sm text-navy/55">
-        Users who punched in but did not punch out — system closed the session after 12 hours. Shown for users in your scope.
+        Users who punched in but did not punch out — system closed the session after 12 hours. Shown for users in your
+        scope.
       </p>
 
-      <div className="mt-4 mb-4 flex flex-wrap items-end gap-3 rounded-2xl bg-white p-4 shadow-card">
-        <label className="text-xs font-medium text-navy/55">
-          Date
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="mt-1 block rounded-xl border border-navy/10 px-3 py-2 text-sm"
-          />
-        </label>
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search name, number, assembly"
-          className="h-11 min-w-[220px] flex-1 rounded-xl border border-navy/10 px-3 text-sm"
-        />
-        <button type="button" onClick={load} className="h-11 rounded-xl bg-ink px-4 text-sm font-semibold text-white">
-          Apply
-        </button>
-      </div>
+      <AdminReportToolbar
+        date={date}
+        onDate={setDate}
+        q={q}
+        onQ={setQ}
+        zone={zone}
+        onZone={(v) => {
+          setZone(v);
+          setDistrict("");
+          setPage(1);
+        }}
+        zones={zones}
+        district={district}
+        onDistrict={(v) => {
+          setDistrict(v);
+          setPage(1);
+        }}
+        districts={districts}
+        designation={designation}
+        onDesignation={(v) => {
+          setDesignation(v);
+          setPage(1);
+        }}
+        designations={designations}
+        reason={reason}
+        onReason={(v) => {
+          setReason(v);
+          setPage(1);
+        }}
+        reasons={[{ value: "auto_12h", label: "Auto · 12 hours" }]}
+        onApply={load}
+        onCsv={() => downloadCsv(`auto-punch-out-${date || "all"}`, exportHeaders, exportRows)}
+        onPdf={() => downloadPdf(`Auto punch-out logs · ${date || "all"}`, exportHeaders, exportRows)}
+      />
 
       <section className="overflow-hidden rounded-2xl border border-navy/5 bg-white shadow-card">
         <div className="overflow-auto">
@@ -108,13 +178,9 @@ export default function AutoPunchOutLogsPage() {
                       {r.zone} · {r.district}
                     </p>
                   </td>
+                  <td className="px-4 py-3 text-sm">{whenIst(r.punchInAt)}</td>
                   <td className="px-4 py-3 text-sm">
-                    {new Date(r.punchInAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}
-                  </td>
-                  <td className="px-4 py-3 text-sm">
-                    {r.punchOutAt
-                      ? new Date(r.punchOutAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
-                      : "—"}
+                    {whenIst(r.punchOutAt)}
                     {r.lat != null && r.lng != null && (
                       <a
                         className="mt-1 block text-xs font-semibold text-teal"
@@ -136,12 +202,12 @@ export default function AutoPunchOutLogsPage() {
               ))}
             </tbody>
           </table>
-          {!logs.length && (
+          {!filtered.length && (
             <p className="p-8 text-center text-sm text-navy/50">No auto punch-outs for this filter.</p>
           )}
         </div>
-        {!!logs.length && (
-          <PaginationBar page={page} pageSize={pageSize} total={logs.length} onPage={setPage} onPageSize={setPageSize} />
+        {!!filtered.length && (
+          <PaginationBar page={page} pageSize={pageSize} total={filtered.length} onPage={setPage} onPageSize={setPageSize} />
         )}
       </section>
     </main>

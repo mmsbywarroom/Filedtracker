@@ -72,6 +72,7 @@ export async function GET(req: Request) {
             : r.distanceMeters,
       marks: r._count.points,
       status: r.punchOutAt ? "Completed" : "Live",
+      punchOutReason: r.punchOutReason,
     })),
   });
 }
