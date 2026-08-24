@@ -145,7 +145,6 @@ function buildDetailExport(
 
 const METRIC_COLUMNS: { key: Metric; field: keyof Group; className?: string }[] = [
   { key: "total", field: "users" },
-  { key: "active", field: "active", className: "text-teal" },
   { key: "inactive", field: "inactive", className: "text-navy/50" },
   { key: "face", field: "faceRegistered", className: "text-violet-700" },
   { key: "punched", field: "punched", className: "text-[#c45c12]" },
@@ -238,7 +237,6 @@ function GroupTable({
             <tr>
               <th className="px-4 py-2">Name</th>
               <th className="px-4 py-2">Users</th>
-              <th className="px-4 py-2">Active</th>
               <th className="px-4 py-2">Inactive</th>
               <th className="px-4 py-2">Face reg</th>
               <th className="px-4 py-2">Punched</th>
