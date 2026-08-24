@@ -7,6 +7,7 @@ import {
   DESIGNATIONS,
   canManageAdmins,
   defaultVisibleDesignations,
+  isSuperOnlyDesignation,
   parseAssembliesInput,
 } from "@/lib/hierarchy";
 
@@ -82,8 +83,8 @@ export async function POST(req: Request) {
     assemblies = [assemblyName];
   }
 
-  const designations = (parsed.data.designations || defaultVisibleDesignations(accessLevel)).filter((d) =>
-    DESIGNATIONS.includes(d as (typeof DESIGNATIONS)[number])
+  const designations = (parsed.data.designations || defaultVisibleDesignations(accessLevel)).filter(
+    (d) => DESIGNATIONS.includes(d as (typeof DESIGNATIONS)[number]) && !isSuperOnlyDesignation(d)
   );
   try {
     const admin = await prisma.admin.create({

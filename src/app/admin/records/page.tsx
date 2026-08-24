@@ -60,6 +60,10 @@ export default function DailyRecordsPage() {
       window.location.href = "/admin/login";
       return;
     }
+    if (!res.ok) {
+      setRows([]);
+      return;
+    }
     const data = await res.json();
     setRows(data.records || []);
   }

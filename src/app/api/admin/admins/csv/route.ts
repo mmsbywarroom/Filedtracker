@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import Papa from "papaparse";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { DESIGNATIONS, canManageAdmins, defaultVisibleDesignations, parseAssembliesInput } from "@/lib/hierarchy";
+import { DESIGNATIONS, canManageAdmins, defaultVisibleDesignations, isSuperOnlyDesignation, parseAssembliesInput } from "@/lib/hierarchy";
 
 const LEVELS = new Set(["State", "Zone Coordinator", "ZLC", "DLC", "Cluster", "ALC"]);
 
@@ -20,7 +20,7 @@ function parseDesignations(raw: string, accessLevel: string) {
   return raw
     .split(/[|;,]/)
     .map((d) => d.trim())
-    .filter((d) => DESIGNATIONS.includes(d as (typeof DESIGNATIONS)[number]));
+    .filter((d) => DESIGNATIONS.includes(d as (typeof DESIGNATIONS)[number]) && !isSuperOnlyDesignation(d));
 }
 
 export async function POST(req: Request) {

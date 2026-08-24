@@ -6,6 +6,7 @@ export const DESIGNATIONS = [
   "Cluster",
   "ALC",
   "Sector Incharge",
+  "Call Center",
 ] as const;
 
 export type Designation = (typeof DESIGNATIONS)[number];
@@ -36,6 +37,21 @@ export const ZONE_COORDINATOR_DESIGNATIONS = ["ALC", "Sector Incharge"] as const
 
 /** State reviews both zone-level field designations */
 export const ZONE_LEVEL_DESIGNATIONS = ["Zone Coordinator", "ZLC"] as const;
+
+/** Not in party hierarchy — only Super admin and State-level admins can see these field users */
+export const SUPER_ONLY_DESIGNATIONS = ["Call Center"] as const;
+
+export function isSuperOnlyDesignation(d?: string | null) {
+  return SUPER_ONLY_DESIGNATIONS.includes((d || "") as (typeof SUPER_ONLY_DESIGNATIONS)[number]);
+}
+
+export function canSeeCallCenterUsers(admin: Pick<AdminScope, "isSuper" | "accessLevel">) {
+  return Boolean(admin.isSuper) || normalizeAccessLevel(admin.accessLevel) === "State";
+}
+
+export function hierarchyDesignations(): string[] {
+  return DESIGNATIONS.filter((d) => !isSuperOnlyDesignation(d));
+}
 
 export type AdminScope = {
   id: string;
@@ -88,12 +104,13 @@ export function normalizeAccessLevel(level: string): string {
 
 export function designationsBelow(level: string): string[] {
   const rank = DESIGNATION_RANK[level] ?? 99;
-  return DESIGNATIONS.filter((d) => DESIGNATION_RANK[d] > rank);
+  return hierarchyDesignations().filter((d) => DESIGNATION_RANK[d] > rank);
 }
 
 /**
  * Designations each admin level sees on Users + Dashboard (hierarchy, not checkboxes).
- * State → all | Zone Coord → ALC,SI | ZLC → DLC..SI | DLC → Cluster..SI | Cluster → ALC,SI | ALC → SI
+ * State → hierarchy + Call Center | Zone Coord → ALC,SI | ZLC → DLC..SI | DLC → Cluster..SI | Cluster → ALC,SI | ALC → SI
+ * Call Center is not under anyone — Super admin and State admins only.
  */
 export function defaultVisibleDesignations(level: string): string[] {
   const n = normalizeAccessLevel(level);
@@ -277,6 +294,7 @@ export function canSeeUser(
   user: { designation?: string | null; zone: string; district: string; assemblyName: string; cluster?: string | null }
 ) {
   if (admin.isSuper) return true;
+  if (isSuperOnlyDesignation(user.designation) && !canSeeCallCenterUsers(admin)) return false;
   if (admin.accessLevel === "State") return true;
 
   const dens = visibleDesignationsFor(admin);

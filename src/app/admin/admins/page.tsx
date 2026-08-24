@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { PaginationBar } from "@/components/PaginationBar";
-import { ADMIN_LEVELS, DESIGNATIONS, defaultVisibleDesignations } from "@/lib/hierarchy";
+import { ADMIN_LEVELS, defaultVisibleDesignations, hierarchyDesignations } from "@/lib/hierarchy";
 
 type AdminRow = {
   id: string;
@@ -359,7 +359,7 @@ export default function AdminsPage() {
 
           <p className="mt-4 text-xs font-semibold uppercase tracking-wider text-navy/45">Can see these designations</p>
           <div className="mt-2 grid grid-cols-2 gap-2">
-            {DESIGNATIONS.map((d) => (
+            {hierarchyDesignations().map((d) => (
               <label key={d} className="flex items-center gap-2 rounded-xl border border-navy/10 px-3 py-2 text-sm">
                 <input type="checkbox" checked={form.designations.includes(d)} onChange={() => toggleDes(d)} />
                 {d}
@@ -499,7 +499,7 @@ export default function AdminsPage() {
                 className={selectClass}
               >
                 <option value="">All designations</option>
-                {DESIGNATIONS.map((d) => (
+                {hierarchyDesignations().map((d) => (
                   <option key={d} value={d}>
                     {d}
                   </option>

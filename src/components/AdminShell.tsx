@@ -6,7 +6,7 @@ import { ReactNode, useEffect, useState } from "react";
 import { BrandMark } from "@/components/BrandMark";
 import { LangToggle, useLang } from "@/lib/i18n";
 
-const SUPER_ONLY = ["/admin/create", "/admin/records", "/admin/admins"];
+const SUPER_ONLY = ["/admin/create", "/admin/admins"];
 
 export default function AdminShell({ children }: { children: ReactNode }) {
   const { t } = useLang();
@@ -39,11 +39,11 @@ export default function AdminShell({ children }: { children: ReactNode }) {
     { href: "/admin/leaves", label: t("leaveModule"), match: (p: string) => p.startsWith("/admin/leaves") },
     { href: "/admin/attendance", label: t("attendanceModule"), match: (p: string) => p.startsWith("/admin/attendance") },
     ...(isSuper
-      ? [
-          { href: "/admin/create", label: t("createUser"), match: (p: string) => p.startsWith("/admin/create") },
-          { href: "/admin/records", label: t("dailyRecords"), match: (p: string) => p.startsWith("/admin/records") },
-          { href: "/admin/admins", label: t("admins"), match: (p: string) => p.startsWith("/admin/admins") },
-        ]
+      ? [{ href: "/admin/create", label: t("createUser"), match: (p: string) => p.startsWith("/admin/create") }]
+      : []),
+    { href: "/admin/records", label: t("dailyRecords"), match: (p: string) => p.startsWith("/admin/records") },
+    ...(isSuper
+      ? [{ href: "/admin/admins", label: t("admins"), match: (p: string) => p.startsWith("/admin/admins") }]
       : []),
   ];
 

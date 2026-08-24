@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { BrandMark } from "@/components/BrandMark";
-import { DESIGNATIONS, cleanScope } from "@/lib/hierarchy";
+import { cleanScope } from "@/lib/hierarchy";
 import { downloadCsv, downloadPdf } from "@/lib/reportExport";
 
 type Group = {
@@ -287,6 +287,7 @@ export default function AdminDashboardPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [level, setLevel] = useState("State");
   const [isSuper, setIsSuper] = useState(false);
+  const [visibleDens, setVisibleDens] = useState<string[]>([]);
   const [scope, setScope] = useState({
     zone: "",
     district: "",
@@ -313,6 +314,7 @@ export default function AdminDashboardPage() {
     const me = await fetch("/api/admin/me").then((r) => r.json());
     if (me.admin?.accessLevel) setLevel(me.admin.accessLevel);
     setIsSuper(Boolean(me.admin?.isSuper));
+    if (Array.isArray(me.admin?.visibleDesignations)) setVisibleDens(me.admin.visibleDesignations);
     const assemblies = Array.isArray(me.admin?.assemblies) ? me.admin.assemblies : [];
     setScope({
       zone: me.admin?.zone || "",
@@ -411,7 +413,7 @@ export default function AdminDashboardPage() {
             className="mt-1 block rounded-xl border border-navy/10 bg-white px-3 py-2 text-sm"
           >
             <option value="">All designations</option>
-            {DESIGNATIONS.map((d) => (
+            {visibleDens.map((d) => (
               <option key={d} value={d}>
                 {d}
               </option>

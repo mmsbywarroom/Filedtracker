@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { userScopeWhere } from "@/lib/hierarchy";
+import { userScopeWhere, visibleDesignationsFor } from "@/lib/hierarchy";
 
 function groupCounts(
   users: { id: string; key: string; isActive: boolean; faceRegistered: boolean }[],
@@ -90,6 +90,30 @@ export async function GET(req: Request) {
     const groupValue = searchParams.get("groupValue") ?? "";
     const start = new Date(`${date}T00:00:00+05:30`);
     const end = new Date(`${date}T23:59:59.999+05:30`);
+
+    const dens = visibleDesignationsFor(s.admin);
+    if (designation && !dens.includes(designation)) {
+      return NextResponse.json({
+        date,
+        totalUsers: 0,
+        activeUsers: 0,
+        inactiveUsers: 0,
+        faceRegisteredUsers: 0,
+        activeToday: 0,
+        liveNow: 0,
+        punches: 0,
+        pendingPunchIn: 0,
+        pendingFace: 0,
+        pendingLive: 0,
+        byDesignation: [],
+        byZone: [],
+        byDistrict: [],
+        byAssembly: [],
+        byCluster: [],
+        rows: [],
+        count: 0,
+      });
+    }
 
     const userWhere = {
       ...userScopeWhere(s.admin),

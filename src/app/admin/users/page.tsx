@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FacePhoto } from "@/components/FacePhoto";
 import { PaginationBar } from "@/components/PaginationBar";
-import { DESIGNATIONS } from "@/lib/hierarchy";
+import { SearchSelect } from "@/components/SearchSelect";
+import { hierarchyDesignations } from "@/lib/hierarchy";
 
 type UserRow = {
   id: string;
@@ -30,12 +31,14 @@ export default function AdminUsersPage() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [q, setQ] = useState("");
   const [assembly, setAssembly] = useState("");
+  const [sector, setSector] = useState("");
   const [designation, setDesignation] = useState("");
   const [zone, setZone] = useState("");
   const [district, setDistrict] = useState("");
   const [face, setFace] = useState("");
   const [status, setStatus] = useState("");
   const [isSuper, setIsSuper] = useState(false);
+  const [visibleDens, setVisibleDens] = useState<string[]>(() => hierarchyDesignations());
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [csvMsg, setCsvMsg] = useState("");
@@ -58,7 +61,12 @@ export default function AdminUsersPage() {
     load();
     fetch("/api/admin/me")
       .then((r) => r.json())
-      .then((d) => setIsSuper(Boolean(d.admin?.isSuper)))
+      .then((d) => {
+        setIsSuper(Boolean(d.admin?.isSuper));
+        if (Array.isArray(d.admin?.visibleDesignations) && d.admin.visibleDesignations.length) {
+          setVisibleDens(d.admin.visibleDesignations);
+        }
+      })
       .catch(() => {});
   }, []);
 
@@ -132,6 +140,7 @@ export default function AdminUsersPage() {
         .toLowerCase();
       if (q && !text.includes(q.toLowerCase())) return false;
       if (assembly && u.assemblyName !== assembly) return false;
+      if (sector && !(u.sectorAllotted || "").toLowerCase().includes(sector.trim().toLowerCase())) return false;
       if (designation && u.designation !== designation) return false;
       if (zone && u.zone !== zone) return false;
       if (district && u.district !== district) return false;
@@ -141,11 +150,11 @@ export default function AdminUsersPage() {
       if (status === "inactive" && u.isActive) return false;
       return true;
     });
-  }, [users, q, assembly, designation, zone, district, face, status]);
+  }, [users, q, assembly, sector, designation, zone, district, face, status]);
 
   useEffect(() => {
     setPage(1);
-  }, [q, assembly, designation, zone, district, face, status, pageSize]);
+  }, [q, assembly, sector, designation, zone, district, face, status, pageSize]);
 
   const pageRows = useMemo(() => {
     const start = (page - 1) * pageSize;
@@ -224,7 +233,7 @@ export default function AdminUsersPage() {
 
       {csvMsg && <p className="mb-3 rounded-xl bg-white px-4 py-2 text-sm text-navy/70 shadow-card">{csvMsg}</p>}
 
-      <div className="mb-4 grid gap-3 rounded-2xl bg-white p-4 shadow-card md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
+      <div className="mb-4 grid gap-3 rounded-2xl bg-white p-4 shadow-card md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8">
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
@@ -233,7 +242,7 @@ export default function AdminUsersPage() {
         />
         <select value={designation} onChange={(e) => setDesignation(e.target.value)} className={selectClass}>
           <option value="">All designations</option>
-          {DESIGNATIONS.map((v) => (
+          {visibleDens.map((v) => (
             <option key={v} value={v}>
               {v}
             </option>
@@ -245,6 +254,12 @@ export default function AdminUsersPage() {
             <option key={v}>{v}</option>
           ))}
         </select>
+        <SearchSelect
+          value={sector}
+          onChange={setSector}
+          options={unique(users, "sectorAllotted")}
+          placeholder="Search sector allotted"
+        />
         <select value={zone} onChange={(e) => setZone(e.target.value)} className={selectClass}>
           <option value="">All zones</option>
           {unique(users, "zone").map((v) => (
@@ -315,7 +330,8 @@ export default function AdminUsersPage() {
                 )}
                 <th className="px-4 py-3">User</th>
                 <th className="px-4 py-3">Designation</th>
-                <th className="px-4 py-3">Assembly / Sector</th>
+                <th className="px-4 py-3">Assembly</th>
+                <th className="px-4 py-3">Sector allotted</th>
                 <th className="px-4 py-3">Zone</th>
                 <th className="px-4 py-3">District</th>
                 <th className="px-4 py-3">Face</th>
@@ -347,10 +363,8 @@ export default function AdminUsersPage() {
                     </div>
                   </td>
                   <td className="px-4 py-3">{u.designation}</td>
-                  <td className="px-4 py-3">
-                    <p className="font-medium">{u.assemblyName}</p>
-                    <p className="text-xs text-navy/50">{u.sectorAllotted}</p>
-                  </td>
+                  <td className="px-4 py-3">{u.assemblyName}</td>
+                  <td className="px-4 py-3">{u.sectorAllotted || "—"}</td>
                   <td className="px-4 py-3">{u.zone}</td>
                   <td className="px-4 py-3">{u.district}</td>
                   <td className="px-4 py-3">

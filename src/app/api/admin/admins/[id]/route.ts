@@ -3,7 +3,7 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { DESIGNATIONS, canManageAdmins, parseAssembliesInput } from "@/lib/hierarchy";
+import { DESIGNATIONS, canManageAdmins, isSuperOnlyDesignation, parseAssembliesInput } from "@/lib/hierarchy";
 
 const schema = z.object({
   name: z.string().min(1).max(80).optional(),
@@ -27,7 +27,9 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   if (parsed.data.name) data.name = parsed.data.name.trim();
   if (parsed.data.accessLevel) data.accessLevel = parsed.data.accessLevel;
   if (parsed.data.designations) {
-    data.designations = parsed.data.designations.filter((d) => DESIGNATIONS.includes(d as (typeof DESIGNATIONS)[number]));
+    data.designations = parsed.data.designations.filter(
+      (d) => DESIGNATIONS.includes(d as (typeof DESIGNATIONS)[number]) && !isSuperOnlyDesignation(d)
+    );
   }
   if (parsed.data.zone != null) data.zone = parsed.data.zone.trim();
   if (parsed.data.district != null) data.district = parsed.data.district.trim();

@@ -4,9 +4,8 @@ import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { normalizePhone } from "@/lib/security";
 import { CSV_COLUMNS } from "@/lib/utils";
-import { isSuperAdmin } from "@/lib/hierarchy";
+import { DESIGNATIONS, isSuperAdmin, parseAssembliesInput } from "@/lib/hierarchy";
 import { normalizeUserAssemblies } from "@/lib/userAssemblies";
-import { parseAssembliesInput } from "@/lib/hierarchy";
 
 function pick(row: Record<string, string>, key: string) {
   const found = Object.keys(row).find((k) => k.trim().toLowerCase() === key.toLowerCase());
@@ -42,6 +41,10 @@ export async function POST(req: Request) {
     const zone = pick(row, CSV_COLUMNS[4]);
     const district = pick(row, CSV_COLUMNS[5]);
     const designation = pick(row, "Designation") || "Sector Incharge";
+    if (!DESIGNATIONS.includes(designation as (typeof DESIGNATIONS)[number])) {
+      errors.push({ row: i + 2, error: "Invalid designation" });
+      continue;
+    }
     const cluster = pick(row, "Cluster");
     const assembliesRaw = pick(row, "Assemblies") || pick(row, "Mapped Assemblies");
     const { assemblyName: asm, assemblies } = normalizeUserAssemblies(
