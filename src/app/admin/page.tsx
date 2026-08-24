@@ -94,7 +94,8 @@ function buildDetailExport(
   metric: Metric,
   date: string,
   groupFilter: { groupBy: GroupBy; groupValue: string } | null,
-  rows: DetailRow[]
+  rows: DetailRow[],
+  variant: "field" | "callCenter" = "field"
 ) {
   const titleParts = [METRIC_LABELS[metric], date];
   if (groupFilter) {
@@ -103,7 +104,7 @@ function buildDetailExport(
   const title = titleParts.join(" · ");
 
   const filename = [
-    "dashboard",
+    variant === "callCenter" ? "call-center" : "dashboard",
     metric,
     date,
     groupFilter ? `${groupFilter.groupBy}-${groupFilter.groupValue}` : "all",
@@ -277,7 +278,7 @@ function GroupTable({
   );
 }
 
-export default function AdminDashboardPage() {
+export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | "callCenter" }) {
   const [date, setDate] = useState(todayIst);
   const [designation, setDesignation] = useState("");
   const [data, setData] = useState<Dash | null>(null);
@@ -298,7 +299,7 @@ export default function AdminDashboardPage() {
   const detailRef = useRef<HTMLElement>(null);
 
   async function load(d: string, des: string) {
-    const params = new URLSearchParams({ date: d });
+    const params = new URLSearchParams({ date: d, scope: variant === "callCenter" ? "callCenter" : "field" });
     if (des) params.set("designation", des);
     const res = await fetch(`/api/admin/dashboard?${params}`);
     if (res.status === 401) {
@@ -314,7 +315,12 @@ export default function AdminDashboardPage() {
     const me = await fetch("/api/admin/me").then((r) => r.json());
     if (me.admin?.accessLevel) setLevel(me.admin.accessLevel);
     setIsSuper(Boolean(me.admin?.isSuper));
-    if (Array.isArray(me.admin?.visibleDesignations)) setVisibleDens(me.admin.visibleDesignations);
+    if (Array.isArray(me.admin?.visibleDesignations)) {
+      const dens = me.admin.visibleDesignations as string[];
+      setVisibleDens(
+        variant === "callCenter" ? dens.filter((d) => d === "Call Center") : dens.filter((d) => d !== "Call Center")
+      );
+    }
     const assemblies = Array.isArray(me.admin?.assemblies) ? me.admin.assemblies : [];
     setScope({
       zone: me.admin?.zone || "",
@@ -329,7 +335,11 @@ export default function AdminDashboardPage() {
     setMetric(m);
     setGroupFilter(group || null);
     setDetailLoading(true);
-    const params = new URLSearchParams({ date, metric: m });
+    const params = new URLSearchParams({
+      date,
+      metric: m,
+      scope: variant === "callCenter" ? "callCenter" : "field",
+    });
     if (designation) params.set("designation", designation);
     if (group) {
       params.set("groupBy", group.groupBy);
@@ -351,7 +361,7 @@ export default function AdminDashboardPage() {
     setMetric(null);
     setGroupFilter(null);
     setDetailRows([]);
-  }, [date, designation]);
+  }, [date, designation, variant]);
 
   const mappedAssemblies =
     scope.assemblies.length > 0
@@ -385,14 +395,19 @@ export default function AdminDashboardPage() {
       <div className="mb-2 flex items-center gap-3">
         <BrandMark size={64} />
         <div>
-          <p className="text-xs uppercase tracking-[0.2em] text-teal">Dashboard</p>
-          <h1 className="text-2xl font-semibold">Hierarchy overview</h1>
+          <p className="text-xs uppercase tracking-[0.2em] text-teal">
+            {variant === "callCenter" ? "Call Center" : "Dashboard"}
+          </p>
+          <h1 className="text-2xl font-semibold">
+            {variant === "callCenter" ? "Call Center overview" : "Hierarchy overview"}
+          </h1>
         </div>
       </div>
       <p className="mt-1 text-sm text-navy/55">
         Login: <span className="rounded-full bg-teal px-2 py-0.5 text-xs font-semibold text-white">{level}</span>
         {" · "}
         {scopeText}
+        {variant === "callCenter" ? " · Call Center users only" : ""}
       </p>
 
       <div className="mt-4 mb-5 flex flex-wrap gap-3">
@@ -405,6 +420,7 @@ export default function AdminDashboardPage() {
             className="mt-1 block rounded-xl border border-navy/10 bg-white px-3 py-2 text-sm"
           />
         </label>
+        {variant !== "callCenter" && (
         <label className="text-xs font-medium text-navy/55">
           Designation
           <select
@@ -420,6 +436,7 @@ export default function AdminDashboardPage() {
             ))}
           </select>
         </label>
+        )}
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
@@ -490,6 +507,7 @@ export default function AdminDashboardPage() {
       </div>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-2">
+        {variant !== "callCenter" && (
         <GroupTable
           title="Hierarchy · Designation wise"
           accent="bg-[#12305A] text-white"
@@ -499,6 +517,7 @@ export default function AdminDashboardPage() {
           activeGroup={groupFilter}
           onCellClick={(m, name) => loadMetric(m, { groupBy: "designation", groupValue: name })}
         />
+        )}
         <GroupTable
           title="Zone wise"
           accent="bg-teal text-white"
@@ -546,7 +565,13 @@ export default function AdminDashboardPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      const { filename, headers, data } = buildDetailExport(metric, date, groupFilter, detailRows);
+                      const { filename, headers, data } = buildDetailExport(
+                        metric,
+                        date,
+                        groupFilter,
+                        detailRows,
+                        variant
+                      );
                       downloadCsv(filename, headers, data);
                     }}
                     className="rounded-lg border border-white/30 px-3 py-1.5 text-sm font-semibold text-white hover:bg-white/10"
@@ -556,7 +581,13 @@ export default function AdminDashboardPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      const { title, headers, data } = buildDetailExport(metric, date, groupFilter, detailRows);
+                      const { title, headers, data } = buildDetailExport(
+                        metric,
+                        date,
+                        groupFilter,
+                        detailRows,
+                        variant
+                      );
                       downloadPdf(title, headers, data);
                     }}
                     className="rounded-lg border border-white/30 px-3 py-1.5 text-sm font-semibold text-white hover:bg-white/10"
@@ -653,4 +684,8 @@ export default function AdminDashboardPage() {
       )}
     </main>
   );
+}
+
+export default function AdminDashboardPage() {
+  return <HierarchyDashboard variant="field" />;
 }

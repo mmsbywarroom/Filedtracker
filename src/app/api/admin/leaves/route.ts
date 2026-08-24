@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { nextLevelScopeWhere } from "@/lib/hierarchy";
+import { reviewScopeWhere } from "@/lib/hierarchy";
 
 export async function GET(req: Request) {
   const s = await requireAdmin();
@@ -12,7 +12,7 @@ export async function GET(req: Request) {
   const q = (searchParams.get("q") || "").trim().toLowerCase();
 
   const scoped = await prisma.user.findMany({
-    where: nextLevelScopeWhere(s.admin),
+    where: reviewScopeWhere(s.admin),
     select: { id: true },
   });
   const ids = scoped.map((u) => u.id);

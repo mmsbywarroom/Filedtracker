@@ -360,7 +360,6 @@ function designationFilter(next: string[]) {
   return { designation: { in: next } };
 }
 
-/** Same geography as users, but only the next designation down (leave + GPS-off). */
 export function nextLevelScopeWhere(admin: AdminScope) {
   if (admin.isSuper) return {};
   const level = normalizeAccessLevel(admin.accessLevel);
@@ -420,6 +419,16 @@ export function nextLevelScopeWhere(admin: AdminScope) {
   return where;
 }
 
+/** Leave + GPS-off: next designation down, plus Call Center for Super/State. */
+export function reviewScopeWhere(admin: AdminScope) {
+  const base = nextLevelScopeWhere(admin);
+  if (admin.isSuper) return base;
+  if (normalizeAccessLevel(admin.accessLevel) === "State") {
+    return { OR: [base, { designation: "Call Center" }] };
+  }
+  return base;
+}
+
 /** @deprecated alias — use nextLevelScopeWhere */
 export const leaveScopeWhere = nextLevelScopeWhere;
 
@@ -428,6 +437,7 @@ export function canReviewLeave(
   user: { designation?: string | null; zone: string; district: string; assemblyName: string; cluster?: string | null }
 ) {
   if (admin.isSuper) return true;
+  if (canSeeCallCenterUsers(admin) && isSuperOnlyDesignation(user.designation)) return true;
   const next = leaveReviewDesignations(admin.accessLevel);
   if (!next.length || !next.includes(user.designation || "")) return false;
   if (admin.accessLevel === "State") return true;

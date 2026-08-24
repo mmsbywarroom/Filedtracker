@@ -42,6 +42,7 @@ function rowReason(r: Row) {
   if (!r.punchOutAt) return "live";
   if (r.punchOutReason === "gps_off") return "gps_off";
   if (r.punchOutReason === "auto_12h") return "auto_12h";
+  if (r.punchOutReason === "auto_geofence") return "auto_geofence";
   return "manual";
 }
 
@@ -160,6 +161,7 @@ export default function DailyRecordsPage() {
           { value: "manual", label: "Manual punch-out" },
           { value: "gps_off", label: "GPS off" },
           { value: "auto_12h", label: "Auto · 12 hours" },
+          { value: "auto_geofence", label: "Auto · left 500 m boundary" },
         ]}
         onCsv={() => downloadCsv(`daily-records-${date}`, exportHeaders, exportRows)}
         onPdf={() => downloadPdf(`Daily records · ${date}`, exportHeaders, exportRows)}

@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { haversineMeters, isPlausibleStep } from "@/lib/utils";
-import { autoPunchOutIfStale } from "@/lib/punchOut";
+import { autoPunchOutIfStale, closeOpenAttendance } from "@/lib/punchOut";
+import { assertInsideCallCenterSite, isCallCenterDesignation } from "@/lib/callCenterGeofence";
 
 export async function POST(req: Request) {
   const s = await requireUser();
@@ -23,7 +24,6 @@ export async function POST(req: Request) {
     include: { points: { orderBy: { recordedAt: "desc" }, take: 1 } },
   });
   if (!open) return NextResponse.json({ error: "No active session." }, { status: 400 });
-  // Stale open session: refuse track and let client refresh (background closer may still run)
   if (Date.now() - open.punchInAt.getTime() >= 12 * 60 * 60 * 1000) {
     void autoPunchOutIfStale(s.sub).catch(() => {});
     return NextResponse.json(
@@ -49,6 +49,38 @@ export async function POST(req: Request) {
     });
   }
   if (!cleaned.length) return NextResponse.json({ ok: true });
+
+  const user = await prisma.user.findUnique({
+    where: { id: s.sub },
+    select: { designation: true, sectorAllotted: true },
+  });
+  if (isCallCenterDesignation(user?.designation)) {
+    for (const p of cleaned) {
+      const geo = assertInsideCallCenterSite({
+        sectorAllotted: user?.sectorAllotted,
+        lat: p.lat,
+        lng: p.lng,
+      });
+      if (!geo.ok) {
+        const attendance = await closeOpenAttendance({
+          userId: s.sub,
+          lat: p.lat,
+          lng: p.lng,
+          accuracy: p.accuracy,
+          reason: "auto_geofence",
+          address: geo.error,
+        });
+        return NextResponse.json(
+          {
+            error: geo.error,
+            code: "AUTO_GEOFENCE",
+            attendance,
+          },
+          { status: 409 }
+        );
+      }
+    }
+  }
 
   await prisma.trackPoint.createMany({
     data: cleaned.map((p) => ({ ...p, attendanceId: open.id })),

@@ -13,14 +13,19 @@ export default function AdminShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [isSuper, setIsSuper] = useState(false);
+  const [canSeeCallCenter, setCanSeeCallCenter] = useState(false);
 
   useEffect(() => {
     fetch("/api/admin/me")
       .then((r) => r.json())
       .then((d) => {
         const superAdmin = Boolean(d.admin?.isSuper);
+        const callCenter = Boolean(d.admin?.canSeeCallCenter);
         setIsSuper(superAdmin);
+        setCanSeeCallCenter(callCenter);
         if (!superAdmin && SUPER_ONLY.some((p) => pathname.startsWith(p))) {
+          window.location.replace("/admin");
+        } else if (!callCenter && pathname.startsWith("/admin/call-center")) {
           window.location.replace("/admin");
         }
       })
@@ -29,6 +34,15 @@ export default function AdminShell({ children }: { children: ReactNode }) {
 
   const nav = [
     { href: "/admin", label: t("dashboard"), match: (p: string) => p === "/admin" },
+    ...(canSeeCallCenter
+      ? [
+          {
+            href: "/admin/call-center",
+            label: t("callCenterDashboard"),
+            match: (p: string) => p.startsWith("/admin/call-center"),
+          },
+        ]
+      : []),
     { href: "/admin/users", label: t("users"), match: (p: string) => p.startsWith("/admin/users") },
     { href: "/admin/gps-off", label: t("gpsOffLogs"), match: (p: string) => p.startsWith("/admin/gps-off") },
     {

@@ -3,7 +3,7 @@ import { pathDistance } from "@/lib/utils";
 
 export const AUTO_PUNCH_OUT_MS = 12 * 60 * 60 * 1000;
 
-export type PunchOutReason = "manual" | "gps_off" | "auto_12h";
+export type PunchOutReason = "manual" | "gps_off" | "auto_12h" | "auto_geofence";
 
 export async function closeOpenAttendance(opts: {
   userId: string;
@@ -36,6 +36,9 @@ export async function closeOpenAttendance(opts: {
   if (opts.reason === "gps_off") address = opts.address || "GPS turned off";
   if (opts.reason === "auto_12h") {
     address = opts.address || "Auto punch-out after 12 hours without punch-out";
+  }
+  if (opts.reason === "auto_geofence") {
+    address = opts.address || "Auto punch-out: left Call Center 500 m boundary";
   }
 
   return prisma.attendance.update({

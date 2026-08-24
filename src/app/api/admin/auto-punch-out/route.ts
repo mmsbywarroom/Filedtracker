@@ -20,7 +20,7 @@ export async function GET(req: Request) {
 
   const where: Record<string, unknown> = {
     userId: { in: ids },
-    punchOutReason: "auto_12h",
+    punchOutReason: { in: ["auto_12h", "auto_geofence"] },
   };
   if (date) {
     const start = new Date(`${date}T00:00:00+05:30`);
@@ -70,9 +70,14 @@ export async function GET(req: Request) {
       punchOutAt: r.punchOutAt,
       lat: r.punchOutLat,
       lng: r.punchOutLng,
-      place: r.punchOutAddress || "Auto punch-out after 12 hours without punch-out",
+      place: r.punchOutAddress || (r.punchOutReason === "auto_geofence"
+        ? "Left Call Center 500 m boundary"
+        : "Auto punch-out after 12 hours without punch-out"),
       reason: r.punchOutReason,
-      why: "No punch-out within 12 hours of punch-in",
+      why:
+        r.punchOutReason === "auto_geofence"
+          ? "Left office 500 m boundary without punch-out"
+          : "No punch-out within 12 hours of punch-in",
     }));
 
   return NextResponse.json({ logs });

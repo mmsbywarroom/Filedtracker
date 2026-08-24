@@ -3,6 +3,7 @@ import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { sanitizeFaceImage } from "@/lib/faceImage";
 import { assertInsideAssignedAssembly } from "@/lib/assemblyGeofence";
+import { assertInsideCallCenterSite, isCallCenterDesignation } from "@/lib/callCenterGeofence";
 import { closeOpenAttendance } from "@/lib/punchOut";
 
 export async function POST(req: Request) {
@@ -19,17 +20,28 @@ export async function POST(req: Request) {
 
   const user = await prisma.user.findUnique({
     where: { id: s.sub },
-    select: { assemblyName: true, designation: true, assemblies: true },
+    select: { assemblyName: true, designation: true, assemblies: true, sectorAllotted: true },
   });
-  const geo = assertInsideAssignedAssembly({
-    assemblyName: user?.assemblyName,
-    assemblies: user?.assemblies,
-    designation: user?.designation,
-    lat,
-    lng,
-  });
-  if (!geo.ok) {
-    return NextResponse.json({ error: geo.error, code: geo.code }, { status: 403 });
+  if (isCallCenterDesignation(user?.designation)) {
+    const geo = assertInsideCallCenterSite({
+      sectorAllotted: user?.sectorAllotted,
+      lat,
+      lng,
+    });
+    if (!geo.ok) {
+      return NextResponse.json({ error: geo.error, code: geo.code }, { status: 403 });
+    }
+  } else {
+    const geo = assertInsideAssignedAssembly({
+      assemblyName: user?.assemblyName,
+      assemblies: user?.assemblies,
+      designation: user?.designation,
+      lat,
+      lng,
+    });
+    if (!geo.ok) {
+      return NextResponse.json({ error: geo.error, code: geo.code }, { status: 403 });
+    }
   }
 
   const attendance = await closeOpenAttendance({

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { downsample } from "@/lib/utils";
 import { sanitizeFaceImage } from "@/lib/faceImage";
 import { assertInsideAssignedAssembly } from "@/lib/assemblyGeofence";
+import { assertInsideCallCenterSite, isCallCenterDesignation } from "@/lib/callCenterGeofence";
 import { autoPunchOutIfStale } from "@/lib/punchOut";
 
 function istDayBounds(d = new Date()) {
@@ -77,7 +78,7 @@ export async function POST(req: Request) {
 
   const user = await prisma.user.findUnique({
     where: { id: s.sub },
-    select: { assemblyName: true, designation: true, isActive: true, assemblies: true },
+    select: { assemblyName: true, designation: true, isActive: true, assemblies: true, sectorAllotted: true },
   });
   if (!user || !user.isActive) {
     return NextResponse.json({ error: "Account not found or inactive." }, { status: 403 });
@@ -100,15 +101,26 @@ export async function POST(req: Request) {
     );
   }
 
-  const geo = assertInsideAssignedAssembly({
-    assemblyName: user.assemblyName,
-    assemblies: user.assemblies,
-    designation: user.designation,
-    lat,
-    lng,
-  });
-  if (!geo.ok) {
-    return NextResponse.json({ error: geo.error, code: geo.code }, { status: 403 });
+  if (isCallCenterDesignation(user.designation)) {
+    const geo = assertInsideCallCenterSite({
+      sectorAllotted: user.sectorAllotted,
+      lat,
+      lng,
+    });
+    if (!geo.ok) {
+      return NextResponse.json({ error: geo.error, code: geo.code }, { status: 403 });
+    }
+  } else {
+    const geo = assertInsideAssignedAssembly({
+      assemblyName: user.assemblyName,
+      assemblies: user.assemblies,
+      designation: user.designation,
+      lat,
+      lng,
+    });
+    if (!geo.ok) {
+      return NextResponse.json({ error: geo.error, code: geo.code }, { status: 403 });
+    }
   }
 
   const attendance = await prisma.attendance.create({

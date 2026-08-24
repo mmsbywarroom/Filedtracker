@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { userScopeWhere, visibleDesignationsFor } from "@/lib/hierarchy";
+import { canSeeCallCenterUsers, userScopeWhere, visibleDesignationsFor } from "@/lib/hierarchy";
 
 function groupCounts(
   users: { id: string; key: string; isActive: boolean; faceRegistered: boolean }[],
@@ -91,7 +91,14 @@ export async function GET(req: Request) {
     const start = new Date(`${date}T00:00:00+05:30`);
     const end = new Date(`${date}T23:59:59.999+05:30`);
 
-    const dens = visibleDesignationsFor(s.admin);
+    const dashScope = searchParams.get("scope") === "callCenter" ? "callCenter" : "field";
+    if (dashScope === "callCenter" && !canSeeCallCenterUsers(s.admin)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const dens = visibleDesignationsFor(s.admin).filter((d) =>
+      dashScope === "callCenter" ? d === "Call Center" : d !== "Call Center"
+    );
     if (designation && !dens.includes(designation)) {
       return NextResponse.json({
         date,
@@ -116,8 +123,11 @@ export async function GET(req: Request) {
     }
 
     const userWhere = {
-      ...userScopeWhere(s.admin),
-      ...(designation ? { designation } : {}),
+      AND: [
+        userScopeWhere(s.admin),
+        dashScope === "callCenter" ? { designation: "Call Center" } : { NOT: { designation: "Call Center" } },
+        designation ? { designation } : {},
+      ],
     };
 
     const users = await prisma.user.findMany({

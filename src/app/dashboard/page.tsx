@@ -178,6 +178,13 @@ export default function DashboardPage() {
             setMsg("Auto punched out after 12 hours (no punch-out).");
           }
         }
+        if (!att.open && last?.punchOutReason === "auto_geofence" && last.punchOutAt) {
+          const age = Date.now() - new Date(last.punchOutAt).getTime();
+          if (age >= 0 && age < 10 * 60 * 1000) {
+            setOkMsg(true);
+            setMsg("Auto punched out: you left the 500 m office boundary.");
+          }
+        }
       }
     } catch (e) {
       setBooting(false);
@@ -282,6 +289,12 @@ export default function DashboardPage() {
             setMode("idle");
             setOkMsg(true);
             setMsg("Auto punched out after 12 hours (no punch-out).");
+            refresh();
+          } else if (data?.code === "AUTO_GEOFENCE") {
+            setOpen(null);
+            setMode("idle");
+            setOkMsg(true);
+            setMsg(data?.error || "Auto punched out: you left the 500 m office boundary.");
             refresh();
           }
         } else if (res.status === 400 && batch.length === 0) {
