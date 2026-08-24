@@ -35,6 +35,7 @@ type Dash = {
   byDistrict: Group[];
   byAssembly: Group[];
   byCluster: Group[];
+  byCallCenterSite?: Group[];
 };
 
 type DetailRow = {
@@ -64,7 +65,7 @@ type Metric =
   | "pendingPunchIn"
   | "pendingFace"
   | "pendingLive";
-type GroupBy = "designation" | "zone" | "district" | "assembly";
+type GroupBy = "designation" | "zone" | "district" | "assembly" | "callCenterSite";
 
 const METRIC_LABELS: Record<Metric, string> = {
   total: "Total users",
@@ -83,7 +84,26 @@ const GROUP_BY_LABELS: Record<GroupBy, string> = {
   zone: "Zone",
   district: "District",
   assembly: "Assembly",
+  callCenterSite: "Office",
 };
+
+function officeRows(sites: Group[] | undefined, name: string): Group[] {
+  const found = sites?.find((r) => r.name === name);
+  return [
+    found || {
+      name,
+      users: 0,
+      active: 0,
+      inactive: 0,
+      faceRegistered: 0,
+      punched: 0,
+      live: 0,
+      pendingPunchIn: 0,
+      pendingFace: 0,
+      pendingLive: 0,
+    },
+  ];
+}
 
 function formatKolkata(iso: string | null | undefined) {
   if (!iso) return "—";
@@ -217,6 +237,7 @@ function GroupTable({
   activeMetric,
   activeGroup,
   onCellClick,
+  hideName,
 }: {
   title: string;
   accent: string;
@@ -225,6 +246,7 @@ function GroupTable({
   activeMetric: Metric | null;
   activeGroup: { groupBy: GroupBy; groupValue: string } | null;
   onCellClick: (metric: Metric, groupValue: string) => void;
+  hideName?: boolean;
 }) {
   return (
     <section className="overflow-hidden rounded-2xl border border-navy/5 bg-white shadow-card">
@@ -236,7 +258,7 @@ function GroupTable({
         <table className="min-w-full text-left text-sm">
           <thead className="sticky top-0 bg-[#eef3fb] text-[11px] font-semibold uppercase tracking-wider text-navy/55">
             <tr>
-              <th className="px-4 py-2">Name</th>
+              {!hideName && <th className="px-4 py-2">Name</th>}
               <th className="px-4 py-2">Users</th>
               <th className="px-4 py-2">Inactive</th>
               <th className="px-4 py-2">Face reg</th>
@@ -250,7 +272,7 @@ function GroupTable({
           <tbody>
             {rows.map((r, i) => (
               <tr key={r.name} className={`border-t border-navy/5 ${i % 2 ? "bg-sand/40" : "bg-white"}`}>
-                <td className="px-4 py-2 font-medium">{r.name}</td>
+                {!hideName && <td className="px-4 py-2 font-medium">{r.name}</td>}
                 {METRIC_COLUMNS.map((col) => {
                   const val = Number(r[col.field] ?? 0);
                   const isActive =
@@ -507,44 +529,69 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
       </div>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-2">
-        {variant !== "callCenter" && (
-        <GroupTable
-          title="Hierarchy · Designation wise"
-          accent="bg-[#12305A] text-white"
-          rows={data?.byDesignation || []}
-          groupBy="designation"
-          activeMetric={metric}
-          activeGroup={groupFilter}
-          onCellClick={(m, name) => loadMetric(m, { groupBy: "designation", groupValue: name })}
-        />
+        {variant === "callCenter" ? (
+          <>
+            <GroupTable
+              title="Yellow Stone"
+              accent="bg-[#c9a227] text-white"
+              rows={officeRows(data?.byCallCenterSite, "Yellow Stone")}
+              groupBy="callCenterSite"
+              hideName
+              activeMetric={metric}
+              activeGroup={groupFilter}
+              onCellClick={(m) => loadMetric(m, { groupBy: "callCenterSite", groupValue: "Yellow Stone" })}
+            />
+            <GroupTable
+              title="Unify"
+              accent="bg-teal text-white"
+              rows={officeRows(data?.byCallCenterSite, "Unify")}
+              groupBy="callCenterSite"
+              hideName
+              activeMetric={metric}
+              activeGroup={groupFilter}
+              onCellClick={(m) => loadMetric(m, { groupBy: "callCenterSite", groupValue: "Unify" })}
+            />
+          </>
+        ) : (
+          <>
+            <GroupTable
+              title="Hierarchy · Designation wise"
+              accent="bg-[#12305A] text-white"
+              rows={data?.byDesignation || []}
+              groupBy="designation"
+              activeMetric={metric}
+              activeGroup={groupFilter}
+              onCellClick={(m, name) => loadMetric(m, { groupBy: "designation", groupValue: name })}
+            />
+            <GroupTable
+              title="Zone wise"
+              accent="bg-teal text-white"
+              rows={data?.byZone || []}
+              groupBy="zone"
+              activeMetric={metric}
+              activeGroup={groupFilter}
+              onCellClick={(m, name) => loadMetric(m, { groupBy: "zone", groupValue: name })}
+            />
+            <GroupTable
+              title="District wise"
+              accent="bg-emerald-700 text-white"
+              rows={data?.byDistrict || []}
+              groupBy="district"
+              activeMetric={metric}
+              activeGroup={groupFilter}
+              onCellClick={(m, name) => loadMetric(m, { groupBy: "district", groupValue: name })}
+            />
+            <GroupTable
+              title="Assembly wise"
+              accent="bg-[#1A56C4] text-white"
+              rows={data?.byAssembly || []}
+              groupBy="assembly"
+              activeMetric={metric}
+              activeGroup={groupFilter}
+              onCellClick={(m, name) => loadMetric(m, { groupBy: "assembly", groupValue: name })}
+            />
+          </>
         )}
-        <GroupTable
-          title="Zone wise"
-          accent="bg-teal text-white"
-          rows={data?.byZone || []}
-          groupBy="zone"
-          activeMetric={metric}
-          activeGroup={groupFilter}
-          onCellClick={(m, name) => loadMetric(m, { groupBy: "zone", groupValue: name })}
-        />
-        <GroupTable
-          title="District wise"
-          accent="bg-emerald-700 text-white"
-          rows={data?.byDistrict || []}
-          groupBy="district"
-          activeMetric={metric}
-          activeGroup={groupFilter}
-          onCellClick={(m, name) => loadMetric(m, { groupBy: "district", groupValue: name })}
-        />
-        <GroupTable
-          title="Assembly wise"
-          accent="bg-[#1A56C4] text-white"
-          rows={data?.byAssembly || []}
-          groupBy="assembly"
-          activeMetric={metric}
-          activeGroup={groupFilter}
-          onCellClick={(m, name) => loadMetric(m, { groupBy: "assembly", groupValue: name })}
-        />
       </div>
 
       {metric && (

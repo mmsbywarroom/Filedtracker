@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canSeeCallCenterUsers, userScopeWhere, visibleDesignationsFor } from "@/lib/hierarchy";
+import { CALL_CENTER_SITE_NAMES, callCenterSiteName } from "@/lib/callCenterGeofence";
 
 function groupCounts(
   users: { id: string; key: string; isActive: boolean; faceRegistered: boolean }[],
@@ -62,13 +63,14 @@ const METRICS = new Set([
   "pendingFace",
   "pendingLive",
 ]);
-const GROUP_BY = new Set(["designation", "zone", "district", "assembly", "cluster"]);
-const GROUP_FIELD: Record<string, "designation" | "zone" | "district" | "assemblyName" | "cluster"> = {
+const GROUP_BY = new Set(["designation", "zone", "district", "assembly", "cluster", "callCenterSite"]);
+const GROUP_FIELD: Record<string, "designation" | "zone" | "district" | "assemblyName" | "cluster" | "sectorAllotted"> = {
   designation: "designation",
   zone: "zone",
   district: "district",
   assembly: "assemblyName",
   cluster: "cluster",
+  callCenterSite: "sectorAllotted",
 };
 
 function matchesGroupValue(raw: string | null | undefined, groupValue: string) {
@@ -117,6 +119,7 @@ export async function GET(req: Request) {
         byDistrict: [],
         byAssembly: [],
         byCluster: [],
+        byCallCenterSite: [],
         rows: [],
         count: 0,
       });
@@ -181,8 +184,12 @@ export async function GET(req: Request) {
       }
 
       if (groupBy && GROUP_BY.has(groupBy)) {
-        const field = GROUP_FIELD[groupBy];
-        if (field) filtered = filtered.filter((u) => matchesGroupValue(u[field], groupValue));
+        if (groupBy === "callCenterSite") {
+          filtered = filtered.filter((u) => callCenterSiteName(u.sectorAllotted) === groupValue);
+        } else {
+          const field = GROUP_FIELD[groupBy];
+          if (field && field !== "sectorAllotted") filtered = filtered.filter((u) => matchesGroupValue(u[field], groupValue));
+        }
       }
 
       const rows = filtered
@@ -227,6 +234,34 @@ export async function GET(req: Request) {
         liveIds
       );
 
+    const emptyGroup = (name: string) => ({
+      name,
+      users: 0,
+      active: 0,
+      inactive: 0,
+      faceRegistered: 0,
+      punched: 0,
+      live: 0,
+      pendingPunchIn: 0,
+      pendingFace: 0,
+      pendingLive: 0,
+    });
+
+    const byCallCenterSite = CALL_CENTER_SITE_NAMES.map((site) => {
+      const siteUsers = users.filter((u) => callCenterSiteName(u.sectorAllotted) === site);
+      const row = groupCounts(
+        siteUsers.map((u) => ({
+          id: u.id,
+          key: site,
+          isActive: u.isActive,
+          faceRegistered: Boolean(u.faceRegisteredAt),
+        })),
+        punchedIds,
+        liveIds
+      )[0];
+      return row || emptyGroup(site);
+    });
+
     return NextResponse.json({
       date,
       totalUsers: users.length,
@@ -244,6 +279,7 @@ export async function GET(req: Request) {
       byDistrict: grouped("district"),
       byAssembly: grouped("assemblyName"),
       byCluster: grouped("cluster"),
+      byCallCenterSite,
     });
   } catch (e) {
     console.error("dashboard error", e);

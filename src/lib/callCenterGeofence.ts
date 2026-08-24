@@ -23,8 +23,14 @@ const SITES: { name: string; lat: number; lng: number; keys: string[] }[] = [
   },
 ];
 
+export const CALL_CENTER_SITE_NAMES = ["Yellow Stone", "Unify"] as const;
+
 function norm(s: string) {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+export function callCenterSiteName(sectorAllotted?: string | null): (typeof CALL_CENTER_SITE_NAMES)[number] | null {
+  return resolveCallCenterSite(sectorAllotted)?.name as (typeof CALL_CENTER_SITE_NAMES)[number] | null;
 }
 
 export function resolveCallCenterSite(sectorAllotted?: string | null): CallCenterSite | null {
