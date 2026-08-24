@@ -194,7 +194,7 @@ export function FaceCapture({ actionLabel, onCapture, busy, mode = "verify" }: P
       {!modelsReady && camReady && <p className="text-xs text-navy/50">{t("firstLoad")}</p>}
       {mode === "register" && (
         <p className="max-w-xs text-center text-xs text-navy/50">
-          Center your full face in the round frame — forehead, both eyes, nose and chin visible. Bright light, no turban-only shot.
+          Center your full face in the round frame — forehead, both eyes, nose and chin clearly visible. Use bright light.
         </p>
       )}
       <button

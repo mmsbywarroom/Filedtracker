@@ -94,7 +94,7 @@ function validateFaceGeometry(
     if (cy < videoHeight * 0.26 || cy > videoHeight * 0.74) return "off_center";
   }
 
-  // Face must not be clipped at edges (partial turban/forehead shots)
+  // Face must not be clipped at edges (partial / top-of-head only shots)
   if (box.x < videoWidth * 0.04 || box.x + box.width > videoWidth * 0.96) return "partial";
   if (box.y < videoHeight * 0.06 || box.y + box.height > videoHeight * 0.94) return "partial";
 
@@ -122,7 +122,7 @@ function validateFaceGeometry(
   const landmarkSpan = landmarkMaxY - landmarkMinY;
   if (landmarkSpan < box.height * 0.72) return "partial";
 
-  // Chin should sit near bottom of detection box (not just forehead/turban)
+  // Chin should sit near bottom of detection box (not just forehead / top of head)
   const chin = lm[8];
   if (chin.y < box.y + box.height * 0.55) return "partial";
 
