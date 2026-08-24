@@ -41,11 +41,11 @@ function groupCounts(
     if (u.isActive) row.active += 1;
     else row.inactive += 1;
     if (u.faceRegistered) row.faceRegistered += 1;
-    else if (u.isActive) row.pendingFace += 1;
+    else row.pendingFace += 1;
     if (punchedIds.has(u.id)) row.punched += 1;
-    else if (u.isActive) row.pendingPunchIn += 1;
+    else row.pendingPunchIn += 1;
     if (liveIds.has(u.id)) row.live += 1;
-    else if (u.isActive && punchedIds.has(u.id)) row.pendingLive += 1;
+    else if (punchedIds.has(u.id)) row.pendingLive += 1;
     map.set(name, row);
   }
   return Array.from(map.values()).sort((a, b) => b.users - a.users);
@@ -129,9 +129,9 @@ export async function GET(req: Request) {
     }
     const activeUsers = users.filter((u) => u.isActive).length;
     const faceRegisteredUsers = users.filter((u) => u.faceRegisteredAt).length;
-    const pendingPunchIn = users.filter((u) => u.isActive && !punchedIds.has(u.id)).length;
-    const pendingFace = users.filter((u) => u.isActive && !u.faceRegisteredAt).length;
-    const pendingLive = users.filter((u) => u.isActive && punchedIds.has(u.id) && !liveIds.has(u.id)).length;
+    const pendingPunchIn = users.filter((u) => !punchedIds.has(u.id)).length;
+    const pendingFace = users.filter((u) => !u.faceRegisteredAt).length;
+    const pendingLive = users.filter((u) => punchedIds.has(u.id) && !liveIds.has(u.id)).length;
 
     if (metric && METRICS.has(metric)) {
       let filtered = users;
@@ -140,10 +140,10 @@ export async function GET(req: Request) {
       else if (metric === "face") filtered = users.filter((u) => u.faceRegisteredAt);
       else if (metric === "live") filtered = users.filter((u) => liveIds.has(u.id));
       else if (metric === "punched") filtered = users.filter((u) => punchedIds.has(u.id));
-      else if (metric === "pendingPunchIn") filtered = users.filter((u) => u.isActive && !punchedIds.has(u.id));
-      else if (metric === "pendingFace") filtered = users.filter((u) => u.isActive && !u.faceRegisteredAt);
+        else if (metric === "pendingPunchIn") filtered = users.filter((u) => !punchedIds.has(u.id));
+        else if (metric === "pendingFace") filtered = users.filter((u) => !u.faceRegisteredAt);
       else if (metric === "pendingLive") {
-        filtered = users.filter((u) => u.isActive && punchedIds.has(u.id) && !liveIds.has(u.id));
+        filtered = users.filter((u) => punchedIds.has(u.id) && !liveIds.has(u.id));
       }
 
       if (groupBy && GROUP_BY.has(groupBy)) {

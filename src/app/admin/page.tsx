@@ -432,14 +432,6 @@ export default function AdminDashboardPage() {
           onClick={() => loadMetric("total")}
         />
         <Stat
-          className="bg-teal"
-          label="Active"
-          value={data?.activeUsers || 0}
-          hint="Tap to view list"
-          active={metric === "active" && !groupFilter}
-          onClick={() => loadMetric("active")}
-        />
-        <Stat
           className="bg-navy/70"
           label="Inactive"
           value={data?.inactiveUsers || 0}
@@ -475,7 +467,7 @@ export default function AdminDashboardPage() {
           className="bg-amber-600"
           label="Pending punchin"
           value={data?.pendingPunchIn || 0}
-          hint="Active, not punched today"
+          hint="Not punched today"
           active={metric === "pendingPunchIn" && !groupFilter}
           onClick={() => loadMetric("pendingPunchIn")}
         />
@@ -483,7 +475,7 @@ export default function AdminDashboardPage() {
           className="bg-rose-600"
           label="Pending face recog"
           value={data?.pendingFace || 0}
-          hint="Active, face not registered"
+          hint="Face not registered"
           active={metric === "pendingFace" && !groupFilter}
           onClick={() => loadMetric("pendingFace")}
         />
