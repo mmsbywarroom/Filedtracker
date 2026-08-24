@@ -36,8 +36,6 @@ export default function AdminUsersPage() {
   const [face, setFace] = useState("");
   const [status, setStatus] = useState("");
   const [isSuper, setIsSuper] = useState(false);
-  const [canCreateUsers, setCanCreateUsers] = useState(false);
-  const [isCluster, setIsCluster] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [csvMsg, setCsvMsg] = useState("");
@@ -60,11 +58,7 @@ export default function AdminUsersPage() {
     load();
     fetch("/api/admin/me")
       .then((r) => r.json())
-      .then((d) => {
-        setIsSuper(Boolean(d.admin?.isSuper));
-        setCanCreateUsers(Boolean(d.admin?.canCreateUsers));
-        setIsCluster(Boolean(d.admin?.isCluster));
-      })
+      .then((d) => setIsSuper(Boolean(d.admin?.isSuper)))
       .catch(() => {});
   }, []);
 
@@ -182,10 +176,6 @@ export default function AdminUsersPage() {
     });
   }
 
-  function canEditUser(u: UserRow) {
-    return isSuper || (isCluster && u.designation === "Sector Incharge");
-  }
-
   const selectClass = "h-11 rounded-xl border border-navy/10 bg-white px-3 text-sm outline-none focus:border-teal";
 
   return (
@@ -198,37 +188,33 @@ export default function AdminUsersPage() {
             {filtered.length} of {users.length} users
           </p>
         </div>
-        {(isSuper || canCreateUsers) && (
+        {isSuper && (
           <div className="flex flex-wrap gap-2">
-            {isSuper && (
-              <>
-                <a
-                  href="/sample-users.csv"
-                  download
-                  className="rounded-xl border border-navy/10 bg-white px-4 py-2.5 text-sm font-semibold text-navy/80 shadow-card"
-                >
-                  Download CSV template
-                </a>
-                <button
-                  type="button"
-                  onClick={() => fileRef.current?.click()}
-                  className="rounded-xl border border-teal/30 bg-teal/10 px-4 py-2.5 text-sm font-semibold text-teal shadow-card"
-                >
-                  Bulk upload CSV
-                </button>
-                <input
-                  ref={fileRef}
-                  type="file"
-                  accept=".csv,text/csv"
-                  className="hidden"
-                  onChange={(e) => {
-                    const f = e.target.files?.[0];
-                    if (f) uploadCsv(f);
-                    e.target.value = "";
-                  }}
-                />
-              </>
-            )}
+            <a
+              href="/sample-users.csv"
+              download
+              className="rounded-xl border border-navy/10 bg-white px-4 py-2.5 text-sm font-semibold text-navy/80 shadow-card"
+            >
+              Download CSV template
+            </a>
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              className="rounded-xl border border-teal/30 bg-teal/10 px-4 py-2.5 text-sm font-semibold text-teal shadow-card"
+            >
+              Bulk upload CSV
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) uploadCsv(f);
+                e.target.value = "";
+              }}
+            />
             <Link href="/admin/create" className="rounded-xl bg-teal px-4 py-2.5 text-sm font-semibold text-white shadow-card">
               Create user
             </Link>
@@ -381,10 +367,9 @@ export default function AdminUsersPage() {
                       <button
                         type="button"
                         onClick={() => toggleActive(u)}
-                        disabled={isCluster && u.designation !== "Sector Incharge"}
                         className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
                           u.isActive ? "bg-emerald-50 text-emerald-700" : "bg-navy/10 text-navy/60"
-                        } ${isCluster && u.designation !== "Sector Incharge" ? "cursor-not-allowed opacity-60" : ""}`}
+                        }`}
                       >
                         {u.isActive ? "Active" : "Inactive"}
                       </button>
@@ -400,7 +385,7 @@ export default function AdminUsersPage() {
                       <Link href={`/admin/users/${u.id}`} className="rounded-lg bg-teal/10 px-2.5 py-1 text-xs font-semibold text-teal">
                         Footprint
                       </Link>
-                      {canEditUser(u) && (
+                      {isSuper && (
                         <>
                           <Link
                             href={`/admin/create?edit=${u.id}`}
@@ -408,7 +393,7 @@ export default function AdminUsersPage() {
                           >
                             Edit
                           </Link>
-                          {isSuper && u.faceRegistered && (
+                          {u.faceRegistered && (
                             <button
                               type="button"
                               onClick={() => resetFace(u)}

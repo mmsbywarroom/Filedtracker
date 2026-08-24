@@ -25,37 +25,13 @@ function CreateUserForm() {
   const [officialAssemblies, setOfficialAssemblies] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [csvMsg, setCsvMsg] = useState("");
-  const [isSuper, setIsSuper] = useState(false);
-  const [isCluster, setIsCluster] = useState(false);
-  const [clusterAssemblies, setClusterAssemblies] = useState<string[]>([]);
 
   useEffect(() => {
     fetch("/api/admin/assembly-names")
       .then((r) => r.json())
       .then((d) => setOfficialAssemblies(d.assemblies || []))
       .catch(() => {});
-    fetch("/api/admin/me")
-      .then((r) => r.json())
-      .then((d) => {
-        const cluster = Boolean(d.admin?.isCluster);
-        const superAdmin = Boolean(d.admin?.isSuper);
-        setIsSuper(superAdmin);
-        setIsCluster(cluster);
-        const mapped = Array.isArray(d.admin?.assemblies) ? d.admin.assemblies.filter(Boolean) : [];
-        setClusterAssemblies(mapped);
-        if (cluster && !editId) {
-          setForm((f) => ({
-            ...f,
-            designation: "Sector Incharge",
-            zone: d.admin?.zone || f.zone,
-            district: d.admin?.district || f.district,
-            cluster: d.admin?.cluster || f.cluster,
-            assemblyName: mapped.length === 1 ? mapped[0] : f.assemblyName,
-          }));
-        }
-      })
-      .catch(() => {});
-  }, [editId]);
+  }, []);
 
   useEffect(() => {
     if (!editId) {
@@ -71,15 +47,11 @@ function CreateUserForm() {
       const data = await res.json();
       const u = (data.users || []).find((row: { id: string }) => row.id === editId);
       if (u) {
-        if (isCluster && u.designation !== "Sector Incharge") {
-          setError("Cluster admins can only edit Sector Incharge users.");
-          return;
-        }
         const assemblies = Array.isArray(u.assemblies) && u.assemblies.length ? u.assemblies : [];
         setForm({
           name: u.name,
           phone: u.phone,
-          designation: isCluster ? "Sector Incharge" : u.designation || "Sector Incharge",
+          designation: u.designation || "Sector Incharge",
           assemblyName: u.assemblyName,
           assemblies: assemblies.length ? assemblies : u.assemblyName ? [u.assemblyName] : [],
           sectorAllotted: u.sectorAllotted,
@@ -89,7 +61,7 @@ function CreateUserForm() {
         });
       }
     })();
-  }, [editId, isCluster]);
+  }, [editId]);
 
   function toggleAssembly(name: string) {
     setForm((f) => {
@@ -113,9 +85,8 @@ function CreateUserForm() {
     const url = editId ? `/api/admin/users/${editId}` : "/api/admin/users";
     const payload = {
       ...form,
-      designation: isCluster ? "Sector Incharge" : form.designation,
-      assemblyName: form.designation === "ALC" && !isCluster ? form.assemblies[0] || form.assemblyName : form.assemblyName,
-      assemblies: form.designation === "ALC" && !isCluster ? form.assemblies : [],
+      assemblyName: form.designation === "ALC" ? form.assemblies[0] || form.assemblyName : form.assemblyName,
+      assemblies: form.designation === "ALC" ? form.assemblies : [],
     };
     const res = await fetch(url, {
       method: editId ? "PATCH" : "POST",
@@ -143,9 +114,7 @@ function CreateUserForm() {
     setCsvMsg(`Created ${data.created}, updated ${data.updated}${data.errors?.length ? `, ${data.errors.length} row errors` : ""}`);
   }
 
-  const isAlc = !isCluster && form.designation === "ALC";
-  const designationOptions = isCluster ? ["Sector Incharge"] : DESIGNATIONS;
-  const assemblyOptions = isCluster && clusterAssemblies.length ? clusterAssemblies : officialAssemblies;
+  const isAlc = form.designation === "ALC";
 
   return (
     <main className="px-4 py-6 md:px-8">
@@ -154,11 +123,6 @@ function CreateUserForm() {
       <div className="grid max-w-4xl gap-4 lg:grid-cols-2">
         <form onSubmit={save} className="rounded-[1.75rem] bg-white p-5 shadow-card">
           <h2 className="font-semibold">{editId ? "Update details" : "Manual create"}</h2>
-          {isCluster && (
-            <p className="mt-1 text-xs text-navy/50">
-              Cluster admins can only create or edit Sector Incharge users in their mapped assemblies. CSV upload is not allowed.
-            </p>
-          )}
           {(
             [
               ["name", "Name"],
@@ -176,7 +140,6 @@ function CreateUserForm() {
               {key === "designation" ? (
                 <select
                   value={form.designation}
-                  disabled={isCluster}
                   onChange={(e) => {
                     const designation = e.target.value;
                     setForm({
@@ -185,25 +148,11 @@ function CreateUserForm() {
                       assemblies: designation === "ALC" ? form.assemblies : [],
                     });
                   }}
-                  className="mt-1 w-full rounded-xl border border-navy/10 bg-sand/40 px-3 py-2 text-sm disabled:opacity-70"
+                  className="mt-1 w-full rounded-xl border border-navy/10 bg-sand/40 px-3 py-2 text-sm"
                 >
-                  {designationOptions.map((d) => (
+                  {DESIGNATIONS.map((d) => (
                     <option key={d} value={d}>
                       {d}
-                    </option>
-                  ))}
-                </select>
-              ) : key === "assemblyName" && assemblyOptions.length ? (
-                <select
-                  value={form.assemblyName}
-                  onChange={(e) => setForm({ ...form, assemblyName: e.target.value })}
-                  className="mt-1 w-full rounded-xl border border-navy/10 bg-sand/40 px-3 py-2 text-sm"
-                  required
-                >
-                  <option value="">Select assembly</option>
-                  {assemblyOptions.map((a) => (
-                    <option key={a} value={a}>
-                      {a}
                     </option>
                   ))}
                 </select>
@@ -211,8 +160,7 @@ function CreateUserForm() {
                 <input
                   value={form[key as keyof typeof form] as string}
                   onChange={(e) => setForm({ ...form, [key]: e.target.value })}
-                  readOnly={isCluster && (key === "zone" || key === "district" || key === "cluster")}
-                  className="mt-1 w-full rounded-xl border border-navy/10 bg-sand/40 px-3 py-2 text-sm read-only:opacity-70"
+                  className="mt-1 w-full rounded-xl border border-navy/10 bg-sand/40 px-3 py-2 text-sm"
                   required={key !== "cluster"}
                 />
               )}
@@ -250,7 +198,6 @@ function CreateUserForm() {
           </button>
         </form>
 
-        {isSuper && (
         <div className="rounded-[1.75rem] bg-white p-5 shadow-card">
           <h2 className="font-semibold">CSV upload</h2>
           <p className="mt-1 text-xs text-navy/50">
@@ -275,7 +222,6 @@ function CreateUserForm() {
           />
           {csvMsg && <p className="mt-2 text-sm text-navy/70">{csvMsg}</p>}
         </div>
-        )}
       </div>
     </main>
   );
