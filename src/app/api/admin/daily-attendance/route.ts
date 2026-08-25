@@ -15,6 +15,7 @@ import {
   istDateString,
   statusLabel,
 } from "@/lib/dailyAttendance";
+import { adminPresentLabel, adminPresentRemark, ensureAdminPresentPunch, removeAdminPresentPunch } from "@/lib/adminPresentPunch";
 
 export async function GET(req: Request) {
   const s = await requireAdmin();
@@ -199,6 +200,22 @@ export async function PATCH(req: Request) {
     select: { punchInAt: true, punchOutAt: true },
   });
   const hours = hoursWorkedOnDay(sessions, date === istDateString() ? new Date() : end);
+  const adminLabel = adminPresentLabel(s.admin.name, s.admin.email);
+  const storedNote =
+    status === "present" ? `${adminPresentRemark(adminLabel)}. ${note}` : note;
+
+  if (status === "present") {
+    await ensureAdminPresentPunch({
+      userId,
+      dateYmd: date,
+      start,
+      end,
+      adminLabel,
+      note,
+    });
+  } else {
+    await removeAdminPresentPunch({ userId, start, end });
+  }
 
   const mark = await prisma.dailyAttendanceMark.upsert({
     where: { userId_date: { userId, date: dateOnly } },
@@ -208,14 +225,14 @@ export async function PATCH(req: Request) {
       status,
       source: "manual",
       hoursWorked: hours,
-      note,
+      note: storedNote,
       markedBy: s.admin.id,
     },
     update: {
       status,
       source: "manual",
       hoursWorked: hours,
-      note,
+      note: storedNote,
       markedBy: s.admin.id,
     },
   });

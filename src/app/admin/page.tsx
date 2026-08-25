@@ -325,10 +325,6 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
   const [groupFilter, setGroupFilter] = useState<{ groupBy: GroupBy; groupValue: string } | null>(null);
   const [detailRows, setDetailRows] = useState<DetailRow[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
-  const [markingId, setMarkingId] = useState<string | null>(null);
-  const [markRemark, setMarkRemark] = useState("");
-  const [markBusy, setMarkBusy] = useState(false);
-  const [markError, setMarkError] = useState("");
   const [level, setLevel] = useState("State");
   const [isSuper, setIsSuper] = useState(false);
   const [visibleDens, setVisibleDens] = useState<string[]>([]);
@@ -378,9 +374,6 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
     setMetric(m);
     setGroupFilter(group || null);
     setDetailLoading(true);
-    setMarkingId(null);
-    setMarkRemark("");
-    setMarkError("");
     const params = new URLSearchParams({
       date,
       metric: m,
@@ -402,39 +395,11 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
     requestAnimationFrame(() => detailRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
   }
 
-  async function markPresent(userId: string) {
-    const remark = markRemark.trim();
-    if (remark.length < 3) {
-      setMarkError("Remark is required (at least 3 characters).");
-      return;
-    }
-    setMarkBusy(true);
-    setMarkError("");
-    const res = await fetch("/api/admin/mark-present", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, date, remark }),
-    });
-    const json = await res.json().catch(() => null);
-    setMarkBusy(false);
-    if (!res.ok) {
-      setMarkError(json?.error || "Could not mark present.");
-      return;
-    }
-    setMarkingId(null);
-    setMarkRemark("");
-    await load(date, designation);
-    await loadMetric("pendingPunchIn", groupFilter || undefined);
-  }
-
   useEffect(() => {
     load(date, designation);
     setMetric(null);
     setGroupFilter(null);
     setDetailRows([]);
-    setMarkingId(null);
-    setMarkRemark("");
-    setMarkError("");
   }, [date, designation, variant]);
 
   const mappedAssemblies =
@@ -726,7 +691,6 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
                       metric === "pendingLive") && <th className="px-4 py-2">Punch in</th>}
                     {metric === "punched" && <th className="px-4 py-2">Remark</th>}
                     {(metric === "live" || metric === "pendingLive") && <th className="px-4 py-2">Status</th>}
-                    {metric === "pendingPunchIn" && <th className="px-4 py-2">Action</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -774,9 +738,8 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
                         <td className="px-4 py-2 text-xs text-navy/70">
                           {r.punchOutReason === "admin_present" ? (
                             <div>
-                              <p className="font-medium text-teal">Manual present by admin</p>
-                              <p>{r.punchInAddress}</p>
-                              {r.punchOutAddress ? <p className="mt-0.5">Remark: {r.punchOutAddress}</p> : null}
+                              <p className="font-medium text-teal">{r.punchInAddress || "Manual present by admin"}</p>
+                              {r.punchOutAddress ? <p className="mt-0.5">{r.punchOutAddress}</p> : null}
                             </div>
                           ) : (
                             r.punchInAddress || "—"
@@ -795,59 +758,6 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
                           <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-800">
                             Punched out / not live
                           </span>
-                        </td>
-                      )}
-                      {metric === "pendingPunchIn" && (
-                        <td className="px-4 py-2 align-top">
-                          {markingId === r.id ? (
-                            <div className="flex min-w-[220px] flex-col gap-2">
-                              <input
-                                value={markRemark}
-                                onChange={(e) => setMarkRemark(e.target.value)}
-                                placeholder="Remark (required)"
-                                className="rounded-lg border border-navy/15 px-2 py-1.5 text-xs"
-                                disabled={markBusy}
-                              />
-                              {markError ? <p className="text-xs text-rose-600">{markError}</p> : null}
-                              {r.onLeaveToday ? (
-                                <p className="text-xs text-violet-700">This user is on leave today.</p>
-                              ) : null}
-                              <div className="flex flex-wrap gap-2">
-                                <button
-                                  type="button"
-                                  disabled={markBusy}
-                                  onClick={() => markPresent(r.id)}
-                                  className="rounded-lg bg-teal px-2.5 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
-                                >
-                                  {markBusy ? "Saving…" : "Confirm present"}
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={markBusy}
-                                  onClick={() => {
-                                    setMarkingId(null);
-                                    setMarkRemark("");
-                                    setMarkError("");
-                                  }}
-                                  className="rounded-lg border border-navy/15 px-2.5 py-1.5 text-xs font-semibold text-navy/70"
-                                >
-                                  Cancel
-                                </button>
-                              </div>
-                            </div>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setMarkingId(r.id);
-                                setMarkRemark("");
-                                setMarkError("");
-                              }}
-                              className="rounded-lg border border-teal/40 bg-teal/5 px-2.5 py-1.5 text-xs font-semibold text-teal hover:bg-teal/10"
-                            >
-                              Mark present
-                            </button>
-                          )}
                         </td>
                       )}
                     </tr>
