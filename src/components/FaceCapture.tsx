@@ -15,14 +15,14 @@ type Props = {
 };
 
 function snapshot(video: HTMLVideoElement, box?: { x: number; y: number; width: number; height: number }) {
-  const size = jpegSize();
+  const size = Math.max(jpegSize(), 240);
   const canvas = document.createElement("canvas");
   canvas.width = size;
   canvas.height = size;
   const ctx = canvas.getContext("2d");
   if (!ctx) return "";
   if (box) {
-    const pad = 0.2;
+    const pad = 0.08;
     const x = Math.max(0, box.x - box.width * pad);
     const y = Math.max(0, box.y - box.height * pad);
     const w = Math.min(video.videoWidth - x, box.width * (1 + pad * 2));
@@ -34,7 +34,7 @@ function snapshot(video: HTMLVideoElement, box?: { x: number; y: number; width: 
     const sy = (video.videoHeight - side) / 2;
     ctx.drawImage(video, sx, sy, side, side, 0, 0, size, size);
   }
-  return canvas.toDataURL("image/jpeg", jpegQuality());
+  return canvas.toDataURL("image/jpeg", Math.max(jpegQuality(), 0.72));
 }
 
 function waitVideoReady(video: HTMLVideoElement) {
@@ -67,7 +67,9 @@ export function FaceCapture({ actionLabel, onCapture, busy, mode = "verify" }: P
   const [locked, setLocked] = useState(false);
   const [error, setError] = useState("");
   const [hint, setHint] = useState("");
-  const needHits = mode === "register" ? 6 : 1;
+  const [goodHits, setGoodHits] = useState(0);
+  // Punch needs a few solid frames — one weak frame was letting group/blurry shots through
+  const needHits = mode === "register" ? 6 : 3;
 
   function hintForError(err: FaceScanError) {
     if (err === "too_far") return t("tooFar");
@@ -140,6 +142,7 @@ export function FaceCapture({ actionLabel, onCapture, busy, mode = "verify" }: P
     } catch (e) {
       hits.current = 0;
       samples.current = [];
+      setGoodHits(0);
       setHint(e instanceof Error ? e.message : t("retryLook"));
     } finally {
       firing.current = false;
@@ -158,15 +161,21 @@ export function FaceCapture({ actionLabel, onCapture, busy, mode = "verify" }: P
       if (result.ok) {
         lastGood.current = result;
         hits.current += 1;
+        setGoodHits(hits.current);
         if (samples.current.length < 6) samples.current.push(result.descriptor);
         if (mode === "register") {
           setHint(`${t("faceFound")} (${Math.min(hits.current, needHits)}/${needHits})`);
         } else {
-          setHint(t("faceFound"));
+          setHint(
+            hits.current >= needHits
+              ? t("faceFound")
+              : `${t("faceFound")} (${Math.min(hits.current, needHits)}/${needHits})`
+          );
         }
         if (hits.current >= needHits) await submit(result);
       } else {
         hits.current = 0;
+        setGoodHits(0);
         lastGood.current = null;
         if (samples.current.length > 2) samples.current = samples.current.slice(-2);
         setHint(hintForError(result.error));
@@ -199,8 +208,11 @@ export function FaceCapture({ actionLabel, onCapture, busy, mode = "verify" }: P
       )}
       <button
         type="button"
-        disabled={!camReady || !modelsReady || busy || firing.current}
-        onClick={() => lastGood.current?.ok && submit(lastGood.current)}
+        disabled={!camReady || !modelsReady || busy || firing.current || goodHits < needHits}
+        onClick={() => {
+          if (goodHits < needHits || !lastGood.current?.ok) return;
+          void submit(lastGood.current);
+        }}
         className="rounded-full bg-teal px-8 py-3 font-semibold text-white shadow-card disabled:opacity-50 touch-manipulation"
       >
         {busy || firing.current ? t("unlocking") : !modelsReady ? t("preparing") : actionLabel}

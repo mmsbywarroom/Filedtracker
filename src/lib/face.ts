@@ -53,8 +53,9 @@ export type ScanFaceOptions = {
 
 function detector(strict: boolean) {
   return new faceapi.TinyFaceDetectorOptions({
-    inputSize: strict ? 416 : 320,
-    scoreThreshold: strict ? 0.52 : 0.35,
+    // Higher input size catches second faces better on punch too
+    inputSize: 416,
+    scoreThreshold: strict ? 0.52 : 0.45,
   });
 }
 
@@ -78,10 +79,10 @@ function validateFaceGeometry(
   const minSide = Math.min(videoWidth, videoHeight);
   const faceSide = Math.min(box.width, box.height);
 
-  const minRatio = strict ? 0.2 : 0.12;
+  const minRatio = strict ? 0.2 : 0.16;
   if (faceSide < minSide * minRatio) return "too_far";
 
-  const maxRatio = strict ? 0.78 : 0.92;
+  const maxRatio = strict ? 0.78 : 0.85;
   if (faceSide > minSide * maxRatio) return "too_far";
 
   const aspect = box.width / Math.max(box.height, 1);
@@ -89,16 +90,17 @@ function validateFaceGeometry(
 
   const cx = box.x + box.width / 2;
   const cy = box.y + box.height / 2;
-  if (strict) {
-    if (cx < videoWidth * 0.24 || cx > videoWidth * 0.76) return "off_center";
-    if (cy < videoHeight * 0.26 || cy > videoHeight * 0.74) return "off_center";
-  }
+  // Punch + register both need a centered face (punch slightly looser)
+  const xPad = strict ? 0.24 : 0.18;
+  const yPad = strict ? 0.26 : 0.2;
+  if (cx < videoWidth * xPad || cx > videoWidth * (1 - xPad)) return "off_center";
+  if (cy < videoHeight * yPad || cy > videoHeight * (1 - yPad)) return "off_center";
 
   // Face must not be clipped at edges (partial / top-of-head only shots)
   if (box.x < videoWidth * 0.04 || box.x + box.width > videoWidth * 0.96) return "partial";
   if (box.y < videoHeight * 0.06 || box.y + box.height > videoHeight * 0.94) return "partial";
 
-  if (strict && score < 0.55) return "low_quality";
+  if (score < (strict ? 0.55 : 0.48)) return "low_quality";
 
   const lm = detection.landmarks.positions;
   if (lm.length < 68) return "partial";
@@ -165,10 +167,11 @@ export async function scanFace(video: HTMLVideoElement, opts: ScanFaceOptions = 
   const box = best.detection.box;
   const minSide = Math.min(video.videoWidth, video.videoHeight);
 
-  const second = detections[1];
-  if (second) {
-    const s = second.detection.box;
-    if (Math.min(s.width, s.height) > minSide * (strict ? 0.12 : 0.14)) {
+  // Any other clear face in frame → reject (two people / group selfie)
+  for (let i = 1; i < detections.length; i++) {
+    const other = detections[i].detection;
+    const side = Math.min(other.box.width, other.box.height);
+    if (other.score >= 0.28 || side > minSide * 0.08) {
       return { ok: false, error: "multiple" };
     }
   }
