@@ -42,9 +42,9 @@ function groupCounts(
     if (u.isActive) row.active += 1;
     else row.inactive += 1;
     if (u.faceRegistered) row.faceRegistered += 1;
-    else row.pendingFace += 1;
+    else if (u.isActive) row.pendingFace += 1;
     if (punchedIds.has(u.id)) row.punched += 1;
-    else row.pendingPunchIn += 1;
+    else if (u.isActive) row.pendingPunchIn += 1;
     if (liveIds.has(u.id)) row.live += 1;
     else if (punchedIds.has(u.id)) row.pendingLive += 1;
     map.set(name, row);
@@ -155,19 +155,38 @@ export async function GET(req: Request) {
         punchInAt: { gte: start, lte: end },
         user: userWhere,
       },
-      select: { userId: true, punchOutAt: true, punchInAt: true },
+      select: {
+        userId: true,
+        punchOutAt: true,
+        punchInAt: true,
+        punchInAddress: true,
+        punchOutReason: true,
+        punchOutAddress: true,
+      },
     });
 
     const punchedIds = new Set(punches.map((p) => p.userId));
     const liveIds = new Set(punches.filter((p) => !p.punchOutAt).map((p) => p.userId));
     const punchInByUser = new Map<string, Date>();
+    const punchMetaByUser = new Map<
+      string,
+      { punchInAddress: string | null; punchOutReason: string | null; punchOutAddress: string | null }
+    >();
     for (const p of punches) {
-      if (!punchInByUser.has(p.userId)) punchInByUser.set(p.userId, p.punchInAt);
+      if (!punchInByUser.has(p.userId)) {
+        punchInByUser.set(p.userId, p.punchInAt);
+        punchMetaByUser.set(p.userId, {
+          punchInAddress: p.punchInAddress,
+          punchOutReason: p.punchOutReason,
+          punchOutAddress: p.punchOutAddress,
+        });
+      }
     }
     const activeUsers = users.filter((u) => u.isActive).length;
     const faceRegisteredUsers = users.filter((u) => u.faceRegisteredAt).length;
-    const pendingPunchIn = users.filter((u) => !punchedIds.has(u.id)).length;
-    const pendingFace = users.filter((u) => !u.faceRegisteredAt).length;
+    // Inactive users left the organisation — do not count them as pending
+    const pendingPunchIn = users.filter((u) => u.isActive && !punchedIds.has(u.id)).length;
+    const pendingFace = users.filter((u) => u.isActive && !u.faceRegisteredAt).length;
     const pendingLive = users.filter((u) => punchedIds.has(u.id) && !liveIds.has(u.id)).length;
 
     if (metric && METRICS.has(metric)) {
@@ -177,8 +196,8 @@ export async function GET(req: Request) {
       else if (metric === "face") filtered = users.filter((u) => u.faceRegisteredAt);
       else if (metric === "live") filtered = users.filter((u) => liveIds.has(u.id));
       else if (metric === "punched") filtered = users.filter((u) => punchedIds.has(u.id));
-        else if (metric === "pendingPunchIn") filtered = users.filter((u) => !punchedIds.has(u.id));
-        else if (metric === "pendingFace") filtered = users.filter((u) => !u.faceRegisteredAt);
+      else if (metric === "pendingPunchIn") filtered = users.filter((u) => u.isActive && !punchedIds.has(u.id));
+      else if (metric === "pendingFace") filtered = users.filter((u) => u.isActive && !u.faceRegisteredAt);
       else if (metric === "pendingLive") {
         filtered = users.filter((u) => punchedIds.has(u.id) && !liveIds.has(u.id));
       }
@@ -192,24 +211,45 @@ export async function GET(req: Request) {
         }
       }
 
+      const leaveUserIds = new Set<string>();
+      if (metric === "pendingPunchIn" && filtered.length) {
+        const leaves = await prisma.leaveRequest.findMany({
+          where: {
+            userId: { in: filtered.map((u) => u.id) },
+            status: "approved",
+            fromDate: { lte: end },
+            toDate: { gte: start },
+          },
+          select: { userId: true },
+        });
+        for (const l of leaves) leaveUserIds.add(l.userId);
+      }
+
       const rows = filtered
-        .map((u) => ({
-          id: u.id,
-          name: u.name,
-          phone: u.phone,
-          designation: u.designation,
-          assemblyName: u.assemblyName,
-          sectorAllotted: u.sectorAllotted,
-          zone: u.zone,
-          district: u.district,
-          cluster: u.cluster,
-          isActive: u.isActive,
-          faceRegistered: Boolean(u.faceRegisteredAt),
-          faceRegisteredAt: u.faceRegisteredAt?.toISOString() || null,
-          punchedToday: punchedIds.has(u.id),
-          liveNow: liveIds.has(u.id),
-          punchInAt: punchInByUser.get(u.id)?.toISOString() || null,
-        }))
+        .map((u) => {
+          const meta = punchMetaByUser.get(u.id);
+          return {
+            id: u.id,
+            name: u.name,
+            phone: u.phone,
+            designation: u.designation,
+            assemblyName: u.assemblyName,
+            sectorAllotted: u.sectorAllotted,
+            zone: u.zone,
+            district: u.district,
+            cluster: u.cluster,
+            isActive: u.isActive,
+            faceRegistered: Boolean(u.faceRegisteredAt),
+            faceRegisteredAt: u.faceRegisteredAt?.toISOString() || null,
+            punchedToday: punchedIds.has(u.id),
+            liveNow: liveIds.has(u.id),
+            punchInAt: punchInByUser.get(u.id)?.toISOString() || null,
+            punchInAddress: meta?.punchInAddress || null,
+            punchOutReason: meta?.punchOutReason || null,
+            punchOutAddress: meta?.punchOutAddress || null,
+            onLeaveToday: leaveUserIds.has(u.id),
+          };
+        })
         .sort((a, b) => a.name.localeCompare(b.name));
 
       return NextResponse.json({

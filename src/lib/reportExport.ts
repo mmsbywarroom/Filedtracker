@@ -62,6 +62,7 @@ export function reasonLabel(reason?: string | null, punchOutAt?: string | null) 
   if (reason === "gps_off") return "GPS off";
   if (reason === "auto_12h") return "Auto · 12 hours";
   if (reason === "auto_geofence") return "Auto · left 1000 m boundary";
+  if (reason === "admin_present") return "Manual present by admin";
   if (reason === "manual") return "Manual punch-out";
   if (punchOutAt) return "Completed";
   return reason || "—";
