@@ -182,7 +182,7 @@ export default function DashboardPage() {
           const age = Date.now() - new Date(last.punchOutAt).getTime();
           if (age >= 0 && age < 10 * 60 * 1000) {
             setOkMsg(true);
-            setMsg("Auto punched out: you left the 500 m office boundary.");
+            setMsg("Auto punched out: you left the 1000 m office boundary.");
           }
         }
       }
@@ -294,7 +294,7 @@ export default function DashboardPage() {
             setOpen(null);
             setMode("idle");
             setOkMsg(true);
-            setMsg(data?.error || "Auto punched out: you left the 500 m office boundary.");
+            setMsg(data?.error || "Auto punched out: you left the 1000 m office boundary.");
             refresh();
           }
         } else if (res.status === 400 && batch.length === 0) {

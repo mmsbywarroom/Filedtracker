@@ -71,12 +71,12 @@ export async function GET(req: Request) {
       lat: r.punchOutLat,
       lng: r.punchOutLng,
       place: r.punchOutAddress || (r.punchOutReason === "auto_geofence"
-        ? "Left Call Center 500 m boundary"
+        ? "Left Call Center 1000 m boundary"
         : "Auto punch-out after 12 hours without punch-out"),
       reason: r.punchOutReason,
       why:
         r.punchOutReason === "auto_geofence"
-          ? "Left office 500 m boundary without punch-out"
+          ? "Left office 1000 m boundary without punch-out"
           : "No punch-out within 12 hours of punch-in",
     }));
 

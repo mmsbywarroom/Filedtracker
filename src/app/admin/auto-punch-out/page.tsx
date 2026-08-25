@@ -147,7 +147,7 @@ export default function AutoPunchOutLogsPage() {
         }}
         reasons={[
           { value: "auto_12h", label: "Auto · 12 hours" },
-          { value: "auto_geofence", label: "Auto · left 500 m boundary" },
+          { value: "auto_geofence", label: "Auto · left 1000 m boundary" },
         ]}
         onApply={load}
         onCsv={() => downloadCsv(`auto-punch-out-${date || "all"}`, exportHeaders, exportRows)}

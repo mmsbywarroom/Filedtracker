@@ -1,6 +1,6 @@
 import { haversineMeters } from "@/lib/utils";
 
-export const CALL_CENTER_RADIUS_M = 500;
+export const CALL_CENTER_RADIUS_M = 1000;
 
 export type CallCenterSite = {
   name: string;

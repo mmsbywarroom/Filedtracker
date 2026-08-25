@@ -161,7 +161,7 @@ export default function DailyRecordsPage() {
           { value: "manual", label: "Manual punch-out" },
           { value: "gps_off", label: "GPS off" },
           { value: "auto_12h", label: "Auto · 12 hours" },
-          { value: "auto_geofence", label: "Auto · left 500 m boundary" },
+          { value: "auto_geofence", label: "Auto · left 1000 m boundary" },
         ]}
         onCsv={() => downloadCsv(`daily-records-${date}`, exportHeaders, exportRows)}
         onPdf={() => downloadPdf(`Daily records · ${date}`, exportHeaders, exportRows)}

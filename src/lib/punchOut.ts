@@ -38,7 +38,7 @@ export async function closeOpenAttendance(opts: {
     address = opts.address || "Auto punch-out after 12 hours without punch-out";
   }
   if (opts.reason === "auto_geofence") {
-    address = opts.address || "Auto punch-out: left Call Center 500 m boundary";
+    address = opts.address || "Auto punch-out: left Call Center 1000 m boundary";
   }
 
   return prisma.attendance.update({
