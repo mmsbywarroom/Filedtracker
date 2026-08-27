@@ -13,6 +13,7 @@ type Group = {
   faceRegistered: number;
   punched: number;
   live: number;
+  leave: number;
   pendingPunchIn: number;
   pendingFace: number;
   pendingLive: number;
@@ -26,6 +27,7 @@ type Dash = {
   faceRegisteredUsers: number;
   activeToday: number;
   liveNow: number;
+  leaveOnDate?: number;
   punches: number;
   pendingPunchIn: number;
   pendingFace: number;
@@ -57,9 +59,7 @@ type DetailRow = {
   punchOutReason?: string | null;
   punchOutAddress?: string | null;
   onLeaveToday?: boolean;
-  leaveTodayStatus?: "approved" | "pending" | null;
-  leaveFromDate?: string | null;
-  leaveToDate?: string | null;
+  leaveRemark?: string | null;
 };
 
 type Metric =
@@ -69,6 +69,7 @@ type Metric =
   | "face"
   | "live"
   | "punched"
+  | "leave"
   | "pendingPunchIn"
   | "pendingFace"
   | "pendingLive";
@@ -81,6 +82,7 @@ const METRIC_LABELS: Record<Metric, string> = {
   face: "Face registered",
   live: "Live now",
   punched: "Punched today",
+  leave: "Leave",
   pendingPunchIn: "Pending punch-in",
   pendingFace: "Pending face recog",
   pendingLive: "Pending live",
@@ -105,33 +107,12 @@ function officeRows(sites: Group[] | undefined, name: string): Group[] {
       faceRegistered: 0,
       punched: 0,
       live: 0,
+      leave: 0,
       pendingPunchIn: 0,
       pendingFace: 0,
       pendingLive: 0,
     },
   ];
-}
-
-function leaveTodayLabel(status?: "approved" | "pending" | null, from?: string | null, to?: string | null) {
-  if (!status) return "";
-  const range = leaveRangeLabel(from, to);
-  if (status === "approved") return range ? `On leave today (${range})` : "On leave today";
-  return range ? `On leave today (awaiting approval, ${range})` : "On leave today (awaiting approval)";
-}
-
-function leaveRangeLabel(from?: string | null, to?: string | null) {
-  if (!from || !to) return "";
-  const fmt = (ymd: string) => {
-    const [y, m, d] = ymd.split("-").map(Number);
-    if (!y || !m || !d) return ymd;
-    return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-IN", {
-      day: "numeric",
-      month: "short",
-      timeZone: "UTC",
-    });
-  };
-  if (from === to) return fmt(from);
-  return `${fmt(from)} – ${fmt(to)}`;
 }
 
 function formatKolkata(iso: string | null | undefined) {
@@ -165,8 +146,9 @@ function buildDetailExport(
 
   const headers = ["Name", "Phone", "Designation", "Assembly", "Sector", "Zone", "District"];
   if (metric === "face" || metric === "pendingFace") headers.push("Face registered");
+  else if (metric === "leave") headers.push("Leave remark");
   else if (metric === "pendingPunchIn") {
-    headers.push("Leave today", "Punch in");
+    headers.push("Punch in");
   } else if (metric === "live" || metric === "punched" || metric === "pendingLive") {
     headers.push("Punch in");
     if (metric === "punched") headers.push("Remark");
@@ -185,8 +167,9 @@ function buildDetailExport(
     ];
     if (metric === "face" || metric === "pendingFace") {
       row.push(r.faceRegisteredAt ? formatKolkata(r.faceRegisteredAt) : "Not registered");
+    } else if (metric === "leave") {
+      row.push(r.leaveRemark || "Marked leave on Attendance");
     } else if (metric === "pendingPunchIn") {
-      row.push(leaveTodayLabel(r.leaveTodayStatus, r.leaveFromDate, r.leaveToDate) || "—");
       row.push(formatKolkata(r.punchInAt));
     } else if (metric === "live" || metric === "punched" || metric === "pendingLive") {
       row.push(formatKolkata(r.punchInAt));
@@ -212,6 +195,7 @@ const METRIC_COLUMNS: { key: Metric; field: keyof Group; className?: string }[] 
   { key: "face", field: "faceRegistered", className: "text-violet-700" },
   { key: "punched", field: "punched", className: "text-[#c45c12]" },
   { key: "live", field: "live", className: "text-emerald-600" },
+  { key: "leave", field: "leave", className: "text-indigo-700" },
   { key: "pendingPunchIn", field: "pendingPunchIn", className: "text-amber-700" },
   { key: "pendingFace", field: "pendingFace", className: "text-rose-700" },
   { key: "pendingLive", field: "pendingLive", className: "text-sky-700" },
@@ -280,6 +264,7 @@ function GroupTable({
   activeGroup,
   onCellClick,
   hideName,
+  date,
 }: {
   title: string;
   accent: string;
@@ -289,12 +274,55 @@ function GroupTable({
   activeGroup: { groupBy: GroupBy; groupValue: string } | null;
   onCellClick: (metric: Metric, groupValue: string) => void;
   hideName?: boolean;
+  date: string;
 }) {
+  function exportPdf() {
+    const headers = [
+      hideName ? null : "Name",
+      "Users",
+      "Inactive",
+      "Face reg",
+      "Punched",
+      "Live",
+      "Leave",
+      "Pending punchin",
+      "Pending face recog",
+      "Pending live",
+    ].filter(Boolean) as string[];
+    const data = rows.map((r) => {
+      const row: (string | number)[] = [];
+      if (!hideName) row.push(r.name);
+      row.push(
+        r.users,
+        r.inactive,
+        r.faceRegistered,
+        r.punched,
+        r.live,
+        r.leave || 0,
+        r.pendingPunchIn,
+        r.pendingFace,
+        r.pendingLive
+      );
+      return row;
+    });
+    downloadPdf(`${title} · ${date}`, headers, data);
+  }
+
   return (
     <section className="overflow-hidden rounded-2xl border border-navy/5 bg-white shadow-card">
-      <div className={`border-b border-navy/5 px-4 py-3 ${accent}`}>
-        <h2 className="font-semibold">{title}</h2>
-        <p className="mt-0.5 text-xs text-white/75">Tap any number to view users</p>
+      <div className={`flex items-start justify-between gap-3 border-b border-navy/5 px-4 py-3 ${accent}`}>
+        <div>
+          <h2 className="font-semibold">{title}</h2>
+          <p className="mt-0.5 text-xs text-white/75">Tap any number to view users</p>
+        </div>
+        <button
+          type="button"
+          onClick={exportPdf}
+          disabled={!rows.length}
+          className="shrink-0 rounded-lg border border-white/30 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/10 disabled:opacity-40"
+        >
+          PDF
+        </button>
       </div>
       <div className="max-h-[360px] overflow-auto">
         <table className="min-w-full text-left text-sm">
@@ -306,6 +334,7 @@ function GroupTable({
               <th className="px-4 py-2">Face reg</th>
               <th className="px-4 py-2">Punched</th>
               <th className="px-4 py-2">Live</th>
+              <th className="px-4 py-2">Leave</th>
               <th className="px-4 py-2">Pending punchin</th>
               <th className="px-4 py-2">Pending face recog</th>
               <th className="px-4 py-2">Pending live</th>
@@ -545,10 +574,18 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
           onClick={() => loadMetric("punched")}
         />
         <Stat
+          className="bg-sky-600"
+          label="Leave"
+          value={data?.leaveOnDate || 0}
+          hint="Marked leave on Attendance"
+          active={metric === "leave" && !groupFilter}
+          onClick={() => loadMetric("leave")}
+        />
+        <Stat
           className="bg-amber-600"
           label="Pending punchin"
           value={data?.pendingPunchIn || 0}
-          hint="Active users, not punched"
+          hint="Active, not punched, not on leave"
           active={metric === "pendingPunchIn" && !groupFilter}
           onClick={() => loadMetric("pendingPunchIn")}
         />
@@ -579,6 +616,7 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
               rows={officeRows(data?.byCallCenterSite, "Yellow Stone")}
               groupBy="callCenterSite"
               hideName
+              date={date}
               activeMetric={metric}
               activeGroup={groupFilter}
               onCellClick={(m) => loadMetric(m, { groupBy: "callCenterSite", groupValue: "Yellow Stone" })}
@@ -589,6 +627,7 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
               rows={officeRows(data?.byCallCenterSite, "Unify")}
               groupBy="callCenterSite"
               hideName
+              date={date}
               activeMetric={metric}
               activeGroup={groupFilter}
               onCellClick={(m) => loadMetric(m, { groupBy: "callCenterSite", groupValue: "Unify" })}
@@ -601,6 +640,7 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
               accent="bg-[#12305A] text-white"
               rows={data?.byDesignation || []}
               groupBy="designation"
+              date={date}
               activeMetric={metric}
               activeGroup={groupFilter}
               onCellClick={(m, name) => loadMetric(m, { groupBy: "designation", groupValue: name })}
@@ -610,6 +650,7 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
               accent="bg-teal text-white"
               rows={data?.byZone || []}
               groupBy="zone"
+              date={date}
               activeMetric={metric}
               activeGroup={groupFilter}
               onCellClick={(m, name) => loadMetric(m, { groupBy: "zone", groupValue: name })}
@@ -619,6 +660,7 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
               accent="bg-emerald-700 text-white"
               rows={data?.byDistrict || []}
               groupBy="district"
+              date={date}
               activeMetric={metric}
               activeGroup={groupFilter}
               onCellClick={(m, name) => loadMetric(m, { groupBy: "district", groupValue: name })}
@@ -628,6 +670,7 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
               accent="bg-[#1A56C4] text-white"
               rows={data?.byAssembly || []}
               groupBy="assembly"
+              date={date}
               activeMetric={metric}
               activeGroup={groupFilter}
               onCellClick={(m, name) => loadMetric(m, { groupBy: "assembly", groupValue: name })}
@@ -709,7 +752,7 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
                     <th className="px-4 py-2">Assembly / Sector</th>
                     <th className="px-4 py-2">Zone</th>
                     {metric === "face" || metric === "pendingFace" ? <th className="px-4 py-2">Face registered</th> : null}
-                    {metric === "pendingPunchIn" && <th className="px-4 py-2">Leave</th>}
+                    {metric === "leave" && <th className="px-4 py-2">Leave remark</th>}
                     {(metric === "live" ||
                       metric === "punched" ||
                       metric === "pendingPunchIn" ||
@@ -738,31 +781,12 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
                             : "Not registered"}
                         </td>
                       )}
-                      {metric === "pendingPunchIn" && (
+                      {metric === "leave" && (
                         <td className="px-4 py-2">
-                          {r.leaveTodayStatus === "approved" || r.leaveTodayStatus === "pending" ? (
-                            <div>
-                              <span
-                                className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                                  r.leaveTodayStatus === "approved"
-                                    ? "bg-violet-50 text-violet-800"
-                                    : "bg-amber-50 text-amber-800"
-                                }`}
-                              >
-                                On leave today
-                              </span>
-                              {leaveRangeLabel(r.leaveFromDate, r.leaveToDate) ? (
-                                <p className="mt-1 text-[11px] text-navy/60">
-                                  {leaveRangeLabel(r.leaveFromDate, r.leaveToDate)}
-                                </p>
-                              ) : null}
-                              {r.leaveTodayStatus === "pending" ? (
-                                <p className="mt-0.5 text-[11px] text-amber-700">Awaiting approval</p>
-                              ) : null}
-                            </div>
-                          ) : (
-                            <span className="text-xs text-navy/40">—</span>
-                          )}
+                          <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-800">
+                            On leave today
+                          </span>
+                          <p className="mt-1 text-xs text-navy/55">{r.leaveRemark || "Marked leave on Attendance"}</p>
                         </td>
                       )}
                       {(metric === "live" ||

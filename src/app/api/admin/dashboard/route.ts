@@ -3,11 +3,13 @@ import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canSeeCallCenterUsers, userScopeWhere, visibleDesignationsFor } from "@/lib/hierarchy";
 import { CALL_CENTER_SITE_NAMES, callCenterSiteName } from "@/lib/callCenterGeofence";
+import { istDayBounds } from "@/lib/dailyAttendance";
 
 function groupCounts(
   users: { id: string; key: string; isActive: boolean; faceRegistered: boolean }[],
   punchedIds: Set<string>,
-  liveIds: Set<string>
+  liveIds: Set<string>,
+  leaveIds: Set<string>
 ) {
   const map = new Map<
     string,
@@ -19,6 +21,7 @@ function groupCounts(
       faceRegistered: number;
       punched: number;
       live: number;
+      leave: number;
       pendingPunchIn: number;
       pendingFace: number;
       pendingLive: number;
@@ -34,6 +37,7 @@ function groupCounts(
       faceRegistered: 0,
       punched: 0,
       live: 0,
+      leave: 0,
       pendingPunchIn: 0,
       pendingFace: 0,
       pendingLive: 0,
@@ -43,8 +47,10 @@ function groupCounts(
     else row.inactive += 1;
     if (u.faceRegistered) row.faceRegistered += 1;
     else if (u.isActive) row.pendingFace += 1;
+    if (leaveIds.has(u.id)) row.leave += 1;
     if (punchedIds.has(u.id)) row.punched += 1;
-    else if (u.isActive) row.pendingPunchIn += 1;
+    // Leave (Attendance mark) and inactive are excluded from pending punch-in
+    else if (u.isActive && !leaveIds.has(u.id)) row.pendingPunchIn += 1;
     if (liveIds.has(u.id)) row.live += 1;
     else if (punchedIds.has(u.id)) row.pendingLive += 1;
     map.set(name, row);
@@ -59,6 +65,7 @@ const METRICS = new Set([
   "face",
   "live",
   "punched",
+  "leave",
   "pendingPunchIn",
   "pendingFace",
   "pendingLive",
@@ -79,6 +86,22 @@ function matchesGroupValue(raw: string | null | undefined, groupValue: string) {
   return val === groupValue;
 }
 
+function emptyGroup(name: string) {
+  return {
+    name,
+    users: 0,
+    active: 0,
+    inactive: 0,
+    faceRegistered: 0,
+    punched: 0,
+    live: 0,
+    leave: 0,
+    pendingPunchIn: 0,
+    pendingFace: 0,
+    pendingLive: 0,
+  };
+}
+
 export async function GET(req: Request) {
   const s = await requireAdmin();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -90,8 +113,7 @@ export async function GET(req: Request) {
     const metric = searchParams.get("metric") || "";
     const groupBy = searchParams.get("groupBy") || "";
     const groupValue = searchParams.get("groupValue") ?? "";
-    const start = new Date(`${date}T00:00:00+05:30`);
-    const end = new Date(`${date}T23:59:59.999+05:30`);
+    const { start, end, dateOnly } = istDayBounds(date);
 
     const dashScope = searchParams.get("scope") === "callCenter" ? "callCenter" : "field";
     if (dashScope === "callCenter" && !canSeeCallCenterUsers(s.admin)) {
@@ -110,6 +132,7 @@ export async function GET(req: Request) {
         faceRegisteredUsers: 0,
         activeToday: 0,
         liveNow: 0,
+        leaveOnDate: 0,
         punches: 0,
         pendingPunchIn: 0,
         pendingFace: 0,
@@ -150,23 +173,39 @@ export async function GET(req: Request) {
       },
     });
 
-    const punches = await prisma.attendance.findMany({
-      where: {
-        punchInAt: { gte: start, lte: end },
-        user: userWhere,
-      },
-      select: {
-        userId: true,
-        punchOutAt: true,
-        punchInAt: true,
-        punchInAddress: true,
-        punchOutReason: true,
-        punchOutAddress: true,
-      },
-    });
+    const userIds = users.map((u) => u.id);
+
+    const [punches, leaveMarks] = await Promise.all([
+      prisma.attendance.findMany({
+        where: {
+          punchInAt: { gte: start, lte: end },
+          user: userWhere,
+        },
+        select: {
+          userId: true,
+          punchOutAt: true,
+          punchInAt: true,
+          punchInAddress: true,
+          punchOutReason: true,
+          punchOutAddress: true,
+        },
+      }),
+      userIds.length
+        ? prisma.dailyAttendanceMark.findMany({
+            where: {
+              date: dateOnly,
+              status: "leave",
+              userId: { in: userIds },
+            },
+            select: { userId: true, note: true },
+          })
+        : Promise.resolve([]),
+    ]);
 
     const punchedIds = new Set(punches.map((p) => p.userId));
     const liveIds = new Set(punches.filter((p) => !p.punchOutAt).map((p) => p.userId));
+    const leaveIds = new Set(leaveMarks.map((m) => m.userId));
+    const leaveNoteByUser = new Map(leaveMarks.map((m) => [m.userId, m.note || ""]));
     const punchInByUser = new Map<string, Date>();
     const punchMetaByUser = new Map<
       string,
@@ -182,10 +221,11 @@ export async function GET(req: Request) {
         });
       }
     }
+
     const activeUsers = users.filter((u) => u.isActive).length;
     const faceRegisteredUsers = users.filter((u) => u.faceRegisteredAt).length;
-    // Inactive users left the organisation — do not count them as pending
-    const pendingPunchIn = users.filter((u) => u.isActive && !punchedIds.has(u.id)).length;
+    const leaveOnDate = users.filter((u) => leaveIds.has(u.id)).length;
+    const pendingPunchIn = users.filter((u) => u.isActive && !punchedIds.has(u.id) && !leaveIds.has(u.id)).length;
     const pendingFace = users.filter((u) => u.isActive && !u.faceRegisteredAt).length;
     const pendingLive = users.filter((u) => punchedIds.has(u.id) && !liveIds.has(u.id)).length;
 
@@ -196,8 +236,10 @@ export async function GET(req: Request) {
       else if (metric === "face") filtered = users.filter((u) => u.faceRegisteredAt);
       else if (metric === "live") filtered = users.filter((u) => liveIds.has(u.id));
       else if (metric === "punched") filtered = users.filter((u) => punchedIds.has(u.id));
-      else if (metric === "pendingPunchIn") filtered = users.filter((u) => u.isActive && !punchedIds.has(u.id));
-      else if (metric === "pendingFace") filtered = users.filter((u) => u.isActive && !u.faceRegisteredAt);
+      else if (metric === "leave") filtered = users.filter((u) => leaveIds.has(u.id));
+      else if (metric === "pendingPunchIn") {
+        filtered = users.filter((u) => u.isActive && !punchedIds.has(u.id) && !leaveIds.has(u.id));
+      } else if (metric === "pendingFace") filtered = users.filter((u) => u.isActive && !u.faceRegisteredAt);
       else if (metric === "pendingLive") {
         filtered = users.filter((u) => punchedIds.has(u.id) && !liveIds.has(u.id));
       }
@@ -211,40 +253,10 @@ export async function GET(req: Request) {
         }
       }
 
-      const leaveByUser = new Map<
-        string,
-        { status: "approved" | "pending"; fromDate: string; toDate: string }
-      >();
-      if (metric === "pendingPunchIn" && filtered.length) {
-        const leaves = await prisma.leaveRequest.findMany({
-          where: {
-            userId: { in: filtered.map((u) => u.id) },
-            status: { in: ["pending", "approved"] },
-            // Inclusive range: leave 27→30 shows on every dashboard date 27,28,29,30
-            fromDate: { lte: end },
-            toDate: { gte: start },
-          },
-          select: { userId: true, status: true, fromDate: true, toDate: true },
-          orderBy: { fromDate: "asc" },
-        });
-        for (const l of leaves) {
-          const cur = leaveByUser.get(l.userId);
-          const next = {
-            status: (l.status === "approved" ? "approved" : "pending") as "approved" | "pending",
-            fromDate: l.fromDate.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }),
-            toDate: l.toDate.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }),
-          };
-          // Prefer approved; otherwise keep first matching leave for this date
-          if (!cur || (next.status === "approved" && cur.status !== "approved")) {
-            leaveByUser.set(l.userId, next);
-          }
-        }
-      }
-
       const rows = filtered
         .map((u) => {
           const meta = punchMetaByUser.get(u.id);
-          const leave = leaveByUser.get(u.id) || null;
+          const onLeaveToday = leaveIds.has(u.id);
           return {
             id: u.id,
             name: u.name,
@@ -264,10 +276,8 @@ export async function GET(req: Request) {
             punchInAddress: meta?.punchInAddress || null,
             punchOutReason: meta?.punchOutReason || null,
             punchOutAddress: meta?.punchOutAddress || null,
-            onLeaveToday: Boolean(leave),
-            leaveTodayStatus: leave?.status || null,
-            leaveFromDate: leave?.fromDate || null,
-            leaveToDate: leave?.toDate || null,
+            onLeaveToday,
+            leaveRemark: onLeaveToday ? leaveNoteByUser.get(u.id) || "Marked leave on Attendance" : null,
           };
         })
         .sort((a, b) => a.name.localeCompare(b.name));
@@ -291,21 +301,9 @@ export async function GET(req: Request) {
           faceRegistered: Boolean(u.faceRegisteredAt),
         })),
         punchedIds,
-        liveIds
+        liveIds,
+        leaveIds
       );
-
-    const emptyGroup = (name: string) => ({
-      name,
-      users: 0,
-      active: 0,
-      inactive: 0,
-      faceRegistered: 0,
-      punched: 0,
-      live: 0,
-      pendingPunchIn: 0,
-      pendingFace: 0,
-      pendingLive: 0,
-    });
 
     const byCallCenterSite = CALL_CENTER_SITE_NAMES.map((site) => {
       const siteUsers = users.filter((u) => callCenterSiteName(u.sectorAllotted) === site);
@@ -317,7 +315,8 @@ export async function GET(req: Request) {
           faceRegistered: Boolean(u.faceRegisteredAt),
         })),
         punchedIds,
-        liveIds
+        liveIds,
+        leaveIds
       )[0];
       return row || emptyGroup(site);
     });
@@ -330,6 +329,7 @@ export async function GET(req: Request) {
       faceRegisteredUsers,
       activeToday: punchedIds.size,
       liveNow: liveIds.size,
+      leaveOnDate,
       punches: punches.length,
       pendingPunchIn,
       pendingFace,
