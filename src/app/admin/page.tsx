@@ -577,7 +577,7 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
           className="bg-sky-600"
           label="Leave"
           value={data?.leaveOnDate || 0}
-          hint="Marked leave on Attendance"
+          hint="Marked leave (not counted in Live/Punched)"
           active={metric === "leave" && !groupFilter}
           onClick={() => loadMetric("leave")}
         />

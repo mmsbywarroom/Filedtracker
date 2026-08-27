@@ -70,3 +70,35 @@ export async function removeAdminPresentPunch(opts: { userId: string; start: Dat
     },
   });
 }
+
+/** Close open punch when admin marks Leave — user must not stay Live. */
+export async function closeOpenPunchForAdminLeave(opts: {
+  userId: string;
+  start: Date;
+  end: Date;
+  adminLabel: string;
+  note: string;
+}) {
+  const open = await prisma.attendance.findFirst({
+    where: {
+      userId: opts.userId,
+      punchInAt: { gte: opts.start, lte: opts.end },
+      punchOutAt: null,
+    },
+    select: { id: true, punchInLat: true, punchInLng: true },
+  });
+  if (!open) return null;
+
+  const when = new Date();
+  return prisma.attendance.update({
+    where: { id: open.id },
+    data: {
+      punchOutAt: when,
+      punchOutLat: open.punchInLat,
+      punchOutLng: open.punchInLng,
+      punchOutAddress: `Closed for leave by admin · ${opts.adminLabel}. ${opts.note}`,
+      punchOutReason: "admin_leave",
+    },
+    select: { id: true },
+  });
+}

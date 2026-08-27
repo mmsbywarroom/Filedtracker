@@ -15,7 +15,7 @@ import {
   istDateString,
   statusLabel,
 } from "@/lib/dailyAttendance";
-import { adminPresentLabel, adminPresentRemark, ensureAdminPresentPunch, removeAdminPresentPunch } from "@/lib/adminPresentPunch";
+import { adminPresentLabel, adminPresentRemark, ensureAdminPresentPunch, removeAdminPresentPunch, closeOpenPunchForAdminLeave } from "@/lib/adminPresentPunch";
 
 export async function GET(req: Request) {
   const s = await requireAdmin();
@@ -208,6 +208,15 @@ export async function PATCH(req: Request) {
     await ensureAdminPresentPunch({
       userId,
       dateYmd: date,
+      start,
+      end,
+      adminLabel,
+      note,
+    });
+  } else if (status === "leave") {
+    await removeAdminPresentPunch({ userId, start, end });
+    await closeOpenPunchForAdminLeave({
+      userId,
       start,
       end,
       adminLabel,

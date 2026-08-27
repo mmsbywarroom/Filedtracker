@@ -47,12 +47,16 @@ function groupCounts(
     else row.inactive += 1;
     if (u.faceRegistered) row.faceRegistered += 1;
     else if (u.isActive) row.pendingFace += 1;
-    if (leaveIds.has(u.id)) row.leave += 1;
-    if (punchedIds.has(u.id)) row.punched += 1;
-    // Leave (Attendance mark) and inactive are excluded from pending punch-in
-    else if (u.isActive && !leaveIds.has(u.id)) row.pendingPunchIn += 1;
-    if (liveIds.has(u.id)) row.live += 1;
-    else if (punchedIds.has(u.id)) row.pendingLive += 1;
+
+    // Attendance Leave mark wins for the day — do not also count Live / Punched
+    if (leaveIds.has(u.id)) {
+      row.leave += 1;
+    } else {
+      if (punchedIds.has(u.id)) row.punched += 1;
+      else if (u.isActive) row.pendingPunchIn += 1;
+      if (liveIds.has(u.id)) row.live += 1;
+      else if (punchedIds.has(u.id)) row.pendingLive += 1;
+    }
     map.set(name, row);
   }
   return Array.from(map.values()).sort((a, b) => b.users - a.users);
@@ -225,23 +229,26 @@ export async function GET(req: Request) {
     const activeUsers = users.filter((u) => u.isActive).length;
     const faceRegisteredUsers = users.filter((u) => u.faceRegisteredAt).length;
     const leaveOnDate = users.filter((u) => leaveIds.has(u.id)).length;
+    // Leave overrides punch/live for dashboard day counts (no double counting)
+    const punchedNotLeave = users.filter((u) => punchedIds.has(u.id) && !leaveIds.has(u.id));
+    const liveNotLeave = users.filter((u) => liveIds.has(u.id) && !leaveIds.has(u.id));
     const pendingPunchIn = users.filter((u) => u.isActive && !punchedIds.has(u.id) && !leaveIds.has(u.id)).length;
     const pendingFace = users.filter((u) => u.isActive && !u.faceRegisteredAt).length;
-    const pendingLive = users.filter((u) => punchedIds.has(u.id) && !liveIds.has(u.id)).length;
+    const pendingLive = punchedNotLeave.filter((u) => !liveIds.has(u.id)).length;
 
     if (metric && METRICS.has(metric)) {
       let filtered = users;
       if (metric === "active") filtered = users.filter((u) => u.isActive);
       else if (metric === "inactive") filtered = users.filter((u) => !u.isActive);
       else if (metric === "face") filtered = users.filter((u) => u.faceRegisteredAt);
-      else if (metric === "live") filtered = users.filter((u) => liveIds.has(u.id));
-      else if (metric === "punched") filtered = users.filter((u) => punchedIds.has(u.id));
+      else if (metric === "live") filtered = users.filter((u) => liveIds.has(u.id) && !leaveIds.has(u.id));
+      else if (metric === "punched") filtered = users.filter((u) => punchedIds.has(u.id) && !leaveIds.has(u.id));
       else if (metric === "leave") filtered = users.filter((u) => leaveIds.has(u.id));
       else if (metric === "pendingPunchIn") {
         filtered = users.filter((u) => u.isActive && !punchedIds.has(u.id) && !leaveIds.has(u.id));
       } else if (metric === "pendingFace") filtered = users.filter((u) => u.isActive && !u.faceRegisteredAt);
       else if (metric === "pendingLive") {
-        filtered = users.filter((u) => punchedIds.has(u.id) && !liveIds.has(u.id));
+        filtered = users.filter((u) => punchedIds.has(u.id) && !liveIds.has(u.id) && !leaveIds.has(u.id));
       }
 
       if (groupBy && GROUP_BY.has(groupBy)) {
@@ -327,8 +334,8 @@ export async function GET(req: Request) {
       activeUsers,
       inactiveUsers: users.length - activeUsers,
       faceRegisteredUsers,
-      activeToday: punchedIds.size,
-      liveNow: liveIds.size,
+      activeToday: punchedNotLeave.length,
+      liveNow: liveNotLeave.length,
       leaveOnDate,
       punches: punches.length,
       pendingPunchIn,
