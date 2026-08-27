@@ -6,7 +6,7 @@ import { ReactNode, useEffect, useState } from "react";
 import { BrandMark } from "@/components/BrandMark";
 import { LangToggle, useLang } from "@/lib/i18n";
 
-const SUPER_ONLY = ["/admin/create", "/admin/admins"];
+const SUPER_ONLY = ["/admin/create", "/admin/admins", "/admin/face-reset-logs"];
 
 export default function AdminShell({ children }: { children: ReactNode }) {
   const { t } = useLang();
@@ -57,7 +57,14 @@ export default function AdminShell({ children }: { children: ReactNode }) {
       : []),
     { href: "/admin/records", label: t("dailyRecords"), match: (p: string) => p.startsWith("/admin/records") },
     ...(isSuper
-      ? [{ href: "/admin/admins", label: t("admins"), match: (p: string) => p.startsWith("/admin/admins") }]
+      ? [
+          {
+            href: "/admin/face-reset-logs",
+            label: t("faceResetLogs"),
+            match: (p: string) => p.startsWith("/admin/face-reset-logs"),
+          },
+          { href: "/admin/admins", label: t("admins"), match: (p: string) => p.startsWith("/admin/admins") },
+        ]
       : []),
   ];
 

@@ -141,6 +141,13 @@ export function canManageAdmins(admin: Pick<AdminScope, "isSuper">) {
   return isSuperAdmin(admin);
 }
 
+/** Super, DLC, and Cluster admins can reset a field user's face (within scope). */
+export function canResetUserFace(admin: Pick<AdminScope, "isSuper" | "accessLevel">) {
+  if (admin.isSuper) return true;
+  const level = normalizeAccessLevel(admin.accessLevel);
+  return level === "DLC" || level === "Cluster";
+}
+
 /** Parse assemblies list from admin record (array or pipe-separated assemblyName). */
 export function adminAssemblies(admin: Pick<AdminScope, "assemblies" | "assemblyName" | "accessLevel">): string[] {
   const fromArr = (admin.assemblies || []).map((a) => cleanScope(a)).filter(Boolean);

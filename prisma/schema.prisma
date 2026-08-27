@@ -128,3 +128,22 @@ model LeaveRequest {
   @@index([userId, createdAt])
   @@index([status, createdAt])
 }
+
+/// Audit log when an admin clears a user's registered face
+model FaceResetLog {
+  id               String   @id @default(cuid())
+  userId           String
+  userName         String
+  userPhone        String
+  userDesignation  String   @default("")
+  adminId          String
+  adminName        String   @default("")
+  adminEmail       String   @default("")
+  adminAccessLevel String   @default("")
+  reason           String
+  createdAt        DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([userId])
+  @@index([adminId])
+}

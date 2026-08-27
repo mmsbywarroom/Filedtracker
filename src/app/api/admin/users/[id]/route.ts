@@ -33,13 +33,14 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
   }
-  const { clearFace, ...rest } = parsed.data;
-  const data: Record<string, unknown> = { ...rest };
-  if (clearFace) {
-    data.faceDescriptorJson = null;
-    data.faceImage = null;
-    data.faceRegisteredAt = null;
+  if (parsed.data.clearFace) {
+    return NextResponse.json(
+      { error: "Use Reset face with a reason. Face reset is logged for audit." },
+      { status: 400 }
+    );
   }
+  const { clearFace: _clearFace, ...rest } = parsed.data;
+  const data: Record<string, unknown> = { ...rest };
   if (typeof data.phone === "string") {
     const phone = normalizePhone(data.phone);
     if (!phone) return NextResponse.json({ error: "Invalid mobile number." }, { status: 400 });

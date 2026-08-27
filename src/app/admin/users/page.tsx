@@ -38,12 +38,17 @@ export default function AdminUsersPage() {
   const [face, setFace] = useState("");
   const [status, setStatus] = useState("");
   const [isSuper, setIsSuper] = useState(false);
+  const [canResetFace, setCanResetFace] = useState(false);
   const [visibleDens, setVisibleDens] = useState<string[]>(() => hierarchyDesignations());
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [csvMsg, setCsvMsg] = useState("");
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [resetTarget, setResetTarget] = useState<UserRow | null>(null);
+  const [resetReason, setResetReason] = useState("");
+  const [resetErr, setResetErr] = useState("");
+  const [resetBusy, setResetBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function load() {
@@ -63,6 +68,7 @@ export default function AdminUsersPage() {
       .then((r) => r.json())
       .then((d) => {
         setIsSuper(Boolean(d.admin?.isSuper));
+        setCanResetFace(Boolean(d.admin?.canResetUserFace));
         if (Array.isArray(d.admin?.visibleDesignations) && d.admin.visibleDesignations.length) {
           setVisibleDens(d.admin.visibleDesignations);
         }
@@ -76,14 +82,28 @@ export default function AdminUsersPage() {
     load();
   }
 
-  async function resetFace(u: UserRow) {
-    if (!confirm(`Clear face for ${u.name}? They must register face again on punch.`)) return;
-    const res = await fetch(`/api/admin/users/${u.id}`, {
-      method: "PATCH",
+  async function resetFace() {
+    if (!resetTarget) return;
+    if (resetReason.trim().length < 3) {
+      setResetErr("Reason is required (at least 3 characters).");
+      return;
+    }
+    setResetBusy(true);
+    setResetErr("");
+    const res = await fetch(`/api/admin/users/${resetTarget.id}/reset-face`, {
+      method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ clearFace: true }),
+      body: JSON.stringify({ reason: resetReason.trim() }),
     });
-    if (res.ok) load();
+    const data = await res.json().catch(() => ({}));
+    setResetBusy(false);
+    if (!res.ok) {
+      setResetErr(data.error || "Could not reset face.");
+      return;
+    }
+    setResetTarget(null);
+    setResetReason("");
+    load();
   }
 
   async function bulkDelete() {
@@ -399,6 +419,19 @@ export default function AdminUsersPage() {
                       <Link href={`/admin/users/${u.id}`} className="rounded-lg bg-teal/10 px-2.5 py-1 text-xs font-semibold text-teal">
                         Footprint
                       </Link>
+                      {canResetFace && u.faceRegistered && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setResetTarget(u);
+                            setResetReason("");
+                            setResetErr("");
+                          }}
+                          className="rounded-lg bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800"
+                        >
+                          Reset face
+                        </button>
+                      )}
                       {isSuper && (
                         <>
                           <Link
@@ -407,15 +440,6 @@ export default function AdminUsersPage() {
                           >
                             Edit
                           </Link>
-                          {u.faceRegistered && (
-                            <button
-                              type="button"
-                              onClick={() => resetFace(u)}
-                              className="rounded-lg bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800"
-                            >
-                              Reset face
-                            </button>
-                          )}
                           <button onClick={() => remove(u.id)} className="rounded-lg bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-600">
                             Delete
                           </button>
@@ -443,6 +467,51 @@ export default function AdminUsersPage() {
           />
         )}
       </section>
+
+      {resetTarget && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-navy/40 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-card">
+            <h2 className="text-lg font-semibold">Reset face</h2>
+            <p className="mt-1 text-sm text-navy/60">
+              Clear face for <span className="font-semibold">{resetTarget.name}</span>. They must register again on punch.
+            </p>
+            <label className="mt-4 block text-xs font-medium text-navy/55">
+              Reason (required)
+              <textarea
+                value={resetReason}
+                onChange={(e) => setResetReason(e.target.value)}
+                rows={3}
+                placeholder="Why are you resetting this face?"
+                className="mt-1 w-full rounded-xl border border-navy/10 px-3 py-2 text-sm"
+                disabled={resetBusy}
+              />
+            </label>
+            {resetErr && <p className="mt-2 text-sm text-red-600">{resetErr}</p>}
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                disabled={resetBusy}
+                onClick={() => {
+                  setResetTarget(null);
+                  setResetReason("");
+                  setResetErr("");
+                }}
+                className="rounded-xl border border-navy/10 px-4 py-2 text-sm font-semibold text-navy/70"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={resetBusy}
+                onClick={() => void resetFace()}
+                className="rounded-xl bg-amber-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {resetBusy ? "Saving…" : "Confirm reset"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

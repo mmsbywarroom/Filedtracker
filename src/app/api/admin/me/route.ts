@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
-import { canManageAdmins, canSeeCallCenterUsers, isSuperAdmin, visibleDesignationsFor } from "@/lib/hierarchy";
+import { canManageAdmins, canResetUserFace, canSeeCallCenterUsers, isSuperAdmin, visibleDesignationsFor } from "@/lib/hierarchy";
 
 export async function GET() {
   const s = await requireAdmin();
@@ -11,6 +11,7 @@ export async function GET() {
       isSuper: isSuperAdmin(s.admin),
       canSeeCallCenter: canSeeCallCenterUsers(s.admin),
       canManageAdmins: canManageAdmins(s.admin),
+      canResetUserFace: canResetUserFace(s.admin),
       visibleDesignations: visibleDesignationsFor(s.admin),
     },
   });
