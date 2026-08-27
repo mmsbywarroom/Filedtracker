@@ -211,23 +211,40 @@ export async function GET(req: Request) {
         }
       }
 
-      const leaveUserIds = new Set<string>();
+      const leaveByUser = new Map<
+        string,
+        { status: "approved" | "pending"; fromDate: string; toDate: string }
+      >();
       if (metric === "pendingPunchIn" && filtered.length) {
         const leaves = await prisma.leaveRequest.findMany({
           where: {
             userId: { in: filtered.map((u) => u.id) },
-            status: "approved",
+            status: { in: ["pending", "approved"] },
+            // Inclusive range: leave 27→30 shows on every dashboard date 27,28,29,30
             fromDate: { lte: end },
             toDate: { gte: start },
           },
-          select: { userId: true },
+          select: { userId: true, status: true, fromDate: true, toDate: true },
+          orderBy: { fromDate: "asc" },
         });
-        for (const l of leaves) leaveUserIds.add(l.userId);
+        for (const l of leaves) {
+          const cur = leaveByUser.get(l.userId);
+          const next = {
+            status: (l.status === "approved" ? "approved" : "pending") as "approved" | "pending",
+            fromDate: l.fromDate.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }),
+            toDate: l.toDate.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }),
+          };
+          // Prefer approved; otherwise keep first matching leave for this date
+          if (!cur || (next.status === "approved" && cur.status !== "approved")) {
+            leaveByUser.set(l.userId, next);
+          }
+        }
       }
 
       const rows = filtered
         .map((u) => {
           const meta = punchMetaByUser.get(u.id);
+          const leave = leaveByUser.get(u.id) || null;
           return {
             id: u.id,
             name: u.name,
@@ -247,7 +264,10 @@ export async function GET(req: Request) {
             punchInAddress: meta?.punchInAddress || null,
             punchOutReason: meta?.punchOutReason || null,
             punchOutAddress: meta?.punchOutAddress || null,
-            onLeaveToday: leaveUserIds.has(u.id),
+            onLeaveToday: Boolean(leave),
+            leaveTodayStatus: leave?.status || null,
+            leaveFromDate: leave?.fromDate || null,
+            leaveToDate: leave?.toDate || null,
           };
         })
         .sort((a, b) => a.name.localeCompare(b.name));

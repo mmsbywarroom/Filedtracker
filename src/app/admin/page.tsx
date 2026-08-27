@@ -57,6 +57,9 @@ type DetailRow = {
   punchOutReason?: string | null;
   punchOutAddress?: string | null;
   onLeaveToday?: boolean;
+  leaveTodayStatus?: "approved" | "pending" | null;
+  leaveFromDate?: string | null;
+  leaveToDate?: string | null;
 };
 
 type Metric =
@@ -107,6 +110,28 @@ function officeRows(sites: Group[] | undefined, name: string): Group[] {
       pendingLive: 0,
     },
   ];
+}
+
+function leaveTodayLabel(status?: "approved" | "pending" | null, from?: string | null, to?: string | null) {
+  if (!status) return "";
+  const range = leaveRangeLabel(from, to);
+  if (status === "approved") return range ? `On leave today (${range})` : "On leave today";
+  return range ? `On leave today (awaiting approval, ${range})` : "On leave today (awaiting approval)";
+}
+
+function leaveRangeLabel(from?: string | null, to?: string | null) {
+  if (!from || !to) return "";
+  const fmt = (ymd: string) => {
+    const [y, m, d] = ymd.split("-").map(Number);
+    if (!y || !m || !d) return ymd;
+    return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-IN", {
+      day: "numeric",
+      month: "short",
+      timeZone: "UTC",
+    });
+  };
+  if (from === to) return fmt(from);
+  return `${fmt(from)} – ${fmt(to)}`;
 }
 
 function formatKolkata(iso: string | null | undefined) {
@@ -161,7 +186,7 @@ function buildDetailExport(
     if (metric === "face" || metric === "pendingFace") {
       row.push(r.faceRegisteredAt ? formatKolkata(r.faceRegisteredAt) : "Not registered");
     } else if (metric === "pendingPunchIn") {
-      row.push(r.onLeaveToday ? "On leave today" : "—");
+      row.push(leaveTodayLabel(r.leaveTodayStatus, r.leaveFromDate, r.leaveToDate) || "—");
       row.push(formatKolkata(r.punchInAt));
     } else if (metric === "live" || metric === "punched" || metric === "pendingLive") {
       row.push(formatKolkata(r.punchInAt));
@@ -715,10 +740,26 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
                       )}
                       {metric === "pendingPunchIn" && (
                         <td className="px-4 py-2">
-                          {r.onLeaveToday ? (
-                            <span className="rounded-full bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-800">
-                              On leave today
-                            </span>
+                          {r.leaveTodayStatus === "approved" || r.leaveTodayStatus === "pending" ? (
+                            <div>
+                              <span
+                                className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                                  r.leaveTodayStatus === "approved"
+                                    ? "bg-violet-50 text-violet-800"
+                                    : "bg-amber-50 text-amber-800"
+                                }`}
+                              >
+                                On leave today
+                              </span>
+                              {leaveRangeLabel(r.leaveFromDate, r.leaveToDate) ? (
+                                <p className="mt-1 text-[11px] text-navy/60">
+                                  {leaveRangeLabel(r.leaveFromDate, r.leaveToDate)}
+                                </p>
+                              ) : null}
+                              {r.leaveTodayStatus === "pending" ? (
+                                <p className="mt-0.5 text-[11px] text-amber-700">Awaiting approval</p>
+                              ) : null}
+                            </div>
                           ) : (
                             <span className="text-xs text-navy/40">—</span>
                           )}
