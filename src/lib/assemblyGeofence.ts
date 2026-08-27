@@ -2,7 +2,7 @@ import { readFileSync } from "fs";
 import { join } from "path";
 import { haversineMeters } from "@/lib/utils";
 
-export const ASSEMBLY_BUFFER_METERS = Number(process.env.ASSEMBLY_GEOFENCE_BUFFER_M || 200);
+export const ASSEMBLY_BUFFER_METERS = Number(process.env.ASSEMBLY_GEOFENCE_BUFFER_M || 500);
 export const ASSEMBLY_GEOFENCE_ENABLED = process.env.ASSEMBLY_GEOFENCE_ENABLED !== "false";
 
 type Ring = number[][];
