@@ -43,6 +43,7 @@ export default function AdminUsersPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [csvMsg, setCsvMsg] = useState("");
+  const [csvErrors, setCsvErrors] = useState<{ row: number; error: string }[]>([]);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [bulkBusy, setBulkBusy] = useState(false);
   const [resetTarget, setResetTarget] = useState<UserRow | null>(null);
@@ -139,17 +140,21 @@ export default function AdminUsersPage() {
 
   async function uploadCsv(file: File) {
     setCsvMsg("Uploading…");
+    setCsvErrors([]);
     const fd = new FormData();
     fd.append("file", file);
     const res = await fetch("/api/admin/users/csv", { method: "POST", body: fd });
     const data = await res.json();
     if (!res.ok) {
       setCsvMsg(data.error || "CSV upload failed");
+      setCsvErrors([]);
       return;
     }
-    setCsvMsg(
-      `Created ${data.created}, updated ${data.updated}${data.errors?.length ? `, ${data.errors.length} row errors` : ""}`
-    );
+    const errs = Array.isArray(data.errors) ? data.errors : [];
+    setCsvErrors(errs);
+    const parts = [`Created ${data.created || 0}`, `updated ${data.updated || 0}`];
+    if (errs.length) parts.push(`${errs.length} row error${errs.length === 1 ? "" : "s"}`);
+    setCsvMsg(parts.join(", "));
     load();
   }
 
@@ -251,7 +256,20 @@ export default function AdminUsersPage() {
         )}
       </div>
 
-      {csvMsg && <p className="mb-3 rounded-xl bg-white px-4 py-2 text-sm text-navy/70 shadow-card">{csvMsg}</p>}
+      {csvMsg && (
+        <div className="mb-3 rounded-xl bg-white px-4 py-3 text-sm shadow-card">
+          <p className={`font-medium ${csvErrors.length ? "text-amber-800" : "text-navy/70"}`}>{csvMsg}</p>
+          {csvErrors.length > 0 && (
+            <ul className="mt-2 max-h-48 list-disc space-y-1 overflow-auto pl-5 text-xs text-rose-700">
+              {csvErrors.map((e, i) => (
+                <li key={`${e.row}-${i}`}>
+                  <span className="font-semibold">Row {e.row}:</span> {e.error}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
 
       <div className="mb-4 grid gap-3 rounded-2xl bg-white p-4 shadow-card md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8">
         <input

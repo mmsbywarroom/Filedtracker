@@ -28,6 +28,9 @@ type Dash = {
   activeToday: number;
   liveNow: number;
   leaveOnDate?: number;
+  presentOnDate?: number;
+  halfDayOnDate?: number;
+  absentOnDate?: number;
   punches: number;
   pendingPunchIn: number;
   pendingFace: number;
@@ -60,6 +63,8 @@ type DetailRow = {
   punchOutAddress?: string | null;
   onLeaveToday?: boolean;
   leaveRemark?: string | null;
+  dayStatus?: string;
+  dayStatusLabel?: string | null;
 };
 
 type Metric =
@@ -70,6 +75,9 @@ type Metric =
   | "live"
   | "punched"
   | "leave"
+  | "present"
+  | "halfDay"
+  | "absent"
   | "pendingPunchIn"
   | "pendingFace"
   | "pendingLive";
@@ -83,6 +91,9 @@ const METRIC_LABELS: Record<Metric, string> = {
   live: "Live now",
   punched: "Punched today",
   leave: "Leave",
+  present: "Present",
+  halfDay: "Half-day",
+  absent: "Absent",
   pendingPunchIn: "Pending punch-in",
   pendingFace: "Pending face recog",
   pendingLive: "Pending live",
@@ -147,7 +158,9 @@ function buildDetailExport(
   const headers = ["Name", "Phone", "Designation", "Assembly", "Sector", "Zone", "District"];
   if (metric === "face" || metric === "pendingFace") headers.push("Face registered");
   else if (metric === "leave") headers.push("Leave remark");
-  else if (metric === "pendingPunchIn") {
+  else if (metric === "present" || metric === "halfDay" || metric === "absent") {
+    headers.push("Punch in", "Day status");
+  } else if (metric === "pendingPunchIn") {
     headers.push("Punch in");
   } else if (metric === "live" || metric === "punched" || metric === "pendingLive") {
     headers.push("Punch in");
@@ -169,6 +182,8 @@ function buildDetailExport(
       row.push(r.faceRegisteredAt ? formatKolkata(r.faceRegisteredAt) : "Not registered");
     } else if (metric === "leave") {
       row.push(r.leaveRemark || "Marked leave on Attendance");
+    } else if (metric === "present" || metric === "halfDay" || metric === "absent") {
+      row.push(formatKolkata(r.punchInAt), r.dayStatusLabel || METRIC_LABELS[metric]);
     } else if (metric === "pendingPunchIn") {
       row.push(formatKolkata(r.punchInAt));
     } else if (metric === "live" || metric === "punched" || metric === "pendingLive") {
@@ -582,6 +597,30 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
           onClick={() => loadMetric("leave")}
         />
         <Stat
+          className="bg-emerald-700"
+          label="Present"
+          value={data?.presentOnDate || 0}
+          hint="Punch by 10:30 · 6–12h on duty"
+          active={metric === "present" && !groupFilter}
+          onClick={() => loadMetric("present")}
+        />
+        <Stat
+          className="bg-amber-500"
+          label="Half-day"
+          value={data?.halfDayOnDate || 0}
+          hint="Punch after 10:30, by 1:00 PM"
+          active={metric === "halfDay" && !groupFilter}
+          onClick={() => loadMetric("halfDay")}
+        />
+        <Stat
+          className="bg-red-600"
+          label="Absent"
+          value={data?.absentOnDate || 0}
+          hint="No punch, after 1:00, or under 6h"
+          active={metric === "absent" && !groupFilter}
+          onClick={() => loadMetric("absent")}
+        />
+        <Stat
           className="bg-amber-600"
           label="Pending punchin"
           value={data?.pendingPunchIn || 0}
@@ -756,7 +795,13 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
                     {(metric === "live" ||
                       metric === "punched" ||
                       metric === "pendingPunchIn" ||
-                      metric === "pendingLive") && <th className="px-4 py-2">Punch in</th>}
+                      metric === "pendingLive" ||
+                      metric === "present" ||
+                      metric === "halfDay" ||
+                      metric === "absent") && <th className="px-4 py-2">Punch in</th>}
+                    {(metric === "present" || metric === "halfDay" || metric === "absent") && (
+                      <th className="px-4 py-2">Day status</th>
+                    )}
                     {metric === "punched" && <th className="px-4 py-2">Remark</th>}
                     {(metric === "live" || metric === "pendingLive") && <th className="px-4 py-2">Status</th>}
                   </tr>
@@ -792,11 +837,29 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
                       {(metric === "live" ||
                         metric === "punched" ||
                         metric === "pendingPunchIn" ||
-                        metric === "pendingLive") && (
+                        metric === "pendingLive" ||
+                        metric === "present" ||
+                        metric === "halfDay" ||
+                        metric === "absent") && (
                         <td className="px-4 py-2 text-xs">
                           {r.punchInAt
                             ? new Date(r.punchInAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
                             : "—"}
+                        </td>
+                      )}
+                      {(metric === "present" || metric === "halfDay" || metric === "absent") && (
+                        <td className="px-4 py-2">
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                              r.dayStatus === "present"
+                                ? "bg-emerald-50 text-emerald-700"
+                                : r.dayStatus === "half_day"
+                                  ? "bg-amber-50 text-amber-800"
+                                  : "bg-red-50 text-red-700"
+                            }`}
+                          >
+                            {r.dayStatusLabel || METRIC_LABELS[metric]}
+                          </span>
                         </td>
                       )}
                       {metric === "punched" && (

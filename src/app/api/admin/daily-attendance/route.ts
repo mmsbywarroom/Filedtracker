@@ -4,15 +4,11 @@ import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canSeeUser, userScopeWhere } from "@/lib/hierarchy";
 import {
-  ATTENDANCE_STATUSES,
-  ABSENT_MAX_HOURS,
   PRESENT_MIN_HOURS,
-  PRESENT_MAX_HOURS,
-  autoAttendanceStatus,
-  autoReason,
   hoursWorkedOnDay,
   istDayBounds,
   istDateString,
+  resolveDayAttendanceStatus,
   statusLabel,
 } from "@/lib/dailyAttendance";
 import { adminPresentLabel, adminPresentRemark, ensureAdminPresentPunch, removeAdminPresentPunch, closeOpenPunchForAdminLeave } from "@/lib/adminPresentPunch";
@@ -24,6 +20,11 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const date = searchParams.get("date") || istDateString();
   const statusFilter = searchParams.get("status") || "";
+  const zoneFilter = (searchParams.get("zone") || "").trim();
+  const districtFilter = (searchParams.get("district") || "").trim();
+  const assemblyFilter = (searchParams.get("assembly") || "").trim();
+  const designationFilter = (searchParams.get("designation") || "").trim();
+  const sectorFilter = (searchParams.get("sector") || "").trim().toLowerCase();
   const q = (searchParams.get("q") || "").trim().toLowerCase();
   const { start, end, dateOnly } = istDayBounds(date);
   const asOf = date === istDateString() ? new Date() : end;
@@ -45,7 +46,11 @@ export async function GET(req: Request) {
 
   const ids = users.map((u) => u.id);
   if (!ids.length) {
-    return NextResponse.json({ date, rows: [], summary: { present: 0, absent: 0, leave: 0 } });
+    return NextResponse.json({
+      date,
+      rows: [],
+      summary: { present: 0, halfDay: 0, absent: 0, leave: 0, total: 0 },
+    });
   }
 
   const [punches, leaves, marks] = await Promise.all([
@@ -77,6 +82,7 @@ export async function GET(req: Request) {
   const markByUser = new Map(marks.map((m) => [m.userId, m]));
 
   let present = 0;
+  let halfDay = 0;
   let absent = 0;
   let leave = 0;
 
@@ -84,34 +90,17 @@ export async function GET(req: Request) {
     .filter((u) => canSeeUser(s.admin, u))
     .map((u) => {
       const sessions = punchesByUser.get(u.id) || [];
-      const hours = hoursWorkedOnDay(sessions, asOf);
-      const hadPunch = sessions.length > 0;
-      const onLeaveToday = onLeave.has(u.id);
       const manual = markByUser.get(u.id);
+      const resolved = resolveDayAttendanceStatus({
+        sessions,
+        asOf,
+        onApprovedLeave: onLeave.has(u.id),
+        manual: manual
+          ? { status: manual.status, source: manual.source, note: manual.note }
+          : null,
+      });
+      const { status, source, reason, hours, firstIn } = resolved;
 
-      let status: (typeof ATTENDANCE_STATUSES)[number];
-      let source: "auto" | "manual";
-      let reason: string;
-
-      if (manual?.source === "manual") {
-        status = manual.status as (typeof ATTENDANCE_STATUSES)[number];
-        source = "manual";
-        reason = manual.note || "Marked manually by admin";
-      } else if (onLeaveToday) {
-        status = "leave";
-        source = "auto";
-        reason = autoReason("leave", hours, hadPunch, true);
-      } else {
-        status = autoAttendanceStatus(hours, hadPunch);
-        source = "auto";
-        reason = autoReason(status, hours, hadPunch, false);
-      }
-
-      if (status === "present") present += 1;
-      else if (status === "leave") leave += 1;
-      else absent += 1;
-
-      const firstIn = sessions.length ? sessions.reduce((a, b) => (a.punchInAt < b.punchInAt ? a : b)).punchInAt : null;
       const lastOut = sessions.length
         ? sessions
             .map((x) => x.punchOutAt)
@@ -140,22 +129,37 @@ export async function GET(req: Request) {
     });
 
   const rows = allRows.filter((r) => {
-      if (statusFilter && r.status !== statusFilter) return false;
-      if (q) {
-        const text = [r.name, r.phone, r.assemblyName, r.designation, r.zone, r.district].join(" ").toLowerCase();
-        if (!text.includes(q)) return false;
-      }
-      return true;
-    });
+    if (zoneFilter && r.zone !== zoneFilter) return false;
+    if (districtFilter && r.district !== districtFilter) return false;
+    if (assemblyFilter && r.assemblyName !== assemblyFilter) return false;
+    if (designationFilter && r.designation !== designationFilter) return false;
+    if (sectorFilter && !(r.sectorAllotted || "").toLowerCase().includes(sectorFilter)) return false;
+    if (statusFilter && r.status !== statusFilter) return false;
+    if (q) {
+      const text = [r.name, r.phone, r.assemblyName, r.designation, r.zone, r.district, r.sectorAllotted]
+        .join(" ")
+        .toLowerCase();
+      if (!text.includes(q)) return false;
+    }
+    return true;
+  });
+
+  for (const r of rows) {
+    if (r.status === "present") present += 1;
+    else if (r.status === "half_day") halfDay += 1;
+    else if (r.status === "leave") leave += 1;
+    else absent += 1;
+  }
 
   return NextResponse.json({
     date,
     rows,
-    summary: { present, absent, leave, total: allRows.length },
+    summary: { present, halfDay, absent, leave, total: rows.length },
     rules: {
-      absent: `No punch-in, or ≤ ${ABSENT_MAX_HOURS} hours punched`,
-      present: `${PRESENT_MIN_HOURS}–${PRESENT_MAX_HOURS} hours punched (or > ${PRESENT_MAX_HOURS}h)`,
-      leave: "Approved leave on this date",
+      present: `Punch in by 10:30 AM and stay on duty 6–12 hours`,
+      halfDay: `Punch in after 10:30 AM and by 1:00 PM`,
+      absent: `No punch-in, punch after 1:00 PM, or early punch with under ${PRESENT_MIN_HOURS}h`,
+      leave: "Approved leave or marked leave on Attendance",
     },
   });
 }
@@ -163,7 +167,7 @@ export async function GET(req: Request) {
 const patchSchema = z.object({
   userId: z.string().min(1),
   date: z.string().min(8),
-  status: z.enum(["present", "absent", "leave"]),
+  status: z.enum(["present", "half_day", "absent", "leave"]),
   note: z.string().trim().min(3, "Reason is required (at least 3 characters).").max(200),
 });
 

@@ -3,7 +3,12 @@ import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canSeeCallCenterUsers, userScopeWhere, visibleDesignationsFor } from "@/lib/hierarchy";
 import { CALL_CENTER_SITE_NAMES, callCenterSiteName } from "@/lib/callCenterGeofence";
-import { istDayBounds } from "@/lib/dailyAttendance";
+import {
+  istDateString,
+  istDayBounds,
+  resolveDayAttendanceStatus,
+  type AttendanceStatus,
+} from "@/lib/dailyAttendance";
 
 function groupCounts(
   users: { id: string; key: string; isActive: boolean; faceRegistered: boolean }[],
@@ -70,6 +75,9 @@ const METRICS = new Set([
   "live",
   "punched",
   "leave",
+  "present",
+  "halfDay",
+  "absent",
   "pendingPunchIn",
   "pendingFace",
   "pendingLive",
@@ -106,6 +114,34 @@ function emptyGroup(name: string) {
   };
 }
 
+function emptyDash(date: string) {
+  return {
+    date,
+    totalUsers: 0,
+    activeUsers: 0,
+    inactiveUsers: 0,
+    faceRegisteredUsers: 0,
+    activeToday: 0,
+    liveNow: 0,
+    leaveOnDate: 0,
+    presentOnDate: 0,
+    halfDayOnDate: 0,
+    absentOnDate: 0,
+    punches: 0,
+    pendingPunchIn: 0,
+    pendingFace: 0,
+    pendingLive: 0,
+    byDesignation: [],
+    byZone: [],
+    byDistrict: [],
+    byAssembly: [],
+    byCluster: [],
+    byCallCenterSite: [],
+    rows: [],
+    count: 0,
+  };
+}
+
 export async function GET(req: Request) {
   const s = await requireAdmin();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -118,6 +154,7 @@ export async function GET(req: Request) {
     const groupBy = searchParams.get("groupBy") || "";
     const groupValue = searchParams.get("groupValue") ?? "";
     const { start, end, dateOnly } = istDayBounds(date);
+    const asOf = date === istDateString() ? new Date() : end;
 
     const dashScope = searchParams.get("scope") === "callCenter" ? "callCenter" : "field";
     if (dashScope === "callCenter" && !canSeeCallCenterUsers(s.admin)) {
@@ -128,28 +165,7 @@ export async function GET(req: Request) {
       dashScope === "callCenter" ? d === "Call Center" : d !== "Call Center"
     );
     if (designation && !dens.includes(designation)) {
-      return NextResponse.json({
-        date,
-        totalUsers: 0,
-        activeUsers: 0,
-        inactiveUsers: 0,
-        faceRegisteredUsers: 0,
-        activeToday: 0,
-        liveNow: 0,
-        leaveOnDate: 0,
-        punches: 0,
-        pendingPunchIn: 0,
-        pendingFace: 0,
-        pendingLive: 0,
-        byDesignation: [],
-        byZone: [],
-        byDistrict: [],
-        byAssembly: [],
-        byCluster: [],
-        byCallCenterSite: [],
-        rows: [],
-        count: 0,
-      });
+      return NextResponse.json(emptyDash(date));
     }
 
     const userWhere = {
@@ -179,7 +195,7 @@ export async function GET(req: Request) {
 
     const userIds = users.map((u) => u.id);
 
-    const [punches, leaveMarks] = await Promise.all([
+    const [punches, leaveMarks, allMarks, approvedLeaves] = await Promise.all([
       prisma.attendance.findMany({
         where: {
           punchInAt: { gte: start, lte: end },
@@ -204,19 +220,45 @@ export async function GET(req: Request) {
             select: { userId: true, note: true },
           })
         : Promise.resolve([]),
+      userIds.length
+        ? prisma.dailyAttendanceMark.findMany({
+            where: { date: dateOnly, userId: { in: userIds } },
+            select: { userId: true, status: true, source: true, note: true },
+          })
+        : Promise.resolve([]),
+      userIds.length
+        ? prisma.leaveRequest.findMany({
+            where: {
+              userId: { in: userIds },
+              status: "approved",
+              fromDate: { lte: end },
+              toDate: { gte: start },
+            },
+            select: { userId: true },
+          })
+        : Promise.resolve([]),
     ]);
 
     const punchedIds = new Set(punches.map((p) => p.userId));
     const liveIds = new Set(punches.filter((p) => !p.punchOutAt).map((p) => p.userId));
+    // Dashboard Leave card = Attendance leave marks (exclusive with Live/Punched)
     const leaveIds = new Set(leaveMarks.map((m) => m.userId));
     const leaveNoteByUser = new Map(leaveMarks.map((m) => [m.userId, m.note || ""]));
+    const markByUser = new Map(allMarks.map((m) => [m.userId, m]));
+    const approvedLeaveIds = new Set(approvedLeaves.map((l) => l.userId));
+
+    const punchesByUser = new Map<string, { punchInAt: Date; punchOutAt: Date | null }[]>();
     const punchInByUser = new Map<string, Date>();
     const punchMetaByUser = new Map<
       string,
       { punchInAddress: string | null; punchOutReason: string | null; punchOutAddress: string | null }
     >();
     for (const p of punches) {
-      if (!punchInByUser.has(p.userId)) {
+      const list = punchesByUser.get(p.userId) || [];
+      list.push({ punchInAt: p.punchInAt, punchOutAt: p.punchOutAt });
+      punchesByUser.set(p.userId, list);
+      const prev = punchInByUser.get(p.userId);
+      if (!prev || p.punchInAt < prev) {
         punchInByUser.set(p.userId, p.punchInAt);
         punchMetaByUser.set(p.userId, {
           punchInAddress: p.punchInAddress,
@@ -224,6 +266,27 @@ export async function GET(req: Request) {
           punchOutAddress: p.punchOutAddress,
         });
       }
+    }
+
+    const dayStatusByUser = new Map<string, AttendanceStatus>();
+    let presentOnDate = 0;
+    let halfDayOnDate = 0;
+    let absentOnDate = 0;
+    let attendanceLeaveOnDate = 0;
+
+    for (const u of users) {
+      const mark = markByUser.get(u.id);
+      const resolved = resolveDayAttendanceStatus({
+        sessions: punchesByUser.get(u.id) || [],
+        asOf,
+        onApprovedLeave: approvedLeaveIds.has(u.id),
+        manual: mark ? { status: mark.status, source: mark.source, note: mark.note } : null,
+      });
+      dayStatusByUser.set(u.id, resolved.status);
+      if (resolved.status === "present") presentOnDate += 1;
+      else if (resolved.status === "half_day") halfDayOnDate += 1;
+      else if (resolved.status === "leave") attendanceLeaveOnDate += 1;
+      else absentOnDate += 1;
     }
 
     const activeUsers = users.filter((u) => u.isActive).length;
@@ -244,6 +307,9 @@ export async function GET(req: Request) {
       else if (metric === "live") filtered = users.filter((u) => liveIds.has(u.id) && !leaveIds.has(u.id));
       else if (metric === "punched") filtered = users.filter((u) => punchedIds.has(u.id) && !leaveIds.has(u.id));
       else if (metric === "leave") filtered = users.filter((u) => leaveIds.has(u.id));
+      else if (metric === "present") filtered = users.filter((u) => dayStatusByUser.get(u.id) === "present");
+      else if (metric === "halfDay") filtered = users.filter((u) => dayStatusByUser.get(u.id) === "half_day");
+      else if (metric === "absent") filtered = users.filter((u) => dayStatusByUser.get(u.id) === "absent");
       else if (metric === "pendingPunchIn") {
         filtered = users.filter((u) => u.isActive && !punchedIds.has(u.id) && !leaveIds.has(u.id));
       } else if (metric === "pendingFace") filtered = users.filter((u) => u.isActive && !u.faceRegisteredAt);
@@ -264,6 +330,7 @@ export async function GET(req: Request) {
         .map((u) => {
           const meta = punchMetaByUser.get(u.id);
           const onLeaveToday = leaveIds.has(u.id);
+          const dayStatus = dayStatusByUser.get(u.id) || "absent";
           return {
             id: u.id,
             name: u.name,
@@ -285,6 +352,9 @@ export async function GET(req: Request) {
             punchOutAddress: meta?.punchOutAddress || null,
             onLeaveToday,
             leaveRemark: onLeaveToday ? leaveNoteByUser.get(u.id) || "Marked leave on Attendance" : null,
+            dayStatus,
+            dayStatusLabel:
+              dayStatus === "half_day" ? "Half-day" : dayStatus.charAt(0).toUpperCase() + dayStatus.slice(1),
           };
         })
         .sort((a, b) => a.name.localeCompare(b.name));
@@ -337,6 +407,10 @@ export async function GET(req: Request) {
       activeToday: punchedNotLeave.length,
       liveNow: liveNotLeave.length,
       leaveOnDate,
+      presentOnDate,
+      halfDayOnDate,
+      absentOnDate,
+      attendanceLeaveOnDate,
       punches: punches.length,
       pendingPunchIn,
       pendingFace,

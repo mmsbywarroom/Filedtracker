@@ -2,6 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { PaginationBar } from "@/components/PaginationBar";
+import { SearchSelect } from "@/components/SearchSelect";
+import { hierarchyDesignations } from "@/lib/hierarchy";
+
+type AttStatus = "present" | "half_day" | "absent" | "leave";
 
 type Row = {
   userId: string;
@@ -12,7 +16,7 @@ type Row = {
   sectorAllotted: string;
   zone: string;
   district: string;
-  status: "present" | "absent" | "leave";
+  status: AttStatus;
   statusLabel: string;
   source: "auto" | "manual";
   reason: string;
@@ -21,7 +25,7 @@ type Row = {
   punchOutAt: string | null;
 };
 
-type Summary = { present: number; absent: number; leave: number; total: number };
+type Summary = { present: number; halfDay: number; absent: number; leave: number; total: number };
 
 function todayIst() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
@@ -34,45 +38,102 @@ function fmtTime(iso: string | null) {
 
 function statusClass(status: string) {
   if (status === "present") return "bg-emerald-50 text-emerald-700";
+  if (status === "half_day") return "bg-amber-50 text-amber-800";
   if (status === "leave") return "bg-sky-50 text-sky-800";
   return "bg-red-50 text-red-700";
 }
 
+function statusTitle(status: AttStatus) {
+  if (status === "half_day") return "Half-day";
+  return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+function unique(rows: Row[], key: keyof Row) {
+  return Array.from(new Set(rows.map((r) => String(r[key] || "")).filter(Boolean))).sort();
+}
+
+const selectClass = "h-11 w-full rounded-xl border border-navy/10 px-3 text-sm";
+
 export default function AttendanceModulePage() {
   const [date, setDate] = useState(todayIst);
   const [statusFilter, setStatusFilter] = useState("");
+  const [zone, setZone] = useState("");
+  const [district, setDistrict] = useState("");
+  const [assembly, setAssembly] = useState("");
+  const [designation, setDesignation] = useState("");
+  const [sector, setSector] = useState("");
   const [q, setQ] = useState("");
-  const [rows, setRows] = useState<Row[]>([]);
-  const [summary, setSummary] = useState<Summary>({ present: 0, absent: 0, leave: 0, total: 0 });
+  const [allRows, setAllRows] = useState<Row[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const [visibleDens, setVisibleDens] = useState<string[]>(() => hierarchyDesignations());
   const [pending, setPending] = useState<{
     userId: string;
     name: string;
-    status: "present" | "absent" | "leave";
+    status: AttStatus;
   } | null>(null);
   const [reason, setReason] = useState("");
   const [statusErr, setStatusErr] = useState("");
 
   async function load() {
     const params = new URLSearchParams({ date });
-    if (statusFilter) params.set("status", statusFilter);
-    if (q.trim()) params.set("q", q.trim());
     const res = await fetch(`/api/admin/daily-attendance?${params}`);
     if (res.status === 401) {
       window.location.href = "/admin/login";
       return;
     }
     const data = await res.json();
-    setRows(data.rows || []);
-    setSummary(data.summary || { present: 0, absent: 0, leave: 0, total: 0 });
+    setAllRows(data.rows || []);
     setPage(1);
   }
 
   useEffect(() => {
     load();
+    fetch("/api/admin/me")
+      .then((r) => r.json())
+      .then((d) => {
+        if (Array.isArray(d.admin?.visibleDesignations) && d.admin.visibleDesignations.length) {
+          setVisibleDens(d.admin.visibleDesignations);
+        }
+      })
+      .catch(() => {});
   }, [date]);
+
+  const rows = useMemo(() => {
+    const sectorQ = sector.trim().toLowerCase();
+    const textQ = q.trim().toLowerCase();
+    return allRows.filter((r) => {
+      if (zone && r.zone !== zone) return false;
+      if (district && r.district !== district) return false;
+      if (assembly && r.assemblyName !== assembly) return false;
+      if (designation && r.designation !== designation) return false;
+      if (sectorQ && !(r.sectorAllotted || "").toLowerCase().includes(sectorQ)) return false;
+      if (statusFilter && r.status !== statusFilter) return false;
+      if (textQ) {
+        const text = [r.name, r.phone, r.assemblyName, r.designation, r.zone, r.district, r.sectorAllotted]
+          .join(" ")
+          .toLowerCase();
+        if (!text.includes(textQ)) return false;
+      }
+      return true;
+    });
+  }, [allRows, zone, district, assembly, designation, sector, statusFilter, q]);
+
+  const summary = useMemo(() => {
+    const s: Summary = { present: 0, halfDay: 0, absent: 0, leave: 0, total: rows.length };
+    for (const r of rows) {
+      if (r.status === "present") s.present += 1;
+      else if (r.status === "half_day") s.halfDay += 1;
+      else if (r.status === "leave") s.leave += 1;
+      else s.absent += 1;
+    }
+    return s;
+  }, [rows]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [zone, district, assembly, designation, sector, statusFilter, q, pageSize]);
 
   async function applyStatus() {
     if (!pending) return;
@@ -98,7 +159,7 @@ export default function AttendanceModulePage() {
     load();
   }
 
-  function requestStatus(userId: string, name: string, status: "present" | "absent" | "leave", current: string) {
+  function requestStatus(userId: string, name: string, status: AttStatus, current: string) {
     if (status === current) return;
     setPending({ userId, name, status });
     setReason("");
@@ -112,13 +173,18 @@ export default function AttendanceModulePage() {
       <p className="text-xs uppercase tracking-[0.2em] text-teal">Attendance</p>
       <h1 className="text-2xl font-semibold">Date-wise attendance</h1>
       <p className="mt-1 text-sm text-navy/55">
-        Auto: no punch or ≤6h = Absent · 8–12h = Present · approved leave = Leave. Manual change requires a reason.
+        Auto: punch by 10:30 + 6–12h = Present · after 10:30 to 1:00 = Half-day · after 1:00 or no punch = Absent ·
+        leave mark / approved leave = Leave. Manual change requires a reason.
       </p>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-4">
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <div className="rounded-2xl bg-emerald-600 px-4 py-3 text-white shadow-card">
           <p className="text-xs uppercase tracking-wider text-white/75">Present</p>
           <p className="text-2xl font-semibold">{summary.present}</p>
+        </div>
+        <div className="rounded-2xl bg-amber-500 px-4 py-3 text-white shadow-card">
+          <p className="text-xs uppercase tracking-wider text-white/75">Half-day</p>
+          <p className="text-2xl font-semibold">{summary.halfDay}</p>
         </div>
         <div className="rounded-2xl bg-red-600 px-4 py-3 text-white shadow-card">
           <p className="text-xs uppercase tracking-wider text-white/75">Absent</p>
@@ -134,38 +200,90 @@ export default function AttendanceModulePage() {
         </div>
       </div>
 
-      <div className="mt-4 mb-4 flex flex-wrap items-end gap-3 rounded-2xl bg-white p-4 shadow-card">
+      <div className="mt-4 mb-4 grid gap-3 rounded-2xl bg-white p-4 shadow-card md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8">
         <label className="text-xs font-medium text-navy/55">
           Date
           <input
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            className="mt-1 block rounded-xl border border-navy/10 px-3 py-2 text-sm"
+            className={`${selectClass} mt-1`}
+          />
+        </label>
+        <label className="text-xs font-medium text-navy/55 md:col-span-2 xl:col-span-1">
+          Search
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Name, phone, assembly"
+            className={`${selectClass} mt-1`}
           />
         </label>
         <label className="text-xs font-medium text-navy/55">
           Status
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="mt-1 block rounded-xl border border-navy/10 px-3 py-2 text-sm"
-          >
-            <option value="">All</option>
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className={`${selectClass} mt-1`}>
+            <option value="">All statuses</option>
             <option value="present">Present</option>
+            <option value="half_day">Half-day</option>
             <option value="absent">Absent</option>
             <option value="leave">Leave</option>
           </select>
         </label>
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search name, phone, assembly"
-          className="h-11 min-w-[200px] flex-1 rounded-xl border border-navy/10 px-3 text-sm"
-        />
-        <button type="button" onClick={load} className="h-11 rounded-xl bg-ink px-4 text-sm font-semibold text-white">
-          Apply
-        </button>
+        <label className="text-xs font-medium text-navy/55">
+          Designation
+          <select value={designation} onChange={(e) => setDesignation(e.target.value)} className={`${selectClass} mt-1`}>
+            <option value="">All designations</option>
+            {visibleDens.map((v) => (
+              <option key={v} value={v}>
+                {v}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-xs font-medium text-navy/55">
+          Zone
+          <select value={zone} onChange={(e) => setZone(e.target.value)} className={`${selectClass} mt-1`}>
+            <option value="">All zones</option>
+            {unique(allRows, "zone").map((v) => (
+              <option key={v} value={v}>
+                {v}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-xs font-medium text-navy/55">
+          District
+          <select value={district} onChange={(e) => setDistrict(e.target.value)} className={`${selectClass} mt-1`}>
+            <option value="">All districts</option>
+            {unique(allRows, "district").map((v) => (
+              <option key={v} value={v}>
+                {v}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-xs font-medium text-navy/55">
+          Assembly
+          <select value={assembly} onChange={(e) => setAssembly(e.target.value)} className={`${selectClass} mt-1`}>
+            <option value="">All assemblies</option>
+            {unique(allRows, "assemblyName").map((v) => (
+              <option key={v} value={v}>
+                {v}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="text-xs font-medium text-navy/55">
+          Sector
+          <div className="mt-1">
+            <SearchSelect
+              value={sector}
+              onChange={setSector}
+              options={unique(allRows, "sectorAllotted")}
+              placeholder="Search sector allotted"
+            />
+          </div>
+        </div>
       </div>
 
       <section className="overflow-hidden rounded-2xl border border-navy/5 bg-white shadow-card">
@@ -175,6 +293,7 @@ export default function AttendanceModulePage() {
               <tr>
                 <th className="px-4 py-3">User</th>
                 <th className="px-4 py-3">Assembly / Sector</th>
+                <th className="px-4 py-3">Zone / District</th>
                 <th className="px-4 py-3">Punch in</th>
                 <th className="px-4 py-3">Punch out</th>
                 <th className="px-4 py-3">Hours</th>
@@ -194,6 +313,10 @@ export default function AttendanceModulePage() {
                     <p className="font-medium">{r.assemblyName}</p>
                     <p className="text-xs text-navy/50">{r.sectorAllotted}</p>
                   </td>
+                  <td className="px-4 py-3">
+                    <p className="font-medium">{r.zone || "—"}</p>
+                    <p className="text-xs text-navy/50">{r.district || "—"}</p>
+                  </td>
                   <td className="px-4 py-3">{fmtTime(r.punchInAt)}</td>
                   <td className="px-4 py-3">{fmtTime(r.punchOutAt)}</td>
                   <td className="px-4 py-3 font-medium">{r.hoursWorked > 0 ? `${r.hoursWorked}h` : "—"}</td>
@@ -201,12 +324,11 @@ export default function AttendanceModulePage() {
                     <select
                       value={r.status}
                       disabled={busy === r.userId}
-                      onChange={(e) =>
-                        requestStatus(r.userId, r.name, e.target.value as "present" | "absent" | "leave", r.status)
-                      }
+                      onChange={(e) => requestStatus(r.userId, r.name, e.target.value as AttStatus, r.status)}
                       className={`rounded-xl border border-navy/10 px-2 py-1.5 text-xs font-semibold ${statusClass(r.status)}`}
                     >
                       <option value="present">Present</option>
+                      <option value="half_day">Half-day</option>
                       <option value="absent">Absent</option>
                       <option value="leave">Leave</option>
                     </select>
@@ -214,7 +336,7 @@ export default function AttendanceModulePage() {
                       {r.source === "manual" ? "Manual" : "Auto"}
                     </p>
                   </td>
-                  <td className="px-4 py-3 max-w-[220px] text-xs text-navy/55">{r.reason}</td>
+                  <td className="px-4 py-3 max-w-[240px] text-xs text-navy/55">{r.reason}</td>
                 </tr>
               ))}
             </tbody>
@@ -231,7 +353,7 @@ export default function AttendanceModulePage() {
           <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-card">
             <h2 className="text-lg font-semibold">Change attendance status</h2>
             <p className="mt-1 text-sm text-navy/60">
-              {pending.name} → <span className="font-semibold capitalize">{pending.status}</span>
+              {pending.name} → <span className="font-semibold">{statusTitle(pending.status)}</span>
             </p>
             <label className="mt-4 block text-xs font-medium text-navy/55">
               Reason (required)

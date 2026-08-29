@@ -42,7 +42,7 @@ export async function POST(req: Request) {
     const district = pick(row, CSV_COLUMNS[5]);
     const designation = pick(row, "Designation") || "Sector Incharge";
     if (!DESIGNATIONS.includes(designation as (typeof DESIGNATIONS)[number])) {
-      errors.push({ row: i + 2, error: "Invalid designation" });
+      errors.push({ row: i + 2, error: `Invalid designation "${designation}"` });
       continue;
     }
     const cluster = pick(row, "Cluster");
@@ -53,22 +53,40 @@ export async function POST(req: Request) {
       assembliesRaw ? parseAssembliesInput(assembliesRaw) : undefined
     );
     const phone = normalizePhone(phoneRaw);
-    if (!name || !phone || !asm || !sectorAllotted || !zone || !district) {
-      errors.push({ row: i + 2, error: "Missing or invalid fields" });
+    const missing: string[] = [];
+    if (!name) missing.push("Name");
+    if (!phone) missing.push(phoneRaw ? "Phone (invalid)" : "Phone");
+    if (!asm) missing.push("Assembly");
+    if (!sectorAllotted) missing.push("Sector allotted");
+    if (!zone) missing.push("Zone");
+    if (!district) missing.push("District");
+    if (missing.length || !phone) {
+      errors.push({
+        row: i + 2,
+        error: `Missing or invalid: ${missing.join(", ") || "Phone"}${phoneRaw || name ? ` (${[name, phoneRaw].filter(Boolean).join(" · ")})` : ""}`,
+      });
       continue;
     }
     if (designation === "ALC" && assemblies.length < 1) {
-      errors.push({ row: i + 2, error: "ALC needs Assemblies column" });
+      errors.push({
+        row: i + 2,
+        error: `ALC needs Assemblies column (${name || phone})`,
+      });
       continue;
     }
-    const existing = await prisma.user.findUnique({ where: { phone } });
     const data = { name, phone, assemblyName: asm, assemblies, sectorAllotted, zone, district, designation, cluster };
-    if (existing) {
-      await prisma.user.update({ where: { id: existing.id }, data });
-      updated.push(phone);
-    } else {
-      await prisma.user.create({ data });
-      created.push(phone);
+    try {
+      const existing = await prisma.user.findUnique({ where: { phone } });
+      if (existing) {
+        await prisma.user.update({ where: { id: existing.id }, data });
+        updated.push(phone);
+      } else {
+        await prisma.user.create({ data });
+        created.push(phone);
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Could not save row";
+      errors.push({ row: i + 2, error: `${msg} (${name} · ${phone})` });
     }
   }
 
