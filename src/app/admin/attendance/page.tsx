@@ -53,7 +53,7 @@ function unique(rows: Row[], key: keyof Row) {
   return Array.from(new Set(rows.map((r) => String(r[key] || "")).filter(Boolean))).sort();
 }
 
-const selectClass = "h-11 w-full rounded-xl border border-navy/10 px-3 text-sm";
+const selectClass = "h-11 w-full rounded-xl border border-navy/15 bg-white px-3 text-sm shadow-sm";
 
 export default function AttendanceModulePage() {
   const [date, setDate] = useState(todayIst);
@@ -202,7 +202,7 @@ export default function AttendanceModulePage() {
         </div>
       </div>
 
-      <div className="mt-4 mb-4 grid gap-3 rounded-2xl bg-white p-4 shadow-card md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8">
+      <div className="admin-filters mt-4 mb-4 grid gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8">
         <label className="text-xs font-medium text-navy/55">
           Date
           <input
@@ -288,7 +288,7 @@ export default function AttendanceModulePage() {
         </div>
       </div>
 
-      <section className="overflow-hidden rounded-2xl border border-navy/5 bg-white shadow-card">
+      <section className="admin-panel overflow-hidden">
         <div className="overflow-auto">
           <table className="min-w-full text-left text-sm">
             <thead className="sticky top-0 bg-[#eef3fb] text-[11px] font-semibold uppercase tracking-wider text-navy/55">
@@ -381,7 +381,7 @@ export default function AttendanceModulePage() {
                   setReason("");
                   setStatusErr("");
                 }}
-                className="rounded-xl border border-navy/10 px-4 py-2 text-sm font-semibold"
+                className="admin-btn-secondary"
               >
                 Cancel
               </button>
@@ -389,7 +389,7 @@ export default function AttendanceModulePage() {
                 type="button"
                 onClick={applyStatus}
                 disabled={busy === pending.userId}
-                className="rounded-xl bg-ink px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                className="admin-btn-ink disabled:opacity-50"
               >
                 Apply
               </button>

@@ -75,7 +75,7 @@ export default function AdminLeavesPage() {
         You only see leave from the level just below you: State→Zone Coordinator/ZLC→DLC→Cluster→ALC→Sector Incharge (within your zone/district/assembly).
       </p>
 
-      <div className="mt-4 mb-4 flex flex-wrap items-end gap-3 rounded-2xl bg-white p-4 shadow-card">
+      <div className="admin-toolbar mt-4 mb-4 flex flex-wrap items-end gap-3">
         <select
           value={status}
           onChange={(e) => setStatus(e.target.value)}
@@ -97,7 +97,7 @@ export default function AdminLeavesPage() {
         </button>
       </div>
 
-      <section className="overflow-hidden rounded-2xl border border-navy/5 bg-white shadow-card">
+      <section className="admin-panel overflow-hidden">
         <div className="overflow-auto">
           <table className="min-w-full text-left text-sm">
             <thead className="sticky top-0 bg-[#eef3fb] text-[11px] font-semibold uppercase tracking-wider text-navy/55">
@@ -148,18 +148,20 @@ export default function AdminLeavesPage() {
                           placeholder="Note (optional)"
                           className="w-44 rounded-lg border border-navy/10 px-2 py-1 text-xs"
                         />
-                        <div className="flex gap-2">
+                        <div className="admin-actions">
                           <button
+                            type="button"
                             disabled={busyId === l.id}
                             onClick={() => decide(l.id, "approved")}
-                            className="rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700"
+                            className="admin-btn-sm border border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
                           >
                             Approve
                           </button>
                           <button
+                            type="button"
                             disabled={busyId === l.id}
                             onClick={() => decide(l.id, "rejected")}
-                            className="rounded-lg bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700"
+                            className="admin-btn-danger admin-btn-sm"
                           >
                             Reject
                           </button>

@@ -472,7 +472,7 @@ export default function AdminsPage() {
           <button className="mt-4 w-full rounded-xl bg-ink py-2.5 text-sm font-semibold text-white">Create admin</button>
         </form>
 
-        <section className="overflow-hidden rounded-[1.75rem] bg-white shadow-card">
+        <section className="admin-panel overflow-hidden">
           <div className="border-b border-navy/5 px-4 py-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="font-semibold">Existing admins</h2>
@@ -597,7 +597,7 @@ export default function AdminsPage() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       {!a.isSuper && (
-                        <button onClick={() => remove(a.id)} className="rounded-lg bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-600">
+                        <button type="button" onClick={() => remove(a.id)} className="admin-btn-danger admin-btn-sm">
                           Delete
                         </button>
                       )}

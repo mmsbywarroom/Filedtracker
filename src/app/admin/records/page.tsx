@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { FacePhoto } from "@/components/FacePhoto";
+import { LazyFacePhoto } from "@/components/LazyFacePhoto";
 import { AdminReportToolbar } from "@/components/AdminReportToolbar";
+import { PaginationBar } from "@/components/PaginationBar";
 import { downloadCsv, downloadPdf, reasonLabel, uniqueSorted } from "@/lib/reportExport";
 import { formatKm } from "@/lib/utils";
 
@@ -17,9 +18,9 @@ type Row = {
   sectorAllotted: string;
   zone: string;
   district: string;
-  faceImage: string | null;
-  punchInFace: string | null;
-  punchOutFace: string | null;
+  faceRegistered?: boolean;
+  hasPunchInFace?: boolean;
+  hasPunchOutFace?: boolean;
   punchInAt: string;
   punchOutAt: string | null;
   punchInAddress: string | null;
@@ -50,24 +51,33 @@ function rowReason(r: Row) {
 export default function DailyRecordsPage() {
   const [date, setDate] = useState(todayIst);
   const [rows, setRows] = useState<Row[]>([]);
+  const [loading, setLoading] = useState(true);
   const [q, setQ] = useState("");
   const [zone, setZone] = useState("");
   const [district, setDistrict] = useState("");
   const [designation, setDesignation] = useState("");
   const [reason, setReason] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   async function load(d: string) {
-    const res = await fetch(`/api/admin/attendance?date=${d}`);
-    if (res.status === 401) {
-      window.location.href = "/admin/login";
-      return;
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/admin/attendance?date=${d}`);
+      if (res.status === 401) {
+        window.location.href = "/admin/login";
+        return;
+      }
+      if (!res.ok) {
+        setRows([]);
+        return;
+      }
+      const data = await res.json();
+      setRows(data.records || []);
+      setPage(1);
+    } finally {
+      setLoading(false);
     }
-    if (!res.ok) {
-      setRows([]);
-      return;
-    }
-    const data = await res.json();
-    setRows(data.records || []);
   }
 
   useEffect(() => {
@@ -94,6 +104,15 @@ export default function DailyRecordsPage() {
       return true;
     });
   }, [rows, q, zone, district, designation, reason]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [q, zone, district, designation, reason, pageSize]);
+
+  const pageRows = useMemo(
+    () => filtered.slice((page - 1) * pageSize, (page - 1) * pageSize + pageSize),
+    [filtered, page, pageSize]
+  );
 
   const live = rows.filter((r) => r.status === "Live").length;
   const done = rows.filter((r) => r.status === "Completed").length;
@@ -134,7 +153,7 @@ export default function DailyRecordsPage() {
       <p className="text-xs uppercase tracking-[0.2em] text-teal">Attendance</p>
       <h1 className="text-2xl font-semibold">Daily records</h1>
       <p className="mt-1 text-sm text-navy/60">
-        {rows.length} punches · {live} live · {done} completed
+        {loading ? "Loading…" : `${rows.length} punches · ${live} live · ${done} completed`}
       </p>
 
       <AdminReportToolbar
@@ -169,7 +188,7 @@ export default function DailyRecordsPage() {
         onPdf={() => downloadPdf(`Daily records · ${date}`, exportHeaders, exportRows)}
       />
 
-      <section className="overflow-hidden rounded-[1.75rem] bg-white shadow-card">
+      <section className="admin-panel overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full text-left text-sm">
             <thead className="bg-sand/70 text-xs uppercase tracking-wide text-navy/50">
@@ -193,7 +212,7 @@ export default function DailyRecordsPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((r) => (
+              {pageRows.map((r) => (
                 <tr key={r.id} className="border-t border-navy/5 align-top">
                   <td className="px-3 py-3 font-medium">{r.name}</td>
                   <td className="px-3 py-3">{r.phone}</td>
@@ -202,14 +221,24 @@ export default function DailyRecordsPage() {
                   <td className="px-3 py-3">{r.designation}</td>
                   <td className="px-3 py-3">{r.sectorAllotted}</td>
                   <td className="px-3 py-3">
-                    <FacePhoto src={r.faceImage} label={`${r.name} registered`} />
+                    <LazyFacePhoto
+                      attendanceId={r.id}
+                      kind="registered"
+                      label={`${r.name} registered`}
+                      available={r.faceRegistered}
+                    />
                   </td>
                   <td className="px-3 py-3">
                     {new Date(r.punchInAt).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" })}
                     {r.punchInAddress ? <p className="max-w-[160px] text-xs text-navy/50">{r.punchInAddress}</p> : null}
                   </td>
                   <td className="px-3 py-3">
-                    <FacePhoto src={r.punchInFace} label={`${r.name} punch in`} />
+                    <LazyFacePhoto
+                      attendanceId={r.id}
+                      kind="in"
+                      label={`${r.name} punch in`}
+                      available={r.hasPunchInFace}
+                    />
                   </td>
                   <td className="px-3 py-3">
                     {r.punchOutAt
@@ -218,14 +247,19 @@ export default function DailyRecordsPage() {
                     {r.punchOutAddress ? <p className="max-w-[160px] text-xs text-navy/50">{r.punchOutAddress}</p> : null}
                   </td>
                   <td className="px-3 py-3">
-                    <FacePhoto src={r.punchOutFace} label={`${r.name} punch out`} />
+                    <LazyFacePhoto
+                      attendanceId={r.id}
+                      kind="out"
+                      label={`${r.name} punch out`}
+                      available={r.hasPunchOutFace}
+                    />
                   </td>
                   <td className="px-3 py-3">{formatKm(r.distanceMeters || 0)}</td>
                   <td className="px-3 py-3">{r.marks}</td>
                   <td className="px-3 py-3">{r.status}</td>
                   <td className="px-3 py-3 text-xs">{reasonLabel(r.punchOutReason, r.punchOutAt)}</td>
                   <td className="px-3 py-3">
-                    <Link href={`/admin/users/${r.userId}`} className="text-teal">
+                    <Link href={`/admin/users/${r.userId}`} className="admin-btn-teal-soft admin-btn-sm">
                       Footprint
                     </Link>
                   </td>
@@ -233,8 +267,12 @@ export default function DailyRecordsPage() {
               ))}
             </tbody>
           </table>
-          {!filtered.length && <p className="p-6 text-sm text-navy/50">No records for this date.</p>}
+          {loading && <p className="p-6 text-sm text-navy/50">Loading records…</p>}
+          {!loading && !filtered.length && <p className="p-6 text-sm text-navy/50">No records for this date.</p>}
         </div>
+        {!loading && !!filtered.length && (
+          <PaginationBar page={page} pageSize={pageSize} total={filtered.length} onPage={setPage} onPageSize={setPageSize} />
+        )}
       </section>
     </main>
   );

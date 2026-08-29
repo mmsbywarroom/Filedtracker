@@ -4,6 +4,11 @@
 
 :root {
   color-scheme: light;
+  --admin-border: rgba(18, 48, 90, 0.12);
+  --admin-border-strong: rgba(18, 48, 90, 0.18);
+  --admin-surface: #ffffff;
+  --admin-muted: #f4f7fb;
+  --admin-head: #e8eef7;
 }
 
 html,
@@ -43,4 +48,201 @@ button {
   textarea {
     font-size: 16px;
   }
+}
+
+/* ─── Admin app chrome ─────────────────────────────────────────── */
+.admin-app {
+  background:
+    radial-gradient(1200px 400px at 10% -10%, rgba(26, 86, 196, 0.07), transparent 55%),
+    radial-gradient(900px 360px at 100% 0%, rgba(255, 209, 0, 0.08), transparent 50%),
+    #eef2f7;
+  min-height: 100vh;
+}
+
+.admin-app .admin-page-kicker {
+  @apply text-[11px] font-semibold uppercase tracking-[0.2em] text-teal;
+}
+
+.admin-app .admin-page-title {
+  @apply mt-1 text-2xl font-semibold tracking-tight text-ink md:text-[1.75rem];
+}
+
+.admin-app .admin-page-sub {
+  @apply mt-1 text-sm text-navy/55;
+}
+
+/* Filter / tool cards */
+.admin-app .admin-toolbar,
+.admin-app .admin-filters {
+  @apply rounded-2xl border border-[color:var(--admin-border)] bg-white p-4 shadow-card;
+}
+
+.admin-app .admin-field,
+.admin-app .admin-filters input,
+.admin-app .admin-filters select,
+.admin-app .admin-toolbar input,
+.admin-app .admin-toolbar select,
+.admin-app main input[type="date"],
+.admin-app main input[type="text"],
+.admin-app main input[type="search"],
+.admin-app main input:not([type]),
+.admin-app main select,
+.admin-app main textarea {
+  @apply rounded-xl border border-[color:var(--admin-border-strong)] bg-white text-sm text-ink shadow-sm outline-none transition;
+}
+
+.admin-app main input:focus,
+.admin-app main select:focus,
+.admin-app main textarea:focus {
+  @apply border-teal/50 ring-2 ring-teal/15;
+}
+
+/* Panels holding tables */
+.admin-app main > section,
+.admin-app .admin-panel {
+  @apply overflow-hidden rounded-2xl border border-[color:var(--admin-border)] bg-white shadow-card;
+}
+
+/* Professional data tables — borders on every admin table */
+.admin-app main table.min-w-full,
+.admin-app .admin-panel table,
+.admin-app section table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+}
+
+.admin-app main thead th,
+.admin-app .admin-panel thead th,
+.admin-app section thead th {
+  background: var(--admin-head);
+  border-bottom: 1px solid var(--admin-border-strong);
+  border-right: 1px solid var(--admin-border);
+  color: rgba(18, 48, 90, 0.62);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 0.85rem 1rem;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.admin-app main thead th:last-child,
+.admin-app .admin-panel thead th:last-child,
+.admin-app section thead th:last-child {
+  border-right: none;
+}
+
+.admin-app main tbody td,
+.admin-app .admin-panel tbody td,
+.admin-app section tbody td {
+  border-bottom: 1px solid var(--admin-border);
+  border-right: 1px solid rgba(18, 48, 90, 0.06);
+  color: rgba(10, 22, 40, 0.88);
+  font-size: 0.875rem;
+  padding: 0.85rem 1rem;
+  vertical-align: middle;
+}
+
+.admin-app main tbody td:last-child,
+.admin-app .admin-panel tbody td:last-child,
+.admin-app section tbody td:last-child {
+  border-right: none;
+}
+
+.admin-app main tbody tr:last-child td,
+.admin-app .admin-panel tbody tr:last-child td,
+.admin-app section tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.admin-app main tbody tr:nth-child(even) td,
+.admin-app .admin-panel tbody tr:nth-child(even) td {
+  background: rgba(244, 247, 251, 0.55);
+}
+
+.admin-app main tbody tr:hover td,
+.admin-app .admin-panel tbody tr:hover td,
+.admin-app section tbody tr:hover td {
+  background: #eef5ff !important;
+}
+
+/* Buttons */
+.admin-btn,
+.admin-btn-primary,
+.admin-btn-ink,
+.admin-btn-secondary,
+.admin-btn-ghost,
+.admin-btn-danger,
+.admin-btn-warn,
+.admin-btn-teal-soft {
+  @apply inline-flex items-center justify-center gap-1.5 rounded-xl px-3.5 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50;
+}
+
+.admin-btn-primary {
+  @apply bg-teal text-white shadow-sm hover:brightness-110;
+}
+
+.admin-btn-ink {
+  @apply bg-ink text-white shadow-sm hover:bg-navy;
+}
+
+.admin-btn-secondary {
+  @apply border border-[color:var(--admin-border-strong)] bg-white text-navy shadow-sm hover:bg-[color:var(--admin-muted)];
+}
+
+.admin-btn-ghost {
+  @apply border border-transparent bg-navy/5 text-navy/80 hover:bg-navy/10;
+}
+
+.admin-btn-danger {
+  @apply border border-red-200 bg-red-50 text-red-700 hover:bg-red-100;
+}
+
+.admin-btn-warn {
+  @apply border border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100;
+}
+
+.admin-btn-teal-soft {
+  @apply border border-teal/25 bg-teal/10 text-teal hover:bg-teal/15;
+}
+
+.admin-btn-sm {
+  @apply rounded-lg px-2.5 py-1.5 text-xs;
+}
+
+/* Badges */
+.admin-badge,
+.admin-badge-success,
+.admin-badge-warn,
+.admin-badge-danger,
+.admin-badge-info,
+.admin-badge-muted {
+  @apply inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold;
+}
+
+.admin-badge-success {
+  @apply border-emerald-200 bg-emerald-50 text-emerald-800;
+}
+
+.admin-badge-warn {
+  @apply border-amber-200 bg-amber-50 text-amber-900;
+}
+
+.admin-badge-danger {
+  @apply border-red-200 bg-red-50 text-red-700;
+}
+
+.admin-badge-info {
+  @apply border-sky-200 bg-sky-50 text-sky-900;
+}
+
+.admin-badge-muted {
+  @apply border-navy/10 bg-navy/5 text-navy/65;
+}
+
+/* Action row inside tables */
+.admin-actions {
+  @apply flex flex-wrap items-center justify-end gap-1.5;
 }

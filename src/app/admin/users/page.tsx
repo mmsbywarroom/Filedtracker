@@ -210,7 +210,7 @@ export default function AdminUsersPage() {
     });
   }
 
-  const selectClass = "h-11 rounded-xl border border-navy/10 bg-white px-3 text-sm outline-none focus:border-teal";
+  const selectClass = "h-11 rounded-xl border border-navy/15 bg-white px-3 text-sm shadow-sm outline-none focus:border-teal focus:ring-2 focus:ring-teal/15";
 
   return (
     <main className="px-4 py-6 md:px-8">
@@ -224,18 +224,10 @@ export default function AdminUsersPage() {
         </div>
         {isSuper && (
           <div className="flex flex-wrap gap-2">
-            <a
-              href="/sample-users.csv"
-              download
-              className="rounded-xl border border-navy/10 bg-white px-4 py-2.5 text-sm font-semibold text-navy/80 shadow-card"
-            >
+            <a href="/sample-users.csv" download className="admin-btn-secondary">
               Download CSV template
             </a>
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              className="rounded-xl border border-teal/30 bg-teal/10 px-4 py-2.5 text-sm font-semibold text-teal shadow-card"
-            >
+            <button type="button" onClick={() => fileRef.current?.click()} className="admin-btn-teal-soft">
               Bulk upload CSV
             </button>
             <input
@@ -249,7 +241,7 @@ export default function AdminUsersPage() {
                 e.target.value = "";
               }}
             />
-            <Link href="/admin/create" className="rounded-xl bg-teal px-4 py-2.5 text-sm font-semibold text-white shadow-card">
+            <Link href="/admin/create" className="admin-btn-primary">
               Create user
             </Link>
           </div>
@@ -271,7 +263,7 @@ export default function AdminUsersPage() {
         </div>
       )}
 
-      <div className="mb-4 grid gap-3 rounded-2xl bg-white p-4 shadow-card md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8">
+      <div className="admin-filters mb-4 grid gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8">
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
@@ -350,10 +342,10 @@ export default function AdminUsersPage() {
         </div>
       )}
 
-      <section className="overflow-hidden rounded-2xl border border-navy/5 bg-white shadow-card">
+      <section className="admin-panel overflow-hidden">
         <div className="overflow-auto">
           <table className="min-w-full text-left text-sm">
-            <thead className="sticky top-0 z-10 bg-[#eef3fb] text-[11px] font-semibold uppercase tracking-wider text-navy/55">
+            <thead className="sticky top-0 z-10">
               <tr>
                 {isSuper && (
                   <th className="px-3 py-3">
@@ -406,35 +398,27 @@ export default function AdminUsersPage() {
                   <td className="px-4 py-3">{u.zone}</td>
                   <td className="px-4 py-3">{u.district}</td>
                   <td className="px-4 py-3">
-                    <span
-                      className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
-                        u.faceRegistered ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"
-                      }`}
-                    >
+                    <span className={u.faceRegistered ? "admin-badge-success" : "admin-badge-warn"}>
                       {u.faceRegistered ? "Registered" : "Pending"}
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex flex-col items-start gap-1">
+                    <div className="flex flex-col items-start gap-1.5">
                       <button
                         type="button"
                         onClick={() => toggleActive(u)}
-                        className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
-                          u.isActive ? "bg-emerald-50 text-emerald-700" : "bg-navy/10 text-navy/60"
-                        }`}
+                        className={`${u.isActive ? "admin-badge-success" : "admin-badge-muted"} cursor-pointer`}
                       >
                         {u.isActive ? "Active" : "Inactive"}
                       </button>
                       {u.onLeaveToday && (
-                        <span className="rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-800">
-                          This user is on leave today
-                        </span>
+                        <span className="admin-badge-info">On leave today</span>
                       )}
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex justify-end gap-2">
-                      <Link href={`/admin/users/${u.id}`} className="rounded-lg bg-teal/10 px-2.5 py-1 text-xs font-semibold text-teal">
+                    <div className="admin-actions">
+                      <Link href={`/admin/users/${u.id}`} className="admin-btn-teal-soft admin-btn-sm">
                         Footprint
                       </Link>
                       {canResetFace && u.faceRegistered && (
@@ -445,20 +429,17 @@ export default function AdminUsersPage() {
                             setResetReason("");
                             setResetErr("");
                           }}
-                          className="rounded-lg bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800"
+                          className="admin-btn-warn admin-btn-sm"
                         >
                           Reset face
                         </button>
                       )}
                       {isSuper && (
                         <>
-                          <Link
-                            href={`/admin/create?edit=${u.id}`}
-                            className="rounded-lg bg-navy/5 px-2.5 py-1 text-xs font-semibold text-navy/70"
-                          >
+                          <Link href={`/admin/create?edit=${u.id}`} className="admin-btn-ghost admin-btn-sm">
                             Edit
                           </Link>
-                          <button onClick={() => remove(u.id)} className="rounded-lg bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-600">
+                          <button type="button" onClick={() => remove(u.id)} className="admin-btn-danger admin-btn-sm">
                             Delete
                           </button>
                         </>

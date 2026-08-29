@@ -150,7 +150,7 @@ export default function GpsOffLogsPage() {
         onPdf={() => downloadPdf(`GPS off logs · ${date || "all"}`, exportHeaders, exportRows)}
       />
 
-      <section className="overflow-hidden rounded-2xl border border-navy/5 bg-white shadow-card">
+      <section className="admin-panel overflow-hidden">
         <div className="overflow-auto">
           <table className="min-w-full text-left text-sm">
             <thead className="sticky top-0 bg-[#eef3fb] text-[11px] font-semibold uppercase tracking-wider text-navy/55">

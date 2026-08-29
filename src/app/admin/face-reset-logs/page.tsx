@@ -79,7 +79,7 @@ export default function FaceResetLogsPage() {
         Super admin only — every face reset with who did it, when, whose face, and why.
       </p>
 
-      <div className="mt-4 mb-4 flex flex-wrap items-end gap-3 rounded-2xl bg-white p-4 shadow-card">
+      <div className="admin-toolbar mt-4 mb-4 flex flex-wrap items-end gap-3">
         <label className="text-xs font-medium text-navy/55">
           Date
           <input
@@ -118,7 +118,7 @@ export default function FaceResetLogsPage() {
 
       {err && <p className="mb-4 text-sm text-red-600">{err}</p>}
 
-      <section className="overflow-hidden rounded-2xl border border-navy/5 bg-white shadow-card">
+      <section className="admin-panel overflow-hidden">
         <div className="overflow-auto">
           <table className="min-w-full text-left text-sm">
             <thead className="sticky top-0 bg-[#eef3fb] text-[11px] font-semibold uppercase tracking-wider text-navy/55">

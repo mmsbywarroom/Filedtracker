@@ -15,19 +15,19 @@ export function PaginationBar({ page, pageSize, total, onPage, onPageSize }: Pro
   const to = Math.min(safe * pageSize, total);
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-navy/5 bg-[#f7f9fd] px-4 py-3 text-sm">
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[color:var(--admin-border)] bg-[color:var(--admin-muted)] px-4 py-3 text-sm">
       <p className="text-navy/55">
-        Showing <span className="font-semibold text-ink">{from}-{to}</span> of{" "}
+        Showing <span className="font-semibold text-ink">{from}–{to}</span> of{" "}
         <span className="font-semibold text-ink">{total}</span>
       </p>
       <div className="flex flex-wrap items-center gap-2">
         {onPageSize && (
-          <label className="flex items-center gap-2 text-xs text-navy/55">
+          <label className="flex items-center gap-2 text-xs font-medium text-navy/55">
             Rows
             <select
               value={pageSize}
               onChange={(e) => onPageSize(Number(e.target.value))}
-              className="rounded-lg border border-navy/10 bg-white px-2 py-1.5 text-sm"
+              className="rounded-lg border border-navy/15 bg-white px-2 py-1.5 text-sm shadow-sm"
             >
               {[25, 50, 100].map((n) => (
                 <option key={n} value={n}>
@@ -41,18 +41,18 @@ export function PaginationBar({ page, pageSize, total, onPage, onPageSize }: Pro
           type="button"
           disabled={safe <= 1}
           onClick={() => onPage(safe - 1)}
-          className="rounded-lg border border-navy/10 bg-white px-3 py-1.5 font-medium disabled:opacity-40"
+          className="admin-btn-secondary admin-btn-sm disabled:opacity-40"
         >
           Previous
         </button>
-        <span className="min-w-[5.5rem] text-center text-xs text-navy/60">
+        <span className="min-w-[5.5rem] text-center text-xs font-medium text-navy/60">
           Page {safe} / {pages}
         </span>
         <button
           type="button"
           disabled={safe >= pages}
           onClick={() => onPage(safe + 1)}
-          className="rounded-lg border border-navy/10 bg-white px-3 py-1.5 font-medium disabled:opacity-40"
+          className="admin-btn-secondary admin-btn-sm disabled:opacity-40"
         >
           Next
         </button>

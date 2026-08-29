@@ -324,7 +324,7 @@ function GroupTable({
   }
 
   return (
-    <section className="overflow-hidden rounded-2xl border border-navy/5 bg-white shadow-card">
+    <section className="admin-panel overflow-hidden">
       <div className={`flex items-start justify-between gap-3 border-b border-navy/5 px-4 py-3 ${accent}`}>
         <div>
           <h2 className="font-semibold">{title}</h2>
@@ -719,7 +719,7 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
       </div>
 
       {metric && (
-        <section ref={detailRef} id="dashboard-detail" className="mt-6 overflow-hidden rounded-2xl border border-navy/5 bg-white shadow-card">
+        <section ref={detailRef} id="dashboard-detail" className="mt-6 admin-panel overflow-hidden">
           <div className="flex items-center justify-between border-b border-navy/5 bg-[#12305A] px-4 py-3 text-white">
             <h2 className="font-semibold">
               {METRIC_LABELS[metric]} · {date}

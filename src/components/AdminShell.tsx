@@ -33,40 +33,52 @@ export default function AdminShell({ children }: { children: ReactNode }) {
   }, [pathname]);
 
   const nav = [
-    { href: "/admin", label: t("dashboard"), match: (p: string) => p === "/admin" },
+    { href: "/admin", label: t("dashboard"), match: (p: string) => p === "/admin", group: "Overview" },
     ...(canSeeCallCenter
       ? [
           {
             href: "/admin/call-center",
             label: t("callCenterDashboard"),
             match: (p: string) => p.startsWith("/admin/call-center"),
+            group: "Overview",
           },
         ]
       : []),
-    { href: "/admin/users", label: t("users"), match: (p: string) => p.startsWith("/admin/users") },
-    { href: "/admin/gps-off", label: t("gpsOffLogs"), match: (p: string) => p.startsWith("/admin/gps-off") },
+    { href: "/admin/users", label: t("users"), match: (p: string) => p.startsWith("/admin/users"), group: "People" },
+    ...(isSuper
+      ? [{ href: "/admin/create", label: t("createUser"), match: (p: string) => p.startsWith("/admin/create"), group: "People" }]
+      : []),
+    ...(isSuper
+      ? [{ href: "/admin/admins", label: t("admins"), match: (p: string) => p.startsWith("/admin/admins"), group: "People" }]
+      : []),
+    {
+      href: "/admin/attendance",
+      label: t("attendanceModule"),
+      match: (p: string) => p.startsWith("/admin/attendance"),
+      group: "Attendance",
+    },
+    { href: "/admin/records", label: t("dailyRecords"), match: (p: string) => p.startsWith("/admin/records"), group: "Attendance" },
+    { href: "/admin/leaves", label: t("leaveModule"), match: (p: string) => p.startsWith("/admin/leaves"), group: "Attendance" },
+    { href: "/admin/gps-off", label: t("gpsOffLogs"), match: (p: string) => p.startsWith("/admin/gps-off"), group: "Logs" },
     {
       href: "/admin/auto-punch-out",
       label: t("autoPunchOutLogs"),
       match: (p: string) => p.startsWith("/admin/auto-punch-out"),
+      group: "Logs",
     },
-    { href: "/admin/leaves", label: t("leaveModule"), match: (p: string) => p.startsWith("/admin/leaves") },
-    { href: "/admin/attendance", label: t("attendanceModule"), match: (p: string) => p.startsWith("/admin/attendance") },
-    ...(isSuper
-      ? [{ href: "/admin/create", label: t("createUser"), match: (p: string) => p.startsWith("/admin/create") }]
-      : []),
-    { href: "/admin/records", label: t("dailyRecords"), match: (p: string) => p.startsWith("/admin/records") },
     ...(isSuper
       ? [
           {
             href: "/admin/face-reset-logs",
             label: t("faceResetLogs"),
             match: (p: string) => p.startsWith("/admin/face-reset-logs"),
+            group: "Logs",
           },
-          { href: "/admin/admins", label: t("admins"), match: (p: string) => p.startsWith("/admin/admins") },
         ]
       : []),
   ];
+
+  const groups = ["Overview", "People", "Attendance", "Logs"] as const;
 
   async function logout() {
     await fetch("/api/auth/logout?scope=admin", { method: "POST" });
@@ -74,59 +86,88 @@ export default function AdminShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen bg-[#f3f6fb] md:flex">
-      <header className="sticky top-0 z-30 flex items-center justify-between gap-2 bg-ink px-4 py-3 text-white md:hidden">
-        <div className="flex items-center gap-2">
+    <div className="admin-app md:flex">
+      <header className="sticky top-0 z-30 flex items-center justify-between gap-2 border-b border-white/10 bg-ink px-4 py-3 text-white md:hidden">
+        <div className="flex items-center gap-2.5">
           <BrandMark size={40} tone="onDark" />
-          <p className="font-semibold">{t("app")}</p>
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-teal-bright">{t("aap")}</p>
+            <p className="text-sm font-semibold leading-tight">{t("app")}</p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <LangToggle />
-          <button type="button" onClick={() => setOpen((v) => !v)} className="rounded-lg border border-white/20 px-3 py-1 text-sm">
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="rounded-lg border border-white/20 bg-white/5 px-3 py-1.5 text-sm font-medium"
+          >
             {t("menu")}
           </button>
         </div>
       </header>
 
       <aside
-        className={`${open ? "flex" : "hidden"} z-40 w-full flex-col overflow-y-auto bg-ink text-white md:fixed md:inset-y-0 md:left-0 md:flex md:h-screen md:w-60 md:shrink-0`}
+        className={`${open ? "flex" : "hidden"} z-40 w-full flex-col overflow-y-auto border-r border-white/10 bg-ink text-white md:fixed md:inset-y-0 md:left-0 md:flex md:h-screen md:w-64 md:shrink-0`}
       >
-        <div className="hidden border-b border-white/10 px-4 py-5 md:block">
+        <div className="hidden border-b border-white/10 px-5 py-6 md:block">
           <Link href="/admin" onClick={() => setOpen(false)} className="block overflow-hidden">
-            <BrandMark size={36} tone="onDark" className="max-w-full" />
-            <p className="mt-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-teal-bright">{t("aap")}</p>
-            <h1 className="mt-1 truncate text-base font-semibold leading-tight">{t("app")}</h1>
-            <p className="mt-0.5 text-xs text-white/55">Admin</p>
+            <BrandMark size={40} tone="onDark" className="max-w-full" />
+            <p className="mt-4 text-[10px] font-semibold uppercase tracking-[0.18em] text-teal-bright">{t("aap")}</p>
+            <h1 className="mt-1 truncate text-lg font-semibold leading-tight tracking-tight">{t("app")}</h1>
+            <p className="mt-1 text-xs text-white/50">Admin console</p>
           </Link>
-          <div className="mt-3">
+          <div className="mt-4">
             <LangToggle />
           </div>
         </div>
-        <nav className="flex flex-col gap-1 p-3">
-          {nav.map((item) => {
-            const active = item.match(pathname);
+
+        <nav className="flex flex-1 flex-col gap-5 p-3 pb-6">
+          {groups.map((group) => {
+            const items = nav.filter((n) => n.group === group);
+            if (!items.length) return null;
             return (
-              <Link
-                key={item.href}
-                href={item.href}
-                onClick={() => setOpen(false)}
-                className={`rounded-xl px-3 py-2.5 text-sm font-medium ${
-                  active ? "bg-white/15 text-white" : "text-white/70 hover:bg-white/10 hover:text-white"
-                }`}
-              >
-                {item.label}
-              </Link>
+              <div key={group}>
+                <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">{group}</p>
+                <div className="flex flex-col gap-0.5">
+                  {items.map((item) => {
+                    const active = item.match(pathname);
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={() => setOpen(false)}
+                        className={`relative rounded-xl px-3 py-2.5 text-sm font-medium transition ${
+                          active
+                            ? "bg-white/12 text-white shadow-sm ring-1 ring-white/10"
+                            : "text-white/65 hover:bg-white/8 hover:text-white"
+                        }`}
+                      >
+                        {active && (
+                          <span className="absolute inset-y-2 left-0 w-1 rounded-full bg-teal-bright" aria-hidden />
+                        )}
+                        <span className={active ? "pl-2" : ""}>{item.label}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
             );
           })}
         </nav>
-        <div className="mt-auto p-4">
-          <button type="button" onClick={logout} className="w-full rounded-xl border border-white/15 px-3 py-2 text-sm text-white/70">
+
+        <div className="border-t border-white/10 p-4">
+          <button
+            type="button"
+            onClick={logout}
+            className="w-full rounded-xl border border-white/15 bg-white/5 px-3 py-2.5 text-sm font-semibold text-white/80 transition hover:bg-white/10 hover:text-white"
+          >
             {t("logout")}
           </button>
         </div>
       </aside>
 
-      <div className="min-h-screen min-w-0 flex-1 md:pl-60">{children}</div>
+      <div className="min-h-screen min-w-0 flex-1 md:pl-64">{children}</div>
     </div>
   );
 }

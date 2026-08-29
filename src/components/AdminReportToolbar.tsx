@@ -1,7 +1,7 @@
 "use client";
 
 const field =
-  "mt-1 block h-11 w-full min-w-[150px] rounded-xl border border-navy/10 bg-white px-3 text-sm";
+  "admin-field mt-1 block h-11 w-full min-w-[150px] rounded-xl border border-navy/15 bg-white px-3 text-sm shadow-sm";
 
 export function AdminReportToolbar({
   date,
@@ -47,19 +47,19 @@ export function AdminReportToolbar({
   onPdf: () => void;
 }) {
   return (
-    <div className="mt-4 mb-4 flex flex-wrap items-end gap-3 rounded-2xl bg-white p-4 shadow-card">
+    <div className="admin-toolbar mt-4 mb-4 flex flex-wrap items-end gap-3">
       {onDate && (
-        <label className="text-xs font-medium text-navy/55">
+        <label className="text-xs font-semibold text-navy/60">
           Date
           <input type="date" value={date} onChange={(e) => onDate(e.target.value)} className={field} />
         </label>
       )}
-      <label className="min-w-[180px] flex-1 text-xs font-medium text-navy/55">
+      <label className="min-w-[180px] flex-1 text-xs font-semibold text-navy/60">
         Search
         <input value={q} onChange={(e) => onQ(e.target.value)} placeholder={qPlaceholder} className={field} />
       </label>
-      <label className="text-xs font-medium text-navy/55">
-        Zone wise
+      <label className="text-xs font-semibold text-navy/60">
+        Zone
         <select value={zone} onChange={(e) => onZone(e.target.value)} className={field}>
           <option value="">All zones</option>
           {zones.map((z) => (
@@ -69,7 +69,7 @@ export function AdminReportToolbar({
           ))}
         </select>
       </label>
-      <label className="text-xs font-medium text-navy/55">
+      <label className="text-xs font-semibold text-navy/60">
         District
         <select value={district} onChange={(e) => onDistrict(e.target.value)} className={field}>
           <option value="">All districts</option>
@@ -80,7 +80,7 @@ export function AdminReportToolbar({
           ))}
         </select>
       </label>
-      <label className="text-xs font-medium text-navy/55">
+      <label className="text-xs font-semibold text-navy/60">
         Designation
         <select value={designation} onChange={(e) => onDesignation(e.target.value)} className={field}>
           <option value="">All designations</option>
@@ -91,8 +91,8 @@ export function AdminReportToolbar({
           ))}
         </select>
       </label>
-      <label className="text-xs font-medium text-navy/55">
-        Reason wise
+      <label className="text-xs font-semibold text-navy/60">
+        Reason
         <select value={reason} onChange={(e) => onReason(e.target.value)} className={field}>
           <option value="">All reasons</option>
           {reasons.map((r) => (
@@ -103,22 +103,14 @@ export function AdminReportToolbar({
         </select>
       </label>
       {onApply && (
-        <button type="button" onClick={onApply} className="h-11 rounded-xl bg-ink px-4 text-sm font-semibold text-white">
+        <button type="button" onClick={onApply} className="admin-btn-ink h-11 px-5">
           Apply
         </button>
       )}
-      <button
-        type="button"
-        onClick={onCsv}
-        className="h-11 rounded-xl border border-navy/15 px-4 text-sm font-semibold text-navy"
-      >
+      <button type="button" onClick={onCsv} className="admin-btn-secondary h-11">
         Download CSV
       </button>
-      <button
-        type="button"
-        onClick={onPdf}
-        className="h-11 rounded-xl border border-navy/15 px-4 text-sm font-semibold text-navy"
-      >
+      <button type="button" onClick={onPdf} className="admin-btn-secondary h-11">
         PDF
       </button>
     </div>
