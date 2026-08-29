@@ -88,7 +88,8 @@ export function autoReason(
   hours: number,
   hadPunch: boolean,
   onLeave: boolean,
-  firstPunchIn: Date | null
+  firstPunchIn: Date | null,
+  sessionCount = 1
 ) {
   if (onLeave) return "Approved leave for this date";
   if (!hadPunch || !firstPunchIn) return "No punch-in on this date";
@@ -97,20 +98,22 @@ export function autoReason(
     hour: "2-digit",
     minute: "2-digit",
   });
+  const sessionsNote =
+    sessionCount > 1 ? ` · ${sessionCount} sessions combined` : "";
   if (status === "present") {
-    return `Punch in ${punchLabel} (by 10:30) · ${hours.toFixed(1)}h on duty (6–12h = present)`;
+    return `First punch ${punchLabel} (by 10:30) · ${hours.toFixed(1)}h on duty${sessionsNote} (6–12h = present)`;
   }
   if (status === "half_day") {
-    return `Punch in ${punchLabel} (after 10:30, by 1:00) = half-day`;
+    return `First punch ${punchLabel} (after 10:30, by 1:00) = half-day${sessionsNote}`;
   }
   const mins = istMinutesOfDay(firstPunchIn);
   if (mins > HALF_DAY_PUNCH_BEFORE_MINUTES) {
-    return `Punch in ${punchLabel} (after 1:00) = absent`;
+    return `First punch ${punchLabel} (after 1:00) = absent${sessionsNote}`;
   }
   if (mins <= PRESENT_PUNCH_BEFORE_MINUTES && hours < PRESENT_MIN_HOURS) {
-    return `Punch in ${punchLabel} but only ${hours.toFixed(1)}h (need 6–12h for present)`;
+    return `First punch ${punchLabel} but only ${hours.toFixed(1)}h combined${sessionsNote} (need 6–12h for present)`;
   }
-  return `Punch in ${punchLabel} · ${hours.toFixed(1)}h = absent`;
+  return `First punch ${punchLabel} · ${hours.toFixed(1)}h${sessionsNote} = absent`;
 }
 
 /** Resolve final day status (manual mark → leave → auto punch rules). */
@@ -119,11 +122,19 @@ export function resolveDayAttendanceStatus(opts: {
   asOf?: Date;
   onApprovedLeave: boolean;
   manual?: { status: string; source: string; note?: string | null } | null;
-}): { status: AttendanceStatus; source: "auto" | "manual"; reason: string; hours: number; firstIn: Date | null } {
+}): {
+  status: AttendanceStatus;
+  source: "auto" | "manual";
+  reason: string;
+  hours: number;
+  firstIn: Date | null;
+  sessionCount: number;
+} {
   const asOf = opts.asOf ?? new Date();
   const hours = hoursWorkedOnDay(opts.sessions, asOf);
   const hadPunch = opts.sessions.length > 0;
   const firstIn = firstPunchIn(opts.sessions);
+  const sessionCount = opts.sessions.length;
   const manual = opts.manual;
 
   if (manual?.source === "manual" && ATTENDANCE_STATUSES.includes(manual.status as AttendanceStatus)) {
@@ -133,23 +144,26 @@ export function resolveDayAttendanceStatus(opts: {
       reason: manual.note || "Marked manually by admin",
       hours,
       firstIn,
+      sessionCount,
     };
   }
   if (opts.onApprovedLeave || manual?.status === "leave") {
     return {
       status: "leave",
       source: manual?.source === "manual" ? "manual" : "auto",
-      reason: manual?.note || autoReason("leave", hours, hadPunch, true, firstIn),
+      reason: manual?.note || autoReason("leave", hours, hadPunch, true, firstIn, sessionCount),
       hours,
       firstIn,
+      sessionCount,
     };
   }
   const status = autoAttendanceStatus({ firstPunchIn: firstIn, hours, hadPunch });
   return {
     status,
     source: "auto",
-    reason: autoReason(status, hours, hadPunch, false, firstIn),
+    reason: autoReason(status, hours, hadPunch, false, firstIn, sessionCount),
     hours,
     firstIn,
+    sessionCount,
   };
 }

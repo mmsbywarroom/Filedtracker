@@ -2,6 +2,8 @@ import { prisma } from "@/lib/prisma";
 import { pathDistance } from "@/lib/utils";
 
 export const AUTO_PUNCH_OUT_MS = 12 * 60 * 60 * 1000;
+/** No GPS track points for this long → treat session as dead (phone/GPS off) */
+export const STALE_TRACKING_MS = 10 * 60 * 1000;
 
 export type PunchOutReason = "manual" | "gps_off" | "auto_12h" | "auto_geofence";
 
@@ -13,7 +15,7 @@ export async function closeOpenAttendance(opts: {
   accuracy?: number | null;
   reason: PunchOutReason;
   punchOutFace?: string | null;
-  /** When set (e.g. auto 12h), use this instead of now */
+  /** When set (e.g. auto 12h / stale close), use this instead of now */
   punchOutAt?: Date;
 }) {
   const open = await prisma.attendance.findFirst({
@@ -31,7 +33,15 @@ export async function closeOpenAttendance(opts: {
     { lat, lng },
   ]);
 
-  const punchOutAt = opts.punchOutAt || new Date();
+  const now = new Date();
+  let punchOutAt = opts.punchOutAt || now;
+  // GPS/phone died: end duty at last known track time so offline gap is not counted
+  if (!opts.punchOutAt && opts.reason === "gps_off" && lastPoint?.recordedAt) {
+    punchOutAt = lastPoint.recordedAt;
+  }
+  if (punchOutAt.getTime() < open.punchInAt.getTime()) punchOutAt = open.punchInAt;
+  if (punchOutAt.getTime() > now.getTime()) punchOutAt = now;
+
   let address = opts.address;
   if (opts.reason === "gps_off") address = opts.address || "GPS turned off";
   if (opts.reason === "auto_12h") {
@@ -66,6 +76,32 @@ export async function closeOpenAttendance(opts: {
       punchOutLng: true,
       punchOutAddress: true,
     },
+  });
+}
+
+/**
+ * If open session has no fresh GPS points (phone off / GPS dead), close at last known
+ * location so the user can punch in again. Day hours sum all sessions.
+ */
+export async function closeOpenIfTrackingStale(userId: string) {
+  const open = await prisma.attendance.findFirst({
+    where: { userId, punchOutAt: null },
+    include: { points: { orderBy: { recordedAt: "desc" }, take: 1 } },
+  });
+  if (!open) return null;
+
+  const last = open.points[0];
+  const lastAt = last?.recordedAt ?? open.punchInAt;
+  if (Date.now() - lastAt.getTime() < STALE_TRACKING_MS) return null;
+
+  return closeOpenAttendance({
+    userId,
+    lat: last?.lat ?? open.punchInLat,
+    lng: last?.lng ?? open.punchInLng,
+    accuracy: last?.accuracy ?? null,
+    reason: "gps_off",
+    punchOutAt: lastAt,
+    address: "GPS/phone stopped — closed at last known location (can punch in again)",
   });
 }
 

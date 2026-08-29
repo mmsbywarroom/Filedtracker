@@ -5,7 +5,7 @@ import { downsample } from "@/lib/utils";
 import { sanitizeFaceImage } from "@/lib/faceImage";
 import { assertInsideAssignedAssembly } from "@/lib/assemblyGeofence";
 import { assertInsideCallCenterSite, isCallCenterDesignation } from "@/lib/callCenterGeofence";
-import { autoPunchOutIfStale } from "@/lib/punchOut";
+import { autoPunchOutIfStale, closeOpenIfTrackingStale } from "@/lib/punchOut";
 
 function istDayBounds(d = new Date()) {
   const ymd = d.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
@@ -21,6 +21,8 @@ export async function GET() {
 
   // Don't block dashboard open on auto punch-out (can lock DB under load)
   void autoPunchOutIfStale(s.sub).catch(() => {});
+  // Phone/GPS died without clean close → end at last point so user can punch in again
+  await closeOpenIfTrackingStale(s.sub).catch(() => {});
 
   const open = await prisma.attendance.findFirst({
     where: { userId: s.sub, punchOutAt: null },
@@ -62,6 +64,8 @@ export async function POST(req: Request) {
   const s = await requireUser();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   await autoPunchOutIfStale(s.sub);
+  // Allow re-punch after GPS/phone stop: close dead open session at last GPS, then create new one
+  await closeOpenIfTrackingStale(s.sub);
 
   const body = await req.json().catch(() => null);
   const lat = Number(body?.lat);

@@ -23,6 +23,7 @@ type Row = {
   hoursWorked: number;
   punchInAt: string | null;
   punchOutAt: string | null;
+  sessionCount?: number;
 };
 
 type Summary = { present: number; halfDay: number; absent: number; leave: number; total: number };
@@ -174,7 +175,8 @@ export default function AttendanceModulePage() {
       <h1 className="text-2xl font-semibold">Date-wise attendance</h1>
       <p className="mt-1 text-sm text-navy/55">
         Auto: punch by 10:30 + 6–12h = Present · after 10:30 to 1:00 = Half-day · after 1:00 or no punch = Absent ·
-        leave mark / approved leave = Leave. Manual change requires a reason.
+        leave mark / approved leave = Leave. Multiple punch-ins the same day (e.g. after GPS/phone off) are added
+        together for hours. Manual change requires a reason.
       </p>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -319,7 +321,12 @@ export default function AttendanceModulePage() {
                   </td>
                   <td className="px-4 py-3">{fmtTime(r.punchInAt)}</td>
                   <td className="px-4 py-3">{fmtTime(r.punchOutAt)}</td>
-                  <td className="px-4 py-3 font-medium">{r.hoursWorked > 0 ? `${r.hoursWorked}h` : "—"}</td>
+                  <td className="px-4 py-3 font-medium">
+                    {r.hoursWorked > 0 ? `${r.hoursWorked}h` : "—"}
+                    {(r.sessionCount || 0) > 1 ? (
+                      <p className="text-[10px] font-normal text-navy/45">{r.sessionCount} sessions</p>
+                    ) : null}
+                  </td>
                   <td className="px-4 py-3">
                     <select
                       value={r.status}

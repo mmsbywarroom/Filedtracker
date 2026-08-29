@@ -99,7 +99,7 @@ export async function GET(req: Request) {
           ? { status: manual.status, source: manual.source, note: manual.note }
           : null,
       });
-      const { status, source, reason, hours, firstIn } = resolved;
+      const { status, source, reason, hours, firstIn, sessionCount } = resolved;
 
       const lastOut = sessions.length
         ? sessions
@@ -122,6 +122,7 @@ export async function GET(req: Request) {
         source,
         reason,
         hoursWorked: Math.round(hours * 10) / 10,
+        sessionCount,
         punchInAt: firstIn,
         punchOutAt: lastOut,
         markId: manual?.id || null,
