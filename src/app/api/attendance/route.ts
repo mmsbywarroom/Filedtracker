@@ -6,6 +6,8 @@ import { sanitizeFaceImage } from "@/lib/faceImage";
 import { assertInsideAssignedAssembly } from "@/lib/assemblyGeofence";
 import { assertInsideCallCenterSite, isCallCenterDesignation } from "@/lib/callCenterGeofence";
 import { autoPunchOutIfStale, closeOpenIfTrackingStale } from "@/lib/punchOut";
+import { requireUserFaceMatch } from "@/lib/requireFaceMatch";
+import { assertPanIndiaPunchLocation, isPanIndiaPunchPhone } from "@/lib/panIndiaPunch";
 
 function istDayBounds(d = new Date()) {
   const ymd = d.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
@@ -75,6 +77,12 @@ export async function POST(req: Request) {
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
     return NextResponse.json({ error: "Location is required for punch in." }, { status: 400 });
   }
+
+  const face = await requireUserFaceMatch(s.sub, body?.descriptor);
+  if (!face.ok) {
+    return NextResponse.json({ error: face.error, code: "FACE_MISMATCH" }, { status: 403 });
+  }
+
   const existing = await prisma.attendance.findFirst({
     where: { userId: s.sub, punchOutAt: null },
   });
@@ -82,7 +90,14 @@ export async function POST(req: Request) {
 
   const user = await prisma.user.findUnique({
     where: { id: s.sub },
-    select: { assemblyName: true, designation: true, isActive: true, assemblies: true, sectorAllotted: true },
+    select: {
+      assemblyName: true,
+      designation: true,
+      isActive: true,
+      assemblies: true,
+      sectorAllotted: true,
+      phone: true,
+    },
   });
   if (!user || !user.isActive) {
     return NextResponse.json({ error: "Account not found or inactive." }, { status: 403 });
@@ -105,7 +120,12 @@ export async function POST(req: Request) {
     );
   }
 
-  if (isCallCenterDesignation(user.designation)) {
+  if (isPanIndiaPunchPhone(user.phone)) {
+    const india = assertPanIndiaPunchLocation(lat, lng);
+    if (!india.ok) {
+      return NextResponse.json({ error: india.error, code: india.code }, { status: 403 });
+    }
+  } else if (isCallCenterDesignation(user.designation)) {
     const geo = assertInsideCallCenterSite({
       sectorAllotted: user.sectorAllotted,
       lat,

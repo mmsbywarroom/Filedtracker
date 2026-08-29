@@ -68,8 +68,8 @@ export function FaceCapture({ actionLabel, onCapture, busy, mode = "verify" }: P
   const [error, setError] = useState("");
   const [hint, setHint] = useState("");
   const [goodHits, setGoodHits] = useState(0);
-  // Punch needs a few solid frames — one weak frame was letting group/blurry shots through
-  const needHits = mode === "register" ? 6 : 3;
+  // Verify: 2 quick frames (spoof harder). Register: more samples.
+  const needHits = mode === "register" ? 4 : 2;
 
   function hintForError(err: FaceScanError) {
     if (err === "too_far") return t("tooFar");
@@ -90,16 +90,17 @@ export function FaceCapture({ actionLabel, onCapture, busy, mode = "verify" }: P
     (async () => {
       try {
         const ios = isIosBrowser();
+        // Lower ideal resolution = faster preview + faster ML
         stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: "user",
-            width: { ideal: ios ? 480 : 640 },
-            height: { ideal: ios ? 480 : 640 },
+            width: { ideal: ios ? 360 : 480 },
+            height: { ideal: ios ? 360 : 480 },
           },
           audio: false,
         });
         if (cancelled || !videoRef.current) {
-          stream.getTracks().forEach((t) => t.stop());
+          stream.getTracks().forEach((tr) => tr.stop());
           return;
         }
         videoRef.current.srcObject = stream;
@@ -118,16 +119,16 @@ export function FaceCapture({ actionLabel, onCapture, busy, mode = "verify" }: P
         await loadFaceModels();
         if (cancelled) return;
         setModelsReady(true);
-        setHint(mode === "register" ? t("lookCamera") : t("lookCamera"));
+        setHint(t("lookCamera"));
       } catch {
         if (!cancelled) setHint(t("retryLook"));
       }
     })();
     return () => {
       cancelled = true;
-      stream?.getTracks().forEach((t) => t.stop());
+      stream?.getTracks().forEach((tr) => tr.stop());
     };
-  }, [mode]);
+  }, [mode, t]);
 
   async function submit(result: FaceScan) {
     if (!result.ok || !videoRef.current || firing.current || busy) return;
@@ -153,44 +154,64 @@ export function FaceCapture({ actionLabel, onCapture, busy, mode = "verify" }: P
   useEffect(() => {
     if (!camReady || !modelsReady || busy || firing.current) return;
     let running = false;
-    let timer = 0;
-    const tick = async () => {
-      if (running || !videoRef.current || firing.current) return;
-      running = true;
-      const result = await scanFace(videoRef.current, { strict: mode === "register" });
-      if (result.ok) {
-        lastGood.current = result;
-        hits.current += 1;
-        setGoodHits(hits.current);
-        if (samples.current.length < 6) samples.current.push(result.descriptor);
-        if (mode === "register") {
-          setHint(`${t("faceFound")} (${Math.min(hits.current, needHits)}/${needHits})`);
-        } else {
-          setHint(
-            hits.current >= needHits
-              ? t("faceFound")
-              : `${t("faceFound")} (${Math.min(hits.current, needHits)}/${needHits})`
-          );
-        }
-        if (hits.current >= needHits) await submit(result);
-      } else {
-        hits.current = 0;
-        setGoodHits(0);
-        lastGood.current = null;
-        if (samples.current.length > 2) samples.current = samples.current.slice(-2);
-        setHint(hintForError(result.error));
-      }
-      running = false;
+    let cancelled = false;
+    let raf = 0;
+    let lastRun = 0;
+    const minGap = mode === "register" ? 160 : 90;
+
+    const schedule = () => {
+      if (cancelled) return;
+      raf = requestAnimationFrame(loop);
     };
-    timer = window.setInterval(tick, isIosBrowser() ? 400 : 320);
-    tick();
-    return () => clearInterval(timer);
+
+    const loop = (now: number) => {
+      if (cancelled) return;
+      if (running || firing.current || !videoRef.current || now - lastRun < minGap) {
+        schedule();
+        return;
+      }
+      lastRun = now;
+      running = true;
+      void (async () => {
+        try {
+          const result = await scanFace(videoRef.current!, { strict: mode === "register" });
+          if (cancelled) return;
+          if (result.ok) {
+            lastGood.current = result;
+            hits.current += 1;
+            setGoodHits(hits.current);
+            if (samples.current.length < 6) samples.current.push(result.descriptor);
+            if (mode === "register") {
+              setHint(`${t("faceFound")} (${Math.min(hits.current, needHits)}/${needHits})`);
+            } else {
+              setHint(t("faceFound"));
+            }
+            if (hits.current >= needHits) await submit(result);
+          } else {
+            hits.current = 0;
+            setGoodHits(0);
+            lastGood.current = null;
+            if (samples.current.length > 2) samples.current = samples.current.slice(-2);
+            setHint(hintForError(result.error));
+          }
+        } finally {
+          running = false;
+          schedule();
+        }
+      })();
+    };
+
+    schedule();
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+    };
   }, [camReady, modelsReady, busy, mode, needHits, t]);
 
   return (
     <div className="flex flex-col items-center gap-4">
       <div
-        className={`relative aspect-square w-full max-w-xs overflow-hidden rounded-full border-[5px] bg-black shadow-float ${
+        className={`relative aspect-square w-full max-w-xs overflow-hidden rounded-2xl border-[4px] bg-black shadow-float ${
           locked ? "border-emerald-400 ring-4 ring-emerald-300/50" : "border-white ring-4 ring-teal/30"
         }`}
       >
@@ -203,7 +224,8 @@ export function FaceCapture({ actionLabel, onCapture, busy, mode = "verify" }: P
       {!modelsReady && camReady && <p className="text-xs text-navy/50">{t("firstLoad")}</p>}
       {mode === "register" && (
         <p className="max-w-xs text-center text-xs text-navy/50">
-          Center your full face in the round frame — forehead, both eyes, nose and chin clearly visible. Use bright light.
+          Center your full face in the square frame — forehead, both eyes, nose and chin clearly visible. Use bright
+          light.
         </p>
       )}
       <button

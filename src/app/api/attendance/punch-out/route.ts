@@ -5,6 +5,8 @@ import { sanitizeFaceImage } from "@/lib/faceImage";
 import { assertInsideAssignedAssembly } from "@/lib/assemblyGeofence";
 import { assertInsideCallCenterSite, isCallCenterDesignation } from "@/lib/callCenterGeofence";
 import { closeOpenAttendance } from "@/lib/punchOut";
+import { requireUserFaceMatch } from "@/lib/requireFaceMatch";
+import { assertPanIndiaPunchLocation, isPanIndiaPunchPhone } from "@/lib/panIndiaPunch";
 
 export async function POST(req: Request) {
   const s = await requireUser();
@@ -18,11 +20,27 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Location is required for punch out." }, { status: 400 });
   }
 
+  const face = await requireUserFaceMatch(s.sub, body?.descriptor);
+  if (!face.ok) {
+    return NextResponse.json({ error: face.error, code: "FACE_MISMATCH" }, { status: 403 });
+  }
+
   const user = await prisma.user.findUnique({
     where: { id: s.sub },
-    select: { assemblyName: true, designation: true, assemblies: true, sectorAllotted: true },
+    select: {
+      assemblyName: true,
+      designation: true,
+      assemblies: true,
+      sectorAllotted: true,
+      phone: true,
+    },
   });
-  if (isCallCenterDesignation(user?.designation)) {
+  if (isPanIndiaPunchPhone(user?.phone)) {
+    const india = assertPanIndiaPunchLocation(lat, lng);
+    if (!india.ok) {
+      return NextResponse.json({ error: india.error, code: india.code }, { status: 403 });
+    }
+  } else if (isCallCenterDesignation(user?.designation)) {
     const geo = assertInsideCallCenterSite({
       sectorAllotted: user?.sectorAllotted,
       lat,

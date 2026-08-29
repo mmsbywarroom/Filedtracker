@@ -5,6 +5,10 @@ import * as faceapi from "face-api.js";
 let loaded = false;
 let loading: Promise<void> | null = null;
 
+/** Reused canvas so we don't allocate every frame */
+let scanCanvas: HTMLCanvasElement | null = null;
+let scanCtx: CanvasRenderingContext2D | null = null;
+
 const MODEL_URLS = [
   "/weights",
   "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@0.22.2/weights",
@@ -53,10 +57,29 @@ export type ScanFaceOptions = {
 
 function detector(strict: boolean) {
   return new faceapi.TinyFaceDetectorOptions({
-    // Higher input size catches second faces better on punch too
-    inputSize: 416,
-    scoreThreshold: strict ? 0.52 : 0.45,
+    inputSize: strict ? 320 : 224,
+    scoreThreshold: strict ? 0.5 : 0.45,
   });
+}
+
+/** Downscale frame before ML — biggest speed win on mid-range Android */
+function frameForScan(video: HTMLVideoElement, maxSide: number) {
+  if (!scanCanvas) {
+    scanCanvas = document.createElement("canvas");
+    scanCtx = scanCanvas.getContext("2d", { willReadFrequently: true });
+  }
+  const ctx = scanCtx;
+  if (!ctx || !video.videoWidth) return null;
+
+  const scale = Math.min(1, maxSide / Math.max(video.videoWidth, video.videoHeight));
+  const w = Math.max(1, Math.round(video.videoWidth * scale));
+  const h = Math.max(1, Math.round(video.videoHeight * scale));
+  if (scanCanvas.width !== w || scanCanvas.height !== h) {
+    scanCanvas.width = w;
+    scanCanvas.height = h;
+  }
+  ctx.drawImage(video, 0, 0, w, h);
+  return { canvas: scanCanvas, scale: scale || 1 };
 }
 
 function avgPoint(points: faceapi.Point[]) {
@@ -90,17 +113,15 @@ function validateFaceGeometry(
 
   const cx = box.x + box.width / 2;
   const cy = box.y + box.height / 2;
-  // Punch + register both need a centered face (punch slightly looser)
-  const xPad = strict ? 0.24 : 0.18;
-  const yPad = strict ? 0.26 : 0.2;
+  const xPad = strict ? 0.22 : 0.16;
+  const yPad = strict ? 0.24 : 0.18;
   if (cx < videoWidth * xPad || cx > videoWidth * (1 - xPad)) return "off_center";
   if (cy < videoHeight * yPad || cy > videoHeight * (1 - yPad)) return "off_center";
 
-  // Face must not be clipped at edges (partial / top-of-head only shots)
-  if (box.x < videoWidth * 0.04 || box.x + box.width > videoWidth * 0.96) return "partial";
-  if (box.y < videoHeight * 0.06 || box.y + box.height > videoHeight * 0.94) return "partial";
+  if (box.x < videoWidth * 0.03 || box.x + box.width > videoWidth * 0.97) return "partial";
+  if (box.y < videoHeight * 0.05 || box.y + box.height > videoHeight * 0.95) return "partial";
 
-  if (score < (strict ? 0.55 : 0.48)) return "low_quality";
+  if (score < (strict ? 0.52 : 0.45)) return "low_quality";
 
   const lm = detection.landmarks.positions;
   if (lm.length < 68) return "partial";
@@ -111,26 +132,23 @@ function validateFaceGeometry(
   const mouth = avgPoint(lm.slice(48, 68));
   const jaw = lm.slice(0, 17);
 
-  // Full face: eyes above nose, mouth clearly below nose
   const eyeY = (leftEye.y + rightEye.y) / 2;
   if (eyeY >= nose.y - box.height * 0.02) return "partial";
-  if (mouth.y <= nose.y + box.height * 0.08) return "partial";
+  if (mouth.y <= nose.y + box.height * 0.06) return "partial";
 
   const eyeDist = Math.hypot(leftEye.x - rightEye.x, leftEye.y - rightEye.y);
-  if (eyeDist < box.width * 0.22) return "partial";
+  if (eyeDist < box.width * 0.2) return "partial";
 
   const landmarkMinY = Math.min(...jaw.map((p) => p.y));
   const landmarkMaxY = Math.max(...lm.map((p) => p.y));
   const landmarkSpan = landmarkMaxY - landmarkMinY;
-  if (landmarkSpan < box.height * 0.72) return "partial";
+  if (landmarkSpan < box.height * (strict ? 0.72 : 0.65)) return "partial";
 
-  // Chin should sit near bottom of detection box (not just forehead / top of head)
   const chin = lm[8];
-  if (chin.y < box.y + box.height * 0.55) return "partial";
+  if (chin.y < box.y + box.height * 0.5) return "partial";
 
-  // Nose roughly centered horizontally
   const eyeMidX = (leftEye.x + rightEye.x) / 2;
-  if (Math.abs(nose.x - eyeMidX) > box.width * 0.22) return "partial";
+  if (Math.abs(nose.x - eyeMidX) > box.width * 0.25) return "partial";
 
   return null;
 }
@@ -153,8 +171,11 @@ export async function scanFace(video: HTMLVideoElement, opts: ScanFaceOptions = 
   await loadFaceModels();
   if (!video.videoWidth) return { ok: false, error: "no_face" };
 
+  const frame = frameForScan(video, strict ? 320 : 224);
+  if (!frame) return { ok: false, error: "no_face" };
+
   const detections = await faceapi
-    .detectAllFaces(video, detector(strict))
+    .detectAllFaces(frame.canvas, detector(strict))
     .withFaceLandmarks()
     .withFaceDescriptors();
 
@@ -164,24 +185,30 @@ export async function scanFace(video: HTMLVideoElement, opts: ScanFaceOptions = 
     (a, b) => b.detection.box.width * b.detection.box.height - a.detection.box.width * a.detection.box.height
   );
   const best = detections[0];
+  const inv = 1 / frame.scale;
   const box = best.detection.box;
-  const minSide = Math.min(video.videoWidth, video.videoHeight);
+  const minSide = Math.min(frame.canvas.width, frame.canvas.height);
 
-  // Any other clear face in frame → reject (two people / group selfie)
   for (let i = 1; i < detections.length; i++) {
     const other = detections[i].detection;
     const side = Math.min(other.box.width, other.box.height);
-    if (other.score >= 0.28 || side > minSide * 0.08) {
+    // Any second face in frame → block (group / standing behind)
+    if (other.score >= 0.22 || side > minSide * 0.06) {
       return { ok: false, error: "multiple" };
     }
   }
 
-  const geoError = validateFaceGeometry(best, video.videoWidth, video.videoHeight, strict);
+  const geoError = validateFaceGeometry(best, frame.canvas.width, frame.canvas.height, strict);
   if (geoError) return { ok: false, error: geoError };
 
   return {
     ok: true,
     descriptor: Array.from(best.descriptor),
-    box: { x: box.x, y: box.y, width: box.width, height: box.height },
+    box: {
+      x: box.x * inv,
+      y: box.y * inv,
+      width: box.width * inv,
+      height: box.height * inv,
+    },
   };
 }

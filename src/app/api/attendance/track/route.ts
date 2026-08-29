@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { haversineMeters, isPlausibleStep } from "@/lib/utils";
 import { autoPunchOutIfStale, closeOpenAttendance } from "@/lib/punchOut";
 import { assertInsideCallCenterSite, isCallCenterDesignation } from "@/lib/callCenterGeofence";
+import { isPanIndiaPunchPhone } from "@/lib/panIndiaPunch";
 
 export async function POST(req: Request) {
   const s = await requireUser();
@@ -52,9 +53,9 @@ export async function POST(req: Request) {
 
   const user = await prisma.user.findUnique({
     where: { id: s.sub },
-    select: { designation: true, sectorAllotted: true },
+    select: { designation: true, sectorAllotted: true, phone: true },
   });
-  if (isCallCenterDesignation(user?.designation)) {
+  if (isCallCenterDesignation(user?.designation) && !isPanIndiaPunchPhone(user?.phone)) {
     for (const p of cleaned) {
       const geo = assertInsideCallCenterSite({
         sectorAllotted: user?.sectorAllotted,

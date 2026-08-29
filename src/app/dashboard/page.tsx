@@ -428,7 +428,7 @@ export default function DashboardPage() {
 
       await verifyFace(descriptor);
 
-      const payload = { lat, lng, accuracy, image };
+      const payload = { lat, lng, accuracy, image, descriptor };
       const url = kind === "in" ? "/api/attendance" : "/api/attendance/punch-out";
       const res = await withTimeout(
         fetch(url, {
