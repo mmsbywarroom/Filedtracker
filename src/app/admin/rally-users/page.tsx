@@ -350,94 +350,96 @@ export default function AdminRallyUsersPage() {
         <p className="text-sm text-navy/55">{users.length} users</p>
       </div>
 
-      <section className="admin-panel mt-4 overflow-x-auto">
-        <table>
-          <thead>
-            <tr>
-              <th>
-                <input
-                  type="checkbox"
-                  checked={pageRows.length > 0 && pageRows.every((u) => selected[u.id])}
-                  onChange={(e) => {
-                    const on = e.target.checked;
-                    setSelected((s) => {
-                      const next = { ...s };
-                      for (const u of pageRows) next[u.id] = on;
-                      return next;
-                    });
-                  }}
-                />
-              </th>
-              <th>User Name</th>
-              <th>Number</th>
-              <th>Zone</th>
-              <th>District</th>
-              <th>Ac Name</th>
-              <th>Village/Ward</th>
-              <th>Vehicle No</th>
-              <th>Vehicle Type</th>
-              <th>POC Name</th>
-              <th>POC Number</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {pageRows.map((u) => (
-              <tr key={u.id}>
-                <td>
+      <section className="admin-panel mt-4">
+        <div className="overflow-x-auto">
+          <table className="min-w-[1100px]">
+            <thead>
+              <tr>
+                <th>
                   <input
                     type="checkbox"
-                    checked={Boolean(selected[u.id])}
-                    onChange={() => setSelected((s) => ({ ...s, [u.id]: !s[u.id] }))}
-                  />
-                </td>
-                <td>{u.name}</td>
-                <td>{u.phone}</td>
-                <td>{u.zone}</td>
-                <td>{u.district}</td>
-                <td>{u.acName}</td>
-                <td>{u.villageWard}</td>
-                <td>{u.vehicleNo}</td>
-                <td>{u.vehicleType}</td>
-                <td>{u.pocName}</td>
-                <td>{u.pocNumber}</td>
-                <td className="whitespace-nowrap">
-                  <button
-                    type="button"
-                    className="admin-btn-ghost"
-                    onClick={() => {
-                      setEditing(u);
-                      setForm({
-                        zone: u.zone,
-                        district: u.district,
-                        acName: u.acName,
-                        villageWard: u.villageWard,
-                        name: u.name,
-                        phone: u.phone,
-                        vehicleNo: u.vehicleNo,
-                        pocName: u.pocName,
-                        pocNumber: u.pocNumber,
-                        vehicleType: u.vehicleType,
+                    checked={pageRows.length > 0 && pageRows.every((u) => selected[u.id])}
+                    onChange={(e) => {
+                      const on = e.target.checked;
+                      setSelected((s) => {
+                        const next = { ...s };
+                        for (const u of pageRows) next[u.id] = on;
+                        return next;
                       });
                     }}
-                  >
-                    Edit
-                  </button>
-                  <button type="button" className="admin-btn-danger ml-1" onClick={() => remove(u.id)}>
-                    Delete
-                  </button>
-                </td>
+                  />
+                </th>
+                <th className="sticky left-10 z-10 bg-[color:var(--admin-head)]">Actions</th>
+                <th>User Name</th>
+                <th>Number</th>
+                <th>Zone</th>
+                <th>District</th>
+                <th>Ac Name</th>
+                <th>Village/Ward</th>
+                <th>Vehicle No</th>
+                <th>Vehicle Type</th>
+                <th>POC Name</th>
+                <th>POC Number</th>
               </tr>
-            ))}
-            {!pageRows.length && (
-              <tr>
-                <td colSpan={12} className="py-8 text-center text-navy/50">
-                  No rally users yet. Create a rally and upload CSV.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {pageRows.map((u) => (
+                <tr key={u.id}>
+                  <td>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(selected[u.id])}
+                      onChange={() => setSelected((s) => ({ ...s, [u.id]: !s[u.id] }))}
+                    />
+                  </td>
+                  <td className="sticky left-10 z-10 whitespace-nowrap bg-white">
+                    <button
+                      type="button"
+                      className="admin-btn-ghost"
+                      onClick={() => {
+                        setEditing(u);
+                        setForm({
+                          zone: u.zone,
+                          district: u.district,
+                          acName: u.acName,
+                          villageWard: u.villageWard,
+                          name: u.name,
+                          phone: u.phone,
+                          vehicleNo: u.vehicleNo,
+                          pocName: u.pocName,
+                          pocNumber: u.pocNumber,
+                          vehicleType: u.vehicleType,
+                        });
+                      }}
+                    >
+                      Edit
+                    </button>
+                    <button type="button" className="admin-btn-danger ml-1" onClick={() => remove(u.id)}>
+                      Delete
+                    </button>
+                  </td>
+                  <td>{u.name}</td>
+                  <td>{u.phone}</td>
+                  <td>{u.zone}</td>
+                  <td>{u.district}</td>
+                  <td>{u.acName}</td>
+                  <td>{u.villageWard}</td>
+                  <td>{u.vehicleNo}</td>
+                  <td>{u.vehicleType}</td>
+                  <td>{u.pocName}</td>
+                  <td>{u.pocNumber}</td>
+                </tr>
+              ))}
+              {!pageRows.length && (
+                <tr>
+                  <td colSpan={12} className="py-8 text-center text-navy/50">
+                    No rally users yet. Create a rally and upload CSV.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
         <PaginationBar page={page} pageSize={pageSize} total={users.length} onPage={setPage} onPageSize={setPageSize} />
       </section>
     </main>

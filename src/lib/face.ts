@@ -213,14 +213,107 @@ export async function scanFace(video: HTMLVideoElement, opts: ScanFaceOptions = 
   };
 }
 
-/** Count every detected head in a still (group photo / vehicle). */
+let tinyLoaded = false;
+let tinyLoading: Promise<void> | null = null;
+
+/** Head-count models from this app only (`/public/weights`) — no CDN / cloud API. */
+export async function loadHeadCountModels() {
+  if (tinyLoaded) return;
+  if (tinyLoading) return tinyLoading;
+  tinyLoading = (async () => {
+    await faceapi.nets.tinyFaceDetector.loadFromUri("/weights");
+    tinyLoaded = true;
+    tinyLoading = null;
+  })();
+  return tinyLoading;
+}
+
+function iou(
+  a: { x: number; y: number; width: number; height: number },
+  b: { x: number; y: number; width: number; height: number }
+) {
+  const x1 = Math.max(a.x, b.x);
+  const y1 = Math.max(a.y, b.y);
+  const x2 = Math.min(a.x + a.width, b.x + b.width);
+  const y2 = Math.min(a.y + a.height, b.y + b.height);
+  const inter = Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
+  const union = a.width * a.height + b.width * b.height - inter;
+  return union <= 0 ? 0 : inter / union;
+}
+
+function nmsBoxes(boxes: { x: number; y: number; width: number; height: number; score: number }[]) {
+  const sorted = [...boxes].sort((a, b) => b.score - a.score);
+  const keep: typeof boxes = [];
+  for (const box of sorted) {
+    if (keep.some((k) => iou(k, box) > 0.38)) continue;
+    keep.push(box);
+  }
+  return keep;
+}
+
+function sourceSize(source: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement) {
+  if (source instanceof HTMLVideoElement) return { w: source.videoWidth, h: source.videoHeight };
+  if (source instanceof HTMLImageElement) return { w: source.naturalWidth || source.width, h: source.naturalHeight || source.height };
+  return { w: source.width, h: source.height };
+}
+
+function canvasForCount(source: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement, maxSide: number) {
+  const { w, h } = sourceSize(source);
+  if (!w || !h) return null;
+  const scale = maxSide / Math.max(w, h);
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(32, Math.round(w * scale));
+  canvas.height = Math.max(32, Math.round(h * scale));
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  ctx.drawImage(source, 0, 0, canvas.width, canvas.height);
+  return canvas;
+}
+
+/** Count every detected head locally (tiny face detector, several sizes + NMS). */
 export async function countHeads(
   source: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement
 ): Promise<number> {
-  await loadFaceModels();
-  const dets = await faceapi.detectAllFaces(
-    source,
-    new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.28 })
-  );
-  return dets.length;
+  await loadHeadCountModels();
+  const { w, h } = sourceSize(source);
+  if (!w || !h) return 0;
+  const canvases = [
+    canvasForCount(source, 1280),
+    canvasForCount(source, 800),
+  ].filter((c): c is HTMLCanvasElement => Boolean(c));
+
+  const boxes: { x: number; y: number; width: number; height: number; score: number }[] = [];
+  for (const canvas of canvases) {
+    const sx = w / canvas.width;
+    const sy = h / canvas.height;
+    const opts = [
+      new faceapi.TinyFaceDetectorOptions({ inputSize: 608, scoreThreshold: 0.1 }),
+      new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.12 }),
+      new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.15 }),
+    ];
+    for (const opt of opts) {
+      const dets = await faceapi.detectAllFaces(canvas, opt);
+      for (const d of dets) {
+        if (d.box.width < 6 || d.box.height < 6) continue;
+        boxes.push({
+          x: d.box.x * sx,
+          y: d.box.y * sy,
+          width: d.box.width * sx,
+          height: d.box.height * sy,
+          score: d.score,
+        });
+      }
+    }
+  }
+  return nmsBoxes(boxes).length;
+}
+
+export async function countHeadsFromDataUrl(dataUrl: string): Promise<number> {
+  const img = new Image();
+  img.src = dataUrl;
+  await new Promise<void>((resolve, reject) => {
+    img.onload = () => resolve();
+    img.onerror = () => reject(new Error("photo"));
+  });
+  return countHeads(img);
 }

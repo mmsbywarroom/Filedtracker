@@ -1,4 +1,4 @@
-import { googleMapsKey } from "@/lib/runtimeEnv";
+/** Local GPS math only — no maps / traffic APIs. */
 
 export function haversineMeters(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
   const R = 6371000;
@@ -14,46 +14,35 @@ export function haversineMeters(a: { lat: number; lng: number }, b: { lat: numbe
 
 export const RALLY_REACHED_METERS = 400;
 
-export async function rallyTravelEta(opts: {
+/** Straight-line vs typical Indian roads (bends / village routes). */
+const ROAD_FACTOR = 1.28;
+
+function kmhForVehicle(vehicleType?: string | null) {
+  const t = (vehicleType || "").toLowerCase();
+  if (/bus|coach/.test(t)) return 28;
+  if (/truck|lorry|tempo|mini/.test(t)) return 30;
+  if (/tractor/.test(t)) return 22;
+  if (/bike|scooter|act|motorcycle/.test(t)) return 35;
+  if (/car|suv|innova|dzire|swift/.test(t)) return 38;
+  return 32;
+}
+
+export function rallyTravelEta(opts: {
   fromLat: number;
   fromLng: number;
   toLat: number;
   toLng: number;
-}): Promise<{ etaSeconds: number; distanceMeters: number }> {
+  vehicleType?: string | null;
+}): { etaSeconds: number; distanceMeters: number } {
   const straight = haversineMeters(
     { lat: opts.fromLat, lng: opts.fromLng },
     { lat: opts.toLat, lng: opts.toLng }
   );
-  const key = googleMapsKey();
-  if (!key) {
-    return { etaSeconds: Math.max(60, Math.round((straight / 1000 / 25) * 3600)), distanceMeters: straight };
-  }
-  const url = new URL("https://maps.googleapis.com/maps/api/directions/json");
-  url.searchParams.set("origin", `${opts.fromLat},${opts.fromLng}`);
-  url.searchParams.set("destination", `${opts.toLat},${opts.toLng}`);
-  url.searchParams.set("mode", "driving");
-  url.searchParams.set("departure_time", "now");
-  url.searchParams.set("traffic_model", "best_guess");
-  url.searchParams.set("key", key);
-  try {
-    const res = await fetch(url.toString(), { cache: "no-store" });
-    const data = (await res.json()) as {
-      routes?: Array<{
-        legs?: Array<{
-          distance?: { value?: number };
-          duration?: { value?: number };
-          duration_in_traffic?: { value?: number };
-        }>;
-      }>;
-    };
-    const leg = data.routes?.[0]?.legs?.[0];
-    const eta = Number(leg?.duration_in_traffic?.value ?? leg?.duration?.value ?? 0);
-    const dist = Number(leg?.distance?.value ?? straight);
-    if (eta > 0) return { etaSeconds: eta, distanceMeters: dist };
-  } catch {
-    /* fall through */
-  }
-  return { etaSeconds: Math.max(60, Math.round((straight / 1000 / 25) * 3600)), distanceMeters: straight };
+  const roadMeters = straight * ROAD_FACTOR;
+  const kmh = kmhForVehicle(opts.vehicleType);
+  const hours = roadMeters / 1000 / kmh;
+  const etaSeconds = Math.max(60, Math.round(hours * 3600));
+  return { etaSeconds, distanceMeters: roadMeters };
 }
 
 export function remainingEtaSeconds(startedAt: Date, etaSeconds: number, reachedAt: Date | null) {

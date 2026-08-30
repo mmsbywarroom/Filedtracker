@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BrandMark } from "@/components/BrandMark";
 import { locateDevice } from "@/lib/deviceGeo";
-import { countHeads, loadFaceModels } from "@/lib/face";
+import { countHeads, countHeadsFromDataUrl, loadHeadCountModels } from "@/lib/face";
 
 const PA = {
   title: "ਰੈਲੀ ਫੋਟੋ",
@@ -78,7 +78,7 @@ export default function RallyCapturePage() {
     html.classList.add("lang-pa");
     html.lang = "pa";
     void loadMe();
-    void loadFaceModels().catch(() => {});
+    void loadHeadCountModels().catch(() => {});
     return () => {
       streamRef.current?.getTracks().forEach((t) => t.stop());
     };
@@ -104,29 +104,36 @@ export default function RallyCapturePage() {
 
   async function countFromDataUrl(dataUrl: string) {
     setHeads(null);
-    const img = new Image();
-    img.src = dataUrl;
-    await new Promise((resolve, reject) => {
-      img.onload = resolve;
-      img.onerror = reject;
-    });
+    setMsg(PA.counting);
     try {
-      const n = await countHeads(img);
+      const n = await countHeadsFromDataUrl(dataUrl);
       setHeads(n);
+      setMsg("");
     } catch {
       setHeads(0);
+      setMsg("");
     }
   }
 
   async function snap() {
     const video = videoRef.current;
     if (!video) return;
-    const dataUrl = toJpeg(video);
-    if (!dataUrl) return;
-    setPreview(dataUrl);
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    setCamOn(false);
-    await countFromDataUrl(dataUrl);
+    try {
+      const n = await countHeads(video);
+      const dataUrl = toJpeg(video);
+      if (!dataUrl) return;
+      setPreview(dataUrl);
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      setCamOn(false);
+      setHeads(n);
+    } catch {
+      const dataUrl = toJpeg(video);
+      if (!dataUrl) return;
+      setPreview(dataUrl);
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      setCamOn(false);
+      await countFromDataUrl(dataUrl);
+    }
   }
 
   async function onFile(file: File) {
@@ -138,11 +145,17 @@ export default function RallyCapturePage() {
       img.onload = resolve;
       img.onerror = reject;
     });
+    let n = 0;
+    try {
+      n = await countHeads(img);
+    } catch {
+      n = 0;
+    }
     const dataUrl = toJpeg(img);
     URL.revokeObjectURL(url);
     if (!dataUrl) return;
     setPreview(dataUrl);
-    await countFromDataUrl(dataUrl);
+    setHeads(n);
   }
 
   async function submit() {
@@ -151,6 +164,12 @@ export default function RallyCapturePage() {
     setErr("");
     setMsg(PA.locating);
     try {
+      let people = heads;
+      if (people == null || people === 0) {
+        setMsg(PA.counting);
+        people = await countHeadsFromDataUrl(preview).catch(() => 0);
+        setHeads(people);
+      }
       const pos = await locateDevice();
       setMsg(PA.sending);
       const res = await fetch("/api/rally/checkin", {
@@ -158,7 +177,7 @@ export default function RallyCapturePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           photo: preview,
-          headCount: heads ?? 0,
+          headCount: people ?? 0,
           lat: pos.coords.latitude,
           lng: pos.coords.longitude,
         }),

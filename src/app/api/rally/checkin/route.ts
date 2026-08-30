@@ -25,11 +25,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Photo is required." }, { status: 400 });
   }
 
-  const travel = await rallyTravelEta({
+  const travel = rallyTravelEta({
     fromLat: lat,
     fromLng: lng,
     toLat: rally.lat,
     toLng: rally.lng,
+    vehicleType: user.vehicleType,
   });
   const reached = travel.distanceMeters <= RALLY_REACHED_METERS;
 
