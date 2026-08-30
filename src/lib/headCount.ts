@@ -1,27 +1,26 @@
 "use client";
 
 import type * as cocoSsd from "@tensorflow-models/coco-ssd";
-import { countHeadsFromDataUrl as countFacesFromDataUrl, loadHeadCountModels } from "@/lib/face";
 
 type Detector = cocoSsd.ObjectDetection;
-type Box = { x: number; y: number; width: number; height: number; score: number };
 
 let net: Detector | null = null;
 let loading: Promise<Detector> | null = null;
 
-function sourceSize(source: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement) {
+function sourceSize(source: CanvasImageSource & { width?: number; height?: number; videoWidth?: number; naturalWidth?: number }) {
   if (source instanceof HTMLVideoElement) return { w: source.videoWidth, h: source.videoHeight };
   if (source instanceof HTMLImageElement) {
     return { w: source.naturalWidth || source.width, h: source.naturalHeight || source.height };
   }
-  return { w: source.width, h: source.height };
+  if (source instanceof HTMLCanvasElement) return { w: source.width, h: source.height };
+  if (typeof ImageBitmap !== "undefined" && source instanceof ImageBitmap) {
+    return { w: source.width, h: source.height };
+  }
+  return { w: Number(source.width) || 0, h: Number(source.height) || 0 };
 }
 
-function toCanvas(
-  source: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement,
-  maxSide: number
-): HTMLCanvasElement | null {
-  const { w, h } = sourceSize(source);
+function toCanvas(source: CanvasImageSource, maxSide: number): HTMLCanvasElement | null {
+  const { w, h } = sourceSize(source as never);
   if (!w || !h) return null;
   const scale = Math.min(1, maxSide / Math.max(w, h));
   const canvas = document.createElement("canvas");
@@ -33,24 +32,18 @@ function toCanvas(
   return canvas;
 }
 
-function iou(a: Box, b: Box) {
-  const x1 = Math.max(a.x, b.x);
-  const y1 = Math.max(a.y, b.y);
-  const x2 = Math.min(a.x + a.width, b.x + b.width);
-  const y2 = Math.min(a.y + a.height, b.y + b.height);
-  const inter = Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
-  const union = a.width * a.height + b.width * b.height - inter;
-  return union <= 0 ? 0 : inter / union;
-}
-
-function nms(boxes: Box[], thresh = 0.4) {
-  const sorted = [...boxes].sort((a, b) => b.score - a.score);
-  const keep: Box[] = [];
-  for (const box of sorted) {
-    if (keep.some((k) => iou(k, box) > thresh)) continue;
-    keep.push(box);
-  }
-  return keep;
+function rotateCanvas(src: HTMLCanvasElement, deg: 0 | 90 | 180 | 270): HTMLCanvasElement {
+  if (deg === 0) return src;
+  const canvas = document.createElement("canvas");
+  const swap = deg === 90 || deg === 270;
+  canvas.width = swap ? src.height : src.width;
+  canvas.height = swap ? src.width : src.height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return src;
+  ctx.translate(canvas.width / 2, canvas.height / 2);
+  ctx.rotate((deg * Math.PI) / 180);
+  ctx.drawImage(src, -src.width / 2, -src.height / 2);
+  return canvas;
 }
 
 export async function loadPersonCountModel() {
@@ -60,66 +53,65 @@ export async function loadPersonCountModel() {
     const tf = await import("@tensorflow/tfjs");
     await tf.ready();
     const coco = await import("@tensorflow-models/coco-ssd");
-    net = await coco.load({ base: "lite_mobilenet_v2" });
+    net = await coco.load({ base: "mobilenet_v2" });
     loading = null;
     return net;
   })();
   return loading;
 }
 
+async function detectPeopleOn(canvas: HTMLCanvasElement, model: Detector) {
+  const preds = await model.detect(canvas, 60, 0.2);
+  return preds.filter((p) => p.class === "person" && p.bbox[2] >= 6 && p.bbox[3] >= 6).length;
+}
+
 /**
- * Count people in any vehicle photo (car, bus, tempo, tractor, bike, …).
- * Two scales: close cabin (car) + wide shot (bus / outdoor tractor).
+ * Count people in any photo (car, bus, hall, tractor…).
+ * Tries EXIF-upright + 4 rotations because phone gallery shots are often sideways.
  */
-export async function countPeople(
-  source: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement
-): Promise<number> {
-  const { w, h } = sourceSize(source);
-  if (!w || !h) return 0;
+export async function countPeople(source: CanvasImageSource): Promise<number> {
   const model = await loadPersonCountModel();
-  const boxes: Box[] = [];
-  for (const maxSide of [480, 800]) {
-    const canvas = toCanvas(source, maxSide);
-    if (!canvas) continue;
-    const sx = w / canvas.width;
-    const sy = h / canvas.height;
-    const preds = await model.detect(canvas, 50, 0.28);
-    for (const p of preds) {
-      if (p.class !== "person") continue;
-      const [x, y, bw, bh] = p.bbox;
-      if (bw * sx < 8 || bh * sy < 8) continue;
-      boxes.push({
-        x: x * sx,
-        y: y * sy,
-        width: bw * sx,
-        height: bh * sy,
-        score: p.score,
-      });
-    }
+  const base = toCanvas(source, 640);
+  if (!base) return 0;
+  let best = 0;
+  for (const deg of [0, 90, 180, 270] as const) {
+    const n = await detectPeopleOn(rotateCanvas(base, deg), model);
+    if (n > best) best = n;
   }
-  return nms(boxes).length;
+  return best;
+}
+
+export async function bitmapFromDataUrl(dataUrl: string): Promise<ImageBitmap | HTMLImageElement> {
+  try {
+    const blob = await (await fetch(dataUrl)).blob();
+    return await createImageBitmap(blob, { imageOrientation: "from-image" } as ImageBitmapOptions);
+  } catch {
+    const img = new Image();
+    img.src = dataUrl;
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error("photo"));
+    });
+    return img;
+  }
 }
 
 export async function countHeadsFromDataUrl(dataUrl: string): Promise<number> {
-  const img = new Image();
-  img.decoding = "async";
-  img.src = dataUrl;
-  await new Promise<void>((resolve, reject) => {
-    img.onload = () => resolve();
-    img.onerror = () => reject(new Error("photo"));
-  });
-  if (typeof img.decode === "function") await img.decode().catch(() => {});
-
-  const people = await countPeople(img).catch(() => 0);
-  await loadHeadCountModels().catch(() => null);
-  const faces = await countFacesFromDataUrl(dataUrl).catch(() => 0);
-  return Math.min(200, Math.max(people, faces));
+  const src = await bitmapFromDataUrl(dataUrl);
+  const n = await countPeople(src);
+  if ("close" in src && typeof src.close === "function") src.close();
+  return Math.min(200, n);
 }
 
-export async function countHeads(
-  source: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement
-): Promise<number> {
-  const canvas = toCanvas(source, 960);
-  if (!canvas) return 0;
-  return countHeadsFromDataUrl(canvas.toDataURL("image/jpeg", 0.85));
+export async function fileToJpegDataUrl(file: File): Promise<string> {
+  let bmp: ImageBitmap | null = null;
+  try {
+    bmp = await createImageBitmap(file, { imageOrientation: "from-image" } as ImageBitmapOptions);
+  } catch {
+    bmp = await createImageBitmap(file);
+  }
+  const canvas = toCanvas(bmp, 1280);
+  bmp.close();
+  if (!canvas) return "";
+  return canvas.toDataURL("image/jpeg", 0.82);
 }
