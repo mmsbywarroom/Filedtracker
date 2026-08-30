@@ -130,15 +130,19 @@ model LeaveRequest {
 }
 
 model Rally {
-  id        String         @id @default(cuid())
-  name      String
-  lat       Float
-  lng       Float
-  isActive  Boolean        @default(true)
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
-  users     RallyUser[]
-  checkins  RallyCheckin[]
+  id             String         @id @default(cuid())
+  name           String
+  lat            Float
+  lng            Float
+  scheduledDate  DateTime       @db.Date
+  isActive       Boolean        @default(true)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  users          RallyUser[]
+  checkins       RallyCheckin[]
+
+  @@index([scheduledDate])
+  @@index([isActive])
 }
 
 model RallyUser {

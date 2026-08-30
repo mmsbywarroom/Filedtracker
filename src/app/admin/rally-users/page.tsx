@@ -3,7 +3,15 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { PaginationBar } from "@/components/PaginationBar";
 
-type Rally = { id: string; name: string; lat: number; lng: number; isActive: boolean; userCount: number };
+type Rally = {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  scheduledDate: string;
+  isActive: boolean;
+  userCount: number;
+};
 type RallyUser = {
   id: string;
   zone: string;
@@ -33,6 +41,17 @@ const emptyForm = {
   vehicleType: "",
 };
 
+function todayYmd() {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+}
+
+function fmtRallyDate(ymd?: string) {
+  if (!ymd) return "";
+  const [y, m, d] = ymd.split("-");
+  if (!y || !m || !d) return ymd;
+  return `${d}-${m}-${y}`;
+}
+
 export default function AdminRallyUsersPage() {
   const [rallies, setRallies] = useState<Rally[]>([]);
   const [users, setUsers] = useState<RallyUser[]>([]);
@@ -47,7 +66,7 @@ export default function AdminRallyUsersPage() {
   const [pageSize, setPageSize] = useState(25);
   const [editing, setEditing] = useState<RallyUser | null>(null);
   const [form, setForm] = useState(emptyForm);
-  const [venue, setVenue] = useState({ name: "", lat: "", lng: "" });
+  const [venue, setVenue] = useState({ name: "", date: todayYmd(), lat: "", lng: "" });
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function loadRallies() {
@@ -59,7 +78,8 @@ export default function AdminRallyUsersPage() {
     const data = await res.json();
     const list: Rally[] = data.rallies || [];
     setRallies(list);
-    setRallyId((cur) => cur || list.find((r) => r.isActive)?.id || list[0]?.id || "");
+    const today = todayYmd();
+    setRallyId((cur) => cur || list.find((r) => r.scheduledDate === today)?.id || list.find((r) => r.isActive)?.id || list[0]?.id || "");
   }
 
   async function loadUsers(id?: string) {
@@ -90,9 +110,9 @@ export default function AdminRallyUsersPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         name: venue.name,
+        scheduledDate: venue.date,
         lat: Number(venue.lat),
         lng: Number(venue.lng),
-        isActive: true,
       }),
     });
     const data = await res.json();
@@ -101,8 +121,12 @@ export default function AdminRallyUsersPage() {
       setMsg(data.error || "Could not create rally");
       return;
     }
-    setVenue({ name: "", lat: "", lng: "" });
-    setMsg("Rally created and set as active.");
+    setVenue({ name: "", date: todayYmd(), lat: "", lng: "" });
+    setMsg(
+      venue.date === todayYmd()
+        ? "Rally created and set as today's active rally."
+        : `Rally scheduled for ${fmtRallyDate(venue.date)}. Users can check in on that date.`
+    );
     await loadRallies();
     setRallyId(data.rally.id);
   }
@@ -199,11 +223,13 @@ export default function AdminRallyUsersPage() {
     <main className="px-4 py-6 md:px-8">
       <p className="admin-page-kicker">Rally</p>
       <h1 className="admin-page-title">Rally users</h1>
-      <p className="admin-page-sub">CSV, manual create, and venue for this rally. These users get the photo capture app, not punch-in.</p>
+      <p className="admin-page-sub">
+        Schedule a rally date, then add users. Check-in opens only on that date — you can prepare CSV days ahead.
+      </p>
 
       <section className="admin-panel mt-5 p-4">
         <h2 className="text-sm font-semibold">Create rally / venue</h2>
-        <form onSubmit={createRally} className="mt-3 grid gap-3 md:grid-cols-4">
+        <form onSubmit={createRally} className="mt-3 grid gap-3 md:grid-cols-5">
           <input
             required
             placeholder="Venue name"
@@ -211,43 +237,44 @@ export default function AdminRallyUsersPage() {
             onChange={(e) => setVenue((v) => ({ ...v, name: e.target.value }))}
             className="px-3 py-2"
           />
+          <label className="block text-xs font-medium text-navy/55">
+            Rally date
+            <input
+              required
+              type="date"
+              value={venue.date}
+              onChange={(e) => setVenue((v) => ({ ...v, date: e.target.value }))}
+              className="mt-1 w-full px-3 py-2"
+            />
+          </label>
           <input
             required
             placeholder="Latitude"
             value={venue.lat}
             onChange={(e) => setVenue((v) => ({ ...v, lat: e.target.value }))}
-            className="px-3 py-2"
+            className="px-3 py-2 md:mt-5"
           />
           <input
             required
             placeholder="Longitude"
             value={venue.lng}
             onChange={(e) => setVenue((v) => ({ ...v, lng: e.target.value }))}
-            className="px-3 py-2"
+            className="px-3 py-2 md:mt-5"
           />
-          <button disabled={busy} className="admin-btn-primary">
+          <button disabled={busy} className="admin-btn-primary md:mt-5">
             Create rally
           </button>
         </form>
         <div className="mt-3 flex flex-wrap items-center gap-2">
-          <label className="text-sm text-navy/60">Active rally</label>
+          <label className="text-sm text-navy/60">Select rally</label>
           <select
             value={rallyId}
-            onChange={async (e) => {
-              const id = e.target.value;
-              setRallyId(id);
-              await fetch(`/api/admin/rallies/${id}`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ isActive: true }),
-              });
-              loadRallies();
-            }}
+            onChange={(e) => setRallyId(e.target.value)}
             className="px-3 py-2"
           >
             {rallies.map((r) => (
               <option key={r.id} value={r.id}>
-                {r.name} {r.isActive ? "(active)" : ""} · {r.userCount} users
+                {fmtRallyDate(r.scheduledDate)} · {r.name} {r.isActive ? "(active)" : ""} · {r.userCount} users
               </option>
             ))}
           </select>

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { remainingEtaSeconds, RALLY_REACHED_METERS } from "@/lib/rallyGeo";
+import { findLiveRally } from "@/lib/rallies";
 
 type Bucket = "m30" | "h1" | "h2" | "h2_5" | "over";
 
@@ -30,7 +31,7 @@ function bump(map: Map<string, Agg>, key: string) {
 export async function GET() {
   const s = await requireAdmin();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const rally = await prisma.rally.findFirst({ where: { isActive: true }, orderBy: { createdAt: "desc" } });
+  const rally = await findLiveRally();
   if (!rally) {
     return NextResponse.json({
       rally: null,

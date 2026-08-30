@@ -3,15 +3,24 @@ import { requireRallyUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { sanitizeRallyPhoto } from "@/lib/rallyPhoto";
 import { rallyTravelEta, RALLY_REACHED_METERS } from "@/lib/rallyGeo";
+import { isRallyOnDate, rallyDateYmd } from "@/lib/rallies";
 
 export async function POST(req: Request) {
   const ctx = await requireRallyUser();
   if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { user } = ctx;
-  const rally = user.rally?.isActive
-    ? user.rally
-    : await prisma.rally.findFirst({ where: { isActive: true }, orderBy: { createdAt: "desc" } });
-  if (!rally) return NextResponse.json({ error: "Rally venue is not set." }, { status: 400 });
+  const rally = isRallyOnDate(user.rally) ? user.rally : null;
+  if (!rally) {
+    const when = user.rally ? rallyDateYmd(user.rally.scheduledDate) : null;
+    return NextResponse.json(
+      {
+        error: when
+          ? `This rally is scheduled for ${when}. Check-in opens on that date.`
+          : "Rally venue is not set.",
+      },
+      { status: 400 }
+    );
+  }
 
   const body = await req.json().catch(() => null);
   const lat = Number(body?.lat);

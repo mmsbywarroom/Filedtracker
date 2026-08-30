@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { remainingEtaSeconds, formatEta, RALLY_REACHED_METERS } from "@/lib/rallyGeo";
+import { findLiveRally } from "@/lib/rallies";
 
 type Metric = "users" | "uniqueVehicles" | "started" | "pending" | "reached" | "m30" | "h1" | "h2" | "h2_5" | "over" | "heads";
 type GroupBy = "zone" | "district" | "ac" | "vehicle";
@@ -23,7 +24,7 @@ export async function GET(req: Request) {
   const groupBy = (q.get("groupBy") || "") as GroupBy | "";
   const groupValue = q.get("groupValue") || "";
 
-  const rally = await prisma.rally.findFirst({ where: { isActive: true }, orderBy: { createdAt: "desc" } });
+  const rally = await findLiveRally();
   if (!rally) return NextResponse.json({ rows: [] });
 
   const users = await prisma.rallyUser.findMany({

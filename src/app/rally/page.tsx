@@ -24,6 +24,7 @@ const COPY = {
     done: "ਫੋਟੋ ਭੇਜੀ ਗਈ। ਸਫ਼ਰ ਸ਼ੁਰੂ ਮੰਨਿਆ ਗਿਆ।",
     needGps: "ਲੋਕੇਸ਼ਨ ਚਾਲੂ ਕਰੋ, ਫਿਰ ਫੋਟੋ ਭੇਜੋ।",
     noRally: "ਰੈਲੀ ਵੇਨਿਊ ਹਾਲੇ ਸੈੱਟ ਨਹੀਂ ਹੈ। ਐਡਮਿਨ ਨਾਲ ਸੰਪਰਕ ਕਰੋ।",
+    opensOn: "ਰੈਲੀ ਇਸ ਤਾਰੀਖ ਨੂੰ ਹੈ",
     cam: "ਕੈਮਰਾ ਖੋਲ੍ਹੋ",
     retake: "ਦੁਬਾਰਾ ਖਿੱਚੋ",
     send: "ਭੇਜੋ",
@@ -49,6 +50,7 @@ const COPY = {
     done: "Photo sent. Journey started.",
     needGps: "Turn on Location, then send the photo.",
     noRally: "Rally venue is not set. Contact admin.",
+    opensOn: "Rally is on",
     cam: "Open camera",
     retake: "Retake",
     send: "Send",
@@ -82,6 +84,7 @@ export default function RallyCapturePage() {
   const t = COPY[lang];
   const [name, setName] = useState("");
   const [rallyName, setRallyName] = useState("");
+  const [rallyOpensOn, setRallyOpensOn] = useState("");
   const [preview, setPreview] = useState("");
   const [heads, setHeads] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
@@ -100,6 +103,7 @@ export default function RallyCapturePage() {
     const data = await res.json();
     setName(data.user?.name || "");
     setRallyName(data.rally?.name || "");
+    setRallyOpensOn(data.rallyOpensOn || "");
     if (data.last) {
       setLast({
         etaLabel: data.last.etaLabel,
@@ -323,7 +327,11 @@ export default function RallyCapturePage() {
 
           {err && <p className="mt-3 text-sm text-red-600">{err}</p>}
           {msg && !err && <p className="mt-3 text-sm text-teal">{msg}</p>}
-          {!rallyName && <p className="mt-3 text-sm text-amber-700">{t.noRally}</p>}
+          {!rallyName && (
+            <p className="mt-3 text-sm text-amber-700">
+              {rallyOpensOn ? `${t.opensOn} ${rallyOpensOn}` : t.noRally}
+            </p>
+          )}
 
           <div className="mt-4 flex flex-col gap-2">
             {!camOn && !preview && (

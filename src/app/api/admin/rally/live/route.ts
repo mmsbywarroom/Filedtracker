@@ -2,11 +2,12 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { remainingEtaSeconds, formatEta, RALLY_REACHED_METERS } from "@/lib/rallyGeo";
+import { findLiveRally } from "@/lib/rallies";
 
 export async function GET() {
   const s = await requireAdmin();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const rally = await prisma.rally.findFirst({ where: { isActive: true }, orderBy: { createdAt: "desc" } });
+  const rally = await findLiveRally();
   if (!rally) return NextResponse.json({ rally: null, rows: [] });
 
   const checkins = await prisma.rallyCheckin.findMany({
@@ -59,7 +60,13 @@ export async function GET() {
   }
 
   return NextResponse.json({
-    rally: { id: rally.id, name: rally.name, lat: rally.lat, lng: rally.lng },
+    rally: {
+      id: rally.id,
+      name: rally.name,
+      lat: rally.lat,
+      lng: rally.lng,
+      scheduledDate: rally.scheduledDate,
+    },
     rows,
   });
 }
