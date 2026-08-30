@@ -52,11 +52,24 @@ jobs:
               sudo curl -SL https://github.com/docker/compose/releases/download/v2.29.7/docker-compose-linux-x86_64 -o /usr/libexec/docker/cli-plugins/docker-compose
               sudo chmod +x /usr/libexec/docker/cli-plugins/docker-compose
             fi
-            sudo docker image prune -af
+            echo "=== disk before cleanup ==="
+            df -h /
+            sudo docker system df || true
+            # Stop app so the old image can be deleted — otherwise load needs 2× image space
+            sudo docker compose -f docker-compose.prod.yml stop app || true
+            sudo docker compose -f docker-compose.prod.yml rm -f app || true
+            sudo docker rmi filedtracker:latest || true
+            sudo docker container prune -f || true
+            sudo docker image prune -af || true
             sudo docker builder prune -af || true
+            sudo docker system prune -f || true
+            sudo journalctl --vacuum-size=50M >/dev/null 2>&1 || true
+            sudo find /var/lib/docker/containers -name '*-json.log' -type f -exec truncate -s 0 {} \; 2>/dev/null || true
+            echo "=== disk after cleanup ==="
+            df -h /
             gzip -dc filedtracker.tar.gz | sudo docker load
-            sudo docker compose -f docker-compose.prod.yml up -d
             rm -f filedtracker.tar.gz
+            sudo docker compose -f docker-compose.prod.yml up -d
             sudo docker image prune -f
             sudo cp -f /opt/filedtracker/deploy/disk-cleanup.sh /opt/filedtracker/disk-cleanup.sh || true
             sudo chmod +x /opt/filedtracker/disk-cleanup.sh 2>/dev/null || true
