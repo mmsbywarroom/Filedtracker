@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { remainingEtaSeconds, RALLY_REACHED_METERS } from "@/lib/rallyGeo";
+import { remainingEtaSeconds, RALLY_REACHED_METERS, isRallyNoMove } from "@/lib/rallyGeo";
 import { findLiveRally } from "@/lib/rallies";
 
 type Bucket = "m30" | "h1" | "h2" | "h2_5" | "over";
@@ -17,7 +17,7 @@ function bucket(remaining: number, reached: boolean): Bucket | "reached" | "not_
 }
 
 function emptyCounts() {
-  return { users: 0, started: 0, pending: 0, reached: 0, m30: 0, h1: 0, h2: 0, h2_5: 0, over: 0, uniqueVehicles: 0, heads: 0 };
+  return { users: 0, started: 0, pending: 0, reached: 0, noMove: 0, m30: 0, h1: 0, h2: 0, h2_5: 0, over: 0, uniqueVehicles: 0, heads: 0 };
 }
 
 type Agg = ReturnType<typeof emptyCounts> & { key: string; veh: Set<string> };
@@ -82,10 +82,12 @@ export async function GET() {
     if (!c) continue;
     const remaining = remainingEtaSeconds(c.startedAt, c.etaSeconds, c.reachedAt);
     const reached = Boolean(c.reachedAt) || c.distanceMeters <= RALLY_REACHED_METERS || remaining <= 0;
+    const noMove = isRallyNoMove(c);
     const b = bucket(remaining, reached);
     for (const t of targets) {
       t.started += 1;
       t.heads += c.headCount || 0;
+      if (noMove) t.noMove += 1;
       if (reached || b === "reached") t.reached += 1;
       else {
         t.pending += 1;

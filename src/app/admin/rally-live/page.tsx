@@ -16,6 +16,8 @@ type Row = {
   reachedAt: string | null;
   startedAt: string;
   distanceMeters: number;
+  noMove?: boolean;
+  movedMeters?: number;
   user: {
     name: string;
     phone: string;
@@ -127,7 +129,7 @@ export default function RallyLivePage() {
 
       <section className="admin-panel mt-5">
         <div className="overflow-x-auto">
-          <table className="min-w-[1080px]">
+          <table className="min-w-[1180px]">
             <thead>
               <tr>
                 <th>Photo</th>
@@ -138,13 +140,14 @@ export default function RallyLivePage() {
                 <th>Capture lng</th>
                 <th>ETA</th>
                 <th>Remaining</th>
+                <th>Flag</th>
                 <th>Vehicle</th>
                 <th>Place</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.id}>
+                <tr key={r.id} className={r.noMove ? "bg-red-50/90" : undefined}>
                   <td>
                     <button type="button" onClick={() => setView(r)} className="block">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -183,6 +186,15 @@ export default function RallyLivePage() {
                     )}
                   </td>
                   <td>
+                    {r.noMove ? (
+                      <span className="rounded-full bg-red-50 px-2 py-1 text-xs font-semibold text-red-800">
+                        No move 1h
+                      </span>
+                    ) : (
+                      <span className="text-xs text-navy/45">{Math.round(r.movedMeters || 0)} m</span>
+                    )}
+                  </td>
+                  <td>
                     {r.user.vehicleNo}
                     <p className="text-xs text-navy/50">{r.user.vehicleType}</p>
                   </td>
@@ -195,7 +207,7 @@ export default function RallyLivePage() {
               ))}
               {!rows.length && (
                 <tr>
-                  <td colSpan={10} className="py-10 text-center text-navy/50">
+                  <td colSpan={11} className="py-10 text-center text-navy/50">
                     No journey photos yet.
                   </td>
                 </tr>

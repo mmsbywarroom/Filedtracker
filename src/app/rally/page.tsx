@@ -90,7 +90,12 @@ export default function RallyCapturePage() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
-  const [last, setLast] = useState<{ etaLabel: string; remainingLabel: string; headCount: number } | null>(null);
+  const [last, setLast] = useState<{
+    etaLabel: string;
+    remainingLabel: string;
+    headCount: number;
+    reached: boolean;
+  } | null>(null);
   const [camOn, setCamOn] = useState(false);
   const [facing, setFacing] = useState<"environment" | "user">("environment");
 
@@ -109,7 +114,10 @@ export default function RallyCapturePage() {
         etaLabel: data.last.etaLabel,
         remainingLabel: data.last.remainingLabel,
         headCount: data.last.headCount,
+        reached: Boolean(data.last.reached),
       });
+    } else {
+      setLast(null);
     }
   }, []);
 
@@ -132,6 +140,36 @@ export default function RallyCapturePage() {
       streamRef.current?.getTracks().forEach((tr) => tr.stop());
     };
   }, [loadMe]);
+
+  useEffect(() => {
+    if (!last || last.reached) return;
+    let alive = true;
+    async function ping() {
+      if (!alive || document.visibilityState === "hidden") return;
+      try {
+        const pos = await locateDevice();
+        if (!alive) return;
+        await fetch("/api/rally/track", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        });
+      } catch {
+        /* app closed / GPS denied — stay at 0 m so admin can flag after 1h */
+      }
+    }
+    void ping();
+    const t = window.setInterval(() => void ping(), 25000);
+    const onVis = () => {
+      if (document.visibilityState === "visible") void ping();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      alive = false;
+      window.clearInterval(t);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+  }, [last]);
 
   async function startCam(mode: "environment" | "user" = facing) {
     setErr("");

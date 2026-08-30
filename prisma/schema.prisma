@@ -182,6 +182,10 @@ model RallyCheckin {
   etaSeconds     Int       @default(0)
   startedAt      DateTime  @default(now())
   reachedAt      DateTime?
+  lastLat        Float?
+  lastLng        Float?
+  lastFixAt      DateTime?
+  movedMeters    Float     @default(0)
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 

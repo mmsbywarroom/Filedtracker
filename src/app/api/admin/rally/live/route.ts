@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { remainingEtaSeconds, formatEta, RALLY_REACHED_METERS } from "@/lib/rallyGeo";
+import { remainingEtaSeconds, formatEta, RALLY_REACHED_METERS, isRallyNoMove } from "@/lib/rallyGeo";
 import { findLiveRally } from "@/lib/rallies";
 
 export async function GET() {
@@ -37,11 +37,12 @@ export async function GET() {
   for (const c of checkins) {
     let remaining = remainingEtaSeconds(c.startedAt, c.etaSeconds, c.reachedAt);
     let reachedAt = c.reachedAt;
-    if (!reachedAt && (c.distanceMeters <= RALLY_REACHED_METERS || remaining <= 0)) {
-      reachedAt = remaining <= 0 ? new Date(c.startedAt.getTime() + c.etaSeconds * 1000) : now;
+    if (!reachedAt && c.distanceMeters <= RALLY_REACHED_METERS) {
+      reachedAt = now;
       remaining = 0;
       void prisma.rallyCheckin.update({ where: { id: c.id }, data: { reachedAt } }).catch(() => {});
     }
+    const noMove = isRallyNoMove({ ...c, reachedAt });
     rows.push({
       id: c.id,
       photo: c.photo,
@@ -55,9 +56,12 @@ export async function GET() {
       remainingLabel: formatEta(remaining),
       startedAt: c.startedAt,
       reachedAt,
+      noMove,
+      movedMeters: Math.round(c.movedMeters || 0),
       user: c.user,
     });
   }
+  rows.sort((a, b) => Number(b.noMove) - Number(a.noMove));
 
   return NextResponse.json({
     rally: {

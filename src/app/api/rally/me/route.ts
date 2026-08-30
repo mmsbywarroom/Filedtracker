@@ -34,7 +34,7 @@ export async function GET() {
           startedAt: last.startedAt,
           etaLabel: formatEta(last.etaSeconds),
           remainingLabel: formatEta(remaining ?? 0),
-          reached: Boolean(last.reachedAt) || last.distanceMeters <= RALLY_REACHED_METERS || (remaining ?? 1) <= 0,
+          reached: Boolean(last.reachedAt) || last.distanceMeters <= RALLY_REACHED_METERS,
         }
       : null,
   });

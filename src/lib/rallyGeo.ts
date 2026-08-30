@@ -58,3 +58,20 @@ export function formatEta(seconds: number) {
   if (h <= 0) return `${Math.max(1, m)} min`;
   return m ? `${h}h ${m}m` : `${h}h`;
 }
+
+/** Photo sent but GPS has not moved ~100m within 1 hour. */
+export const RALLY_NO_MOVE_MS = 60 * 60 * 1000;
+export const RALLY_NO_MOVE_METERS = 100;
+
+export function isRallyNoMove(c: {
+  startedAt: Date | string;
+  reachedAt?: Date | string | null;
+  distanceMeters?: number | null;
+  movedMeters?: number | null;
+}) {
+  if (c.reachedAt) return false;
+  if ((c.distanceMeters || 0) <= RALLY_REACHED_METERS) return false;
+  const started = new Date(c.startedAt).getTime();
+  if (!Number.isFinite(started) || Date.now() - started < RALLY_NO_MOVE_MS) return false;
+  return (c.movedMeters || 0) < RALLY_NO_MOVE_METERS;
+}

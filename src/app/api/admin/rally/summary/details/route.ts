@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { remainingEtaSeconds, formatEta, RALLY_REACHED_METERS } from "@/lib/rallyGeo";
+import { remainingEtaSeconds, formatEta, RALLY_REACHED_METERS, isRallyNoMove } from "@/lib/rallyGeo";
 import { findLiveRally } from "@/lib/rallies";
 
-type Metric = "users" | "uniqueVehicles" | "started" | "pending" | "reached" | "m30" | "h1" | "h2" | "h2_5" | "over" | "heads";
+type Metric = "users" | "uniqueVehicles" | "started" | "pending" | "reached" | "noMove" | "m30" | "h1" | "h2" | "h2_5" | "over" | "heads";
 type GroupBy = "zone" | "district" | "ac" | "vehicle";
 
 function matchGroup(u: { zone: string; district: string; acName: string; vehicleNo: string }, groupBy?: string, groupValue?: string) {
@@ -38,6 +38,7 @@ export async function GET(req: Request) {
     const c = u.checkins[0];
     const remaining = c ? remainingEtaSeconds(c.startedAt, c.etaSeconds, c.reachedAt) : null;
     const reached = c ? Boolean(c.reachedAt) || c.distanceMeters <= RALLY_REACHED_METERS || remaining! <= 0 : false;
+    const noMove = c ? isRallyNoMove(c) : false;
     let bucket: string | null = null;
     if (c && !reached && remaining != null) {
       if (remaining <= 30 * 60) bucket = "m30";
@@ -54,6 +55,7 @@ export async function GET(req: Request) {
       (metric === "started" && Boolean(c)) ||
       (metric === "pending" && Boolean(c) && !reached) ||
       (metric === "reached" && reached) ||
+      (metric === "noMove" && noMove) ||
       (metric === "m30" && bucket === "m30") ||
       (metric === "h1" && bucket === "h1") ||
       (metric === "h2" && bucket === "h2") ||
@@ -77,9 +79,17 @@ export async function GET(req: Request) {
       lat: c?.lat ?? null,
       lng: c?.lng ?? null,
       etaLabel: c ? formatEta(c.etaSeconds) : "—",
-      remainingLabel: c ? (reached ? "Reached" : formatEta(remaining || 0)) : "Not started",
+      remainingLabel: c
+        ? noMove
+          ? "No movement 1h"
+          : reached
+            ? "Reached"
+            : formatEta(remaining || 0)
+        : "Not started",
       started: Boolean(c),
       reached,
+      noMove,
+      movedMeters: Math.round(c?.movedMeters || 0),
     });
   }
 

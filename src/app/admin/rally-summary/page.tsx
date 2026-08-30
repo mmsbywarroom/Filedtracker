@@ -8,6 +8,7 @@ type Counts = {
   started: number;
   pending: number;
   reached: number;
+  noMove: number;
   m30: number;
   h1: number;
   h2: number;
@@ -25,6 +26,7 @@ type Metric =
   | "started"
   | "pending"
   | "reached"
+  | "noMove"
   | "m30"
   | "h1"
   | "h2"
@@ -57,6 +59,7 @@ const METRIC_LABELS: Record<Metric, string> = {
   started: "Journey started",
   pending: "Pending",
   reached: "Reached venue",
+  noMove: "No movement",
   m30: "In 30 min",
   h1: "In 1 hour",
   h2: "In 2 hours",
@@ -72,7 +75,7 @@ const GROUP_LABELS: Record<GroupBy, string> = {
   vehicle: "Vehicle",
 };
 
-const BREAKDOWN_HEADERS = ["Name", "Users", "Unique veh", "Heads", "Started", "Pending", "Reached", "30m", "1h", "2h", "2–2.5h", ">2.5h"];
+const BREAKDOWN_HEADERS = ["Name", "Users", "Unique veh", "Heads", "Started", "Pending", "Reached", "No move", "30m", "1h", "2h", "2–2.5h", ">2.5h"];
 
 function breakdownRows(rows: Counts[]) {
   return rows.map((r) => [
@@ -83,6 +86,7 @@ function breakdownRows(rows: Counts[]) {
     r.started,
     r.pending,
     r.reached,
+    r.noMove || 0,
     r.m30,
     r.h1,
     r.h2,
@@ -200,6 +204,7 @@ export default function RallySummaryPage() {
     ["Journey started", t.started],
     ["Pending", t.pending],
     ["Reached venue", t.reached],
+    ["No movement (1h)", t.noMove || 0],
     ["In 30 min", t.m30],
     ["In 1 hour", t.h1],
     ["In 2 hours", t.h2],
@@ -215,7 +220,7 @@ export default function RallySummaryPage() {
           <ExportBtns title={`rally-${title}`} headers={BREAKDOWN_HEADERS} rows={breakdownRows(rows)} />
         </div>
         <div className="mt-2 overflow-x-auto">
-          <table className="min-w-[900px]">
+          <table className="min-w-[1020px]">
             <thead>
               <tr>
                 {BREAKDOWN_HEADERS.map((h) => (
@@ -246,6 +251,9 @@ export default function RallySummaryPage() {
                     <CellBtn value={r.reached} active={metric === "reached" && group?.groupValue === r.key} onClick={() => openMetric("reached", { groupBy, groupValue: r.key || "" })} />
                   </td>
                   <td>
+                    <CellBtn value={r.noMove || 0} active={metric === "noMove" && group?.groupValue === r.key} onClick={() => openMetric("noMove", { groupBy, groupValue: r.key || "" })} />
+                  </td>
+                  <td>
                     <CellBtn value={r.m30} active={metric === "m30" && group?.groupValue === r.key} onClick={() => openMetric("m30", { groupBy, groupValue: r.key || "" })} />
                   </td>
                   <td>
@@ -264,7 +272,7 @@ export default function RallySummaryPage() {
               ))}
               {!rows.length && (
                 <tr>
-                  <td colSpan={12} className="py-8 text-center text-navy/50">
+                  <td colSpan={13} className="py-8 text-center text-navy/50">
                     No data
                   </td>
                 </tr>
@@ -309,6 +317,7 @@ export default function RallySummaryPage() {
           <Stat className="bg-[#c45c12]" label="Journey started" value={t.started} hint="Photo captured" active={metric === "started" && !group} onClick={() => openMetric("started")} />
           <Stat className="bg-amber-600" label="Pending" value={t.pending} hint="On the way" active={metric === "pending" && !group} onClick={() => openMetric("pending")} />
           <Stat className="bg-emerald-700" label="Reached venue" value={t.reached} hint="Arrived" active={metric === "reached" && !group} onClick={() => openMetric("reached")} />
+          <Stat className="bg-red-700" label="No movement" value={t.noMove || 0} hint="Photo, no GPS move 1h" active={metric === "noMove" && !group} onClick={() => openMetric("noMove")} />
           <Stat className="bg-sky-700" label="In 30 min" value={t.m30} hint="ETA ≤ 30m" active={metric === "m30" && !group} onClick={() => openMetric("m30")} />
           <Stat className="bg-indigo-700" label="In 1 hour" value={t.h1} hint="30m–1h" active={metric === "h1" && !group} onClick={() => openMetric("h1")} />
           <Stat className="bg-[#1A56C4]" label="In 2 hours" value={t.h2} hint="1–2h" active={metric === "h2" && !group} onClick={() => openMetric("h2")} />
