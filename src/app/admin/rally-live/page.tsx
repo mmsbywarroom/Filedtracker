@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { countHeadsFromDataUrl, loadHeadCountModels } from "@/lib/face";
+import { countHeadsFromDataUrl, loadPersonCountModel } from "@/lib/headCount";
 import { PhotoViewer } from "@/components/PhotoViewer";
 
 type Row = {
@@ -34,7 +34,13 @@ export default function RallyLivePage() {
   const [rally, setRally] = useState<{ name: string } | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
   const [view, setView] = useState<Row | null>(null);
+  const [counting, setCounting] = useState("");
+  const rowsRef = useRef<Row[]>([]);
   const counted = useRef<Set<string>>(new Set());
+  const busyCount = useRef(false);
+  const recountFn = useRef<(force?: boolean) => void>(() => {});
+
+  rowsRef.current = rows;
 
   async function load() {
     const res = await fetch("/api/admin/rally/live", { cache: "no-store" });
@@ -44,40 +50,66 @@ export default function RallyLivePage() {
     }
     const data = await res.json();
     setRally(data.rally);
-    setRows(data.rows || []);
+    const incoming: Row[] = data.rows || [];
+    setRows((prev) => {
+      const local = new Map(prev.map((r) => [r.id, r.headCount]));
+      return incoming.map((r) => ({
+        ...r,
+        headCount: r.headCount > 0 ? r.headCount : local.get(r.id) || 0,
+      }));
+    });
   }
 
   useEffect(() => {
     void load();
-    void loadHeadCountModels().catch(() => {});
+    void loadPersonCountModel().catch(() => {});
     const t = window.setInterval(() => void load(), 15000);
     return () => clearInterval(t);
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      for (const r of rows) {
-        if (cancelled || r.headCount > 0 || counted.current.has(r.id) || !r.photo) continue;
-        counted.current.add(r.id);
-        try {
-          const n = await countHeadsFromDataUrl(r.photo);
-          if (cancelled || n <= 0) continue;
-          setRows((cur) => cur.map((x) => (x.id === r.id ? { ...x, headCount: n } : x)));
-          await fetch(`/api/admin/rally/checkins/${r.id}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ headCount: n }),
-          });
-        } catch {
-          /* keep 0 */
+    let alive = true;
+    async function countPending(force = false) {
+      if (busyCount.current) return;
+      busyCount.current = true;
+      try {
+        await loadPersonCountModel().catch(() => null);
+        const list = rowsRef.current;
+        for (const r of list) {
+          if (!alive || !r.photo) continue;
+          if (!force && (r.headCount > 0 || counted.current.has(r.id))) continue;
+          setCounting(`Counting heads… ${r.user.name}`);
+          try {
+            const n = await countHeadsFromDataUrl(r.photo);
+            if (!alive) return;
+            if (n <= 0) continue;
+            counted.current.add(r.id);
+            setRows((cur) => cur.map((x) => (x.id === r.id ? { ...x, headCount: n } : x)));
+            await fetch(`/api/admin/rally/checkins/${r.id}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ headCount: n }),
+            });
+          } catch {
+            /* retry next tick */
+          }
         }
+      } finally {
+        busyCount.current = false;
+        if (alive) setCounting("");
       }
-    })();
-    return () => {
-      cancelled = true;
+    }
+    void countPending();
+    recountFn.current = (force?: boolean) => {
+      if (force) counted.current.clear();
+      void countPending(Boolean(force));
     };
-  }, [rows]);
+    const t = window.setInterval(() => void countPending(), 5000);
+    return () => {
+      alive = false;
+      clearInterval(t);
+    };
+  }, []);
 
   return (
     <main className="px-4 py-6 md:px-8">
@@ -86,6 +118,12 @@ export default function RallyLivePage() {
       <p className="admin-page-sub">
         {rally ? `Active venue: ${rally.name}` : "No active rally. Create one under Rally users."} · updates every 15s
       </p>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <button type="button" className="admin-btn-teal-soft" onClick={() => recountFn.current(true)}>
+          Recalc head count
+        </button>
+        {counting && <p className="text-sm text-teal">{counting}</p>}
+      </div>
 
       <section className="admin-panel mt-5">
         <div className="overflow-x-auto">
@@ -95,6 +133,7 @@ export default function RallyLivePage() {
                 <th>Photo</th>
                 <th>User</th>
                 <th>Heads</th>
+                <th>Time</th>
                 <th>Capture lat</th>
                 <th>Capture lng</th>
                 <th>ETA</th>
@@ -120,6 +159,9 @@ export default function RallyLivePage() {
                     </p>
                   </td>
                   <td className="text-lg font-semibold">{r.headCount}</td>
+                  <td className="whitespace-nowrap text-xs text-navy/70">
+                    {new Date(r.startedAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}
+                  </td>
                   <td className="font-mono text-xs">{Number(r.lat).toFixed(6)}</td>
                   <td className="font-mono text-xs">
                     {Number(r.lng).toFixed(6)}
@@ -153,7 +195,7 @@ export default function RallyLivePage() {
               ))}
               {!rows.length && (
                 <tr>
-                  <td colSpan={9} className="py-10 text-center text-navy/50">
+                  <td colSpan={10} className="py-10 text-center text-navy/50">
                     No journey photos yet.
                   </td>
                 </tr>

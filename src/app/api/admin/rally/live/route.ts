@@ -31,14 +31,9 @@ export async function GET() {
     },
   });
 
-  const latest = new Map<string, (typeof checkins)[number]>();
-  for (const c of checkins) {
-    if (!latest.has(c.userId)) latest.set(c.userId, c);
-  }
-
   const now = new Date();
   const rows = [];
-  for (const c of Array.from(latest.values())) {
+  for (const c of checkins) {
     let remaining = remainingEtaSeconds(c.startedAt, c.etaSeconds, c.reachedAt);
     let reachedAt = c.reachedAt;
     if (!reachedAt && (c.distanceMeters <= RALLY_REACHED_METERS || remaining <= 0)) {

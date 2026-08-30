@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BrandMark } from "@/components/BrandMark";
 import { locateDevice } from "@/lib/deviceGeo";
-import { countHeads, countHeadsFromDataUrl, loadHeadCountModels } from "@/lib/face";
+import { countHeadsFromDataUrl, loadPersonCountModel } from "@/lib/headCount";
 
 const PA = {
   title: "ਰੈਲੀ ਫੋਟੋ",
@@ -24,7 +24,7 @@ const PA = {
   retake: "ਦੁਬਾਰਾ ਖਿੱਚੋ",
   send: "ਭੇਜੋ",
   logout: "ਲਾਗਆਉਟ",
-  hint: "ਗੱਡੀ ਵਾਲੀ ਫੋਟੋ ਖਿੱਚੋ ਜਾਂ ਅਪਲੋਡ ਕਰੋ। ਸਿਰ ਆਪਣੇ ਆਪ ਗਿਣੇ ਜਾਣਗੇ।",
+  hint: "ਬੱਸ, ਕਾਰ, ਟੈਂਪੋ, ਟਰੈਕਟਰ — ਕਿਸੇ ਵੀ ਗੱਡੀ ਦੀ ਫੋਟੋ ਖਿੱਚੋ ਜਾਂ ਅਪਲੋਡ ਕਰੋ। ਲੋਕ ਆਪਣੇ ਆਪ ਗਿਣੇ ਜਾਣਗੇ।",
 };
 
 function toJpeg(source: HTMLVideoElement | HTMLImageElement) {
@@ -78,7 +78,7 @@ export default function RallyCapturePage() {
     html.classList.add("lang-pa");
     html.lang = "pa";
     void loadMe();
-    void loadHeadCountModels().catch(() => {});
+    void loadPersonCountModel().catch(() => {});
     return () => {
       streamRef.current?.getTracks().forEach((t) => t.stop());
     };
@@ -118,22 +118,12 @@ export default function RallyCapturePage() {
   async function snap() {
     const video = videoRef.current;
     if (!video) return;
-    try {
-      const n = await countHeads(video);
-      const dataUrl = toJpeg(video);
-      if (!dataUrl) return;
-      setPreview(dataUrl);
-      streamRef.current?.getTracks().forEach((t) => t.stop());
-      setCamOn(false);
-      setHeads(n);
-    } catch {
-      const dataUrl = toJpeg(video);
-      if (!dataUrl) return;
-      setPreview(dataUrl);
-      streamRef.current?.getTracks().forEach((t) => t.stop());
-      setCamOn(false);
-      await countFromDataUrl(dataUrl);
-    }
+    const dataUrl = toJpeg(video);
+    if (!dataUrl) return;
+    setPreview(dataUrl);
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    setCamOn(false);
+    await countFromDataUrl(dataUrl);
   }
 
   async function onFile(file: File) {
@@ -145,17 +135,11 @@ export default function RallyCapturePage() {
       img.onload = resolve;
       img.onerror = reject;
     });
-    let n = 0;
-    try {
-      n = await countHeads(img);
-    } catch {
-      n = 0;
-    }
     const dataUrl = toJpeg(img);
     URL.revokeObjectURL(url);
     if (!dataUrl) return;
     setPreview(dataUrl);
-    setHeads(n);
+    await countFromDataUrl(dataUrl);
   }
 
   async function submit() {

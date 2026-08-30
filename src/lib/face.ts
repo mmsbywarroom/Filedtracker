@@ -216,14 +216,24 @@ export async function scanFace(video: HTMLVideoElement, opts: ScanFaceOptions = 
 let tinyLoaded = false;
 let tinyLoading: Promise<void> | null = null;
 
-/** Head-count models from this app only (`/public/weights`) — no CDN / cloud API. */
+/** Tiny detector only — local `/weights` first, then same CDN fallback as punch-in. */
 export async function loadHeadCountModels() {
   if (tinyLoaded) return;
   if (tinyLoading) return tinyLoading;
   tinyLoading = (async () => {
-    await faceapi.nets.tinyFaceDetector.loadFromUri("/weights");
-    tinyLoaded = true;
+    let last: unknown;
+    for (const url of MODEL_URLS) {
+      try {
+        await faceapi.nets.tinyFaceDetector.loadFromUri(url);
+        tinyLoaded = true;
+        tinyLoading = null;
+        return;
+      } catch (err) {
+        last = err;
+      }
+    }
     tinyLoading = null;
+    throw last || new Error("Head-count model failed to load");
   })();
   return tinyLoading;
 }
@@ -270,39 +280,32 @@ function canvasForCount(source: HTMLVideoElement | HTMLImageElement | HTMLCanvas
   return canvas;
 }
 
-/** Count every detected head locally (tiny face detector, several sizes + NMS). */
+/** Count heads with one upscaled canvas and two detector sizes (fast enough to finish on admin poll). */
 export async function countHeads(
   source: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement
 ): Promise<number> {
   await loadHeadCountModels();
   const { w, h } = sourceSize(source);
   if (!w || !h) return 0;
-  const canvases = [
-    canvasForCount(source, 1280),
-    canvasForCount(source, 800),
-  ].filter((c): c is HTMLCanvasElement => Boolean(c));
-
+  const canvas = canvasForCount(source, 640);
+  if (!canvas) return 0;
+  const sx = w / canvas.width;
+  const sy = h / canvas.height;
   const boxes: { x: number; y: number; width: number; height: number; score: number }[] = [];
-  for (const canvas of canvases) {
-    const sx = w / canvas.width;
-    const sy = h / canvas.height;
-    const opts = [
-      new faceapi.TinyFaceDetectorOptions({ inputSize: 608, scoreThreshold: 0.1 }),
-      new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.12 }),
-      new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.15 }),
-    ];
-    for (const opt of opts) {
-      const dets = await faceapi.detectAllFaces(canvas, opt);
-      for (const d of dets) {
-        if (d.box.width < 6 || d.box.height < 6) continue;
-        boxes.push({
-          x: d.box.x * sx,
-          y: d.box.y * sy,
-          width: d.box.width * sx,
-          height: d.box.height * sy,
-          score: d.score,
-        });
-      }
+  for (const opt of [
+    new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.15 }),
+    new faceapi.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.2 }),
+  ]) {
+    const dets = await faceapi.detectAllFaces(canvas, opt);
+    for (const d of dets) {
+      if (d.box.width < 8 || d.box.height < 8) continue;
+      boxes.push({
+        x: d.box.x * sx,
+        y: d.box.y * sy,
+        width: d.box.width * sx,
+        height: d.box.height * sy,
+        score: d.score,
+      });
     }
   }
   return nmsBoxes(boxes).length;
@@ -310,10 +313,12 @@ export async function countHeads(
 
 export async function countHeadsFromDataUrl(dataUrl: string): Promise<number> {
   const img = new Image();
+  img.decoding = "async";
   img.src = dataUrl;
   await new Promise<void>((resolve, reject) => {
     img.onload = () => resolve();
     img.onerror = () => reject(new Error("photo"));
   });
+  if (typeof img.decode === "function") await img.decode().catch(() => {});
   return countHeads(img);
 }

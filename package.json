@@ -17,6 +17,8 @@
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
+    "@tensorflow-models/coco-ssd": "^2.2.3",
+    "@tensorflow/tfjs": "^4.22.0",
     "bcryptjs": "^2.4.3",
     "face-api.js": "^0.22.2",
     "jose": "^5.9.6",
