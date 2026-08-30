@@ -62,6 +62,12 @@ export default function AdminShell({ children }: { children: ReactNode }) {
     ...(isSuper
       ? [{ href: "/admin/holidays", label: t("holidays"), match: (p: string) => p.startsWith("/admin/holidays"), group: "Attendance" }]
       : []),
+    {
+      href: "/admin/salary-register",
+      label: t("salaryRegister"),
+      match: (p: string) => p.startsWith("/admin/salary-register"),
+      group: "Attendance",
+    },
     { href: "/admin/rally-users", label: t("rallyUsers"), match: (p: string) => p.startsWith("/admin/rally-users"), group: "Rally" },
     { href: "/admin/rally-live", label: t("rallyLive"), match: (p: string) => p.startsWith("/admin/rally-live"), group: "Rally" },
     { href: "/admin/rally-summary", label: t("rallySummary"), match: (p: string) => p.startsWith("/admin/rally-summary"), group: "Rally" },
