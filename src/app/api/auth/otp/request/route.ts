@@ -16,8 +16,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Enter a valid 10-digit mobile number." }, { status: 400 });
   }
 
-  const user = await prisma.user.findUnique({ where: { phone } });
-  if (!user || !user.isActive) {
+  const field = await prisma.user.findUnique({ where: { phone } });
+  const rally = field ? null : await prisma.rallyUser.findUnique({ where: { phone } });
+  if ((!field || !field.isActive) && (!rally || !rally.isActive)) {
     return NextResponse.json({ error: "This number is not registered. Contact admin." }, { status: 404 });
   }
 

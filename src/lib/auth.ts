@@ -18,6 +18,7 @@ function secret() {
 export type SessionPayload = {
   sub: string;
   role: "admin" | "user";
+  kind?: "field" | "rally";
   phone?: string;
   name?: string;
 };
@@ -120,8 +121,20 @@ export async function getSession(): Promise<SessionPayload | null> {
 
 export async function requireUser() {
   const s = await getUserSession();
-  if (!s || s.role !== "user") return null;
+  if (!s || s.role !== "user" || s.kind === "rally") return null;
   return s;
+}
+
+export async function requireRallyUser() {
+  const s = await getUserSession();
+  if (!s || s.role !== "user") return null;
+  if (s.kind && s.kind !== "rally") return null;
+  const user = await prisma.rallyUser.findFirst({
+    where: { id: s.sub, isActive: true },
+    include: { rally: true },
+  });
+  if (!user) return null;
+  return { session: s, user };
 }
 
 export async function requireAdmin() {

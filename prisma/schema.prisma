@@ -129,6 +129,62 @@ model LeaveRequest {
   @@index([status, createdAt])
 }
 
+model Rally {
+  id        String         @id @default(cuid())
+  name      String
+  lat       Float
+  lng       Float
+  isActive  Boolean        @default(true)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  users     RallyUser[]
+  checkins  RallyCheckin[]
+}
+
+model RallyUser {
+  id          String         @id @default(cuid())
+  rallyId     String
+  rally       Rally          @relation(fields: [rallyId], references: [id], onDelete: Cascade)
+  zone        String
+  district    String
+  acName      String
+  villageWard String         @default("")
+  name        String
+  phone       String         @unique
+  vehicleNo   String         @default("")
+  pocName     String         @default("")
+  pocNumber   String         @default("")
+  vehicleType String         @default("")
+  isActive    Boolean        @default(true)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  checkins    RallyCheckin[]
+
+  @@index([rallyId])
+  @@index([zone, district, acName])
+}
+
+model RallyCheckin {
+  id             String    @id @default(cuid())
+  rallyId        String
+  rally          Rally     @relation(fields: [rallyId], references: [id], onDelete: Cascade)
+  userId         String
+  user           RallyUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  photo          String
+  headCount      Int       @default(0)
+  lat            Float
+  lng            Float
+  distanceMeters Float     @default(0)
+  etaSeconds     Int       @default(0)
+  startedAt      DateTime  @default(now())
+  reachedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([rallyId, startedAt])
+  @@index([userId, startedAt])
+}
+
 /// Audit log when an admin clears a user's registered face
 model FaceResetLog {
   id               String   @id @default(cuid())

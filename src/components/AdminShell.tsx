@@ -59,6 +59,9 @@ export default function AdminShell({ children }: { children: ReactNode }) {
     },
     { href: "/admin/records", label: t("dailyRecords"), match: (p: string) => p.startsWith("/admin/records"), group: "Attendance" },
     { href: "/admin/leaves", label: t("leaveModule"), match: (p: string) => p.startsWith("/admin/leaves"), group: "Attendance" },
+    { href: "/admin/rally-users", label: t("rallyUsers"), match: (p: string) => p.startsWith("/admin/rally-users"), group: "Rally" },
+    { href: "/admin/rally-live", label: t("rallyLive"), match: (p: string) => p.startsWith("/admin/rally-live"), group: "Rally" },
+    { href: "/admin/rally-summary", label: t("rallySummary"), match: (p: string) => p.startsWith("/admin/rally-summary"), group: "Rally" },
     { href: "/admin/gps-off", label: t("gpsOffLogs"), match: (p: string) => p.startsWith("/admin/gps-off"), group: "Logs" },
     {
       href: "/admin/auto-punch-out",
@@ -78,7 +81,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
       : []),
   ];
 
-  const groups = ["Overview", "People", "Attendance", "Logs"] as const;
+  const groups = ["Overview", "People", "Attendance", "Rally", "Logs"] as const;
 
   async function logout() {
     await fetch("/api/auth/logout?scope=admin", { method: "POST" });

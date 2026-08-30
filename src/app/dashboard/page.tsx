@@ -153,6 +153,11 @@ export default function DashboardPage() {
         return;
       }
 
+      if (me.user?.kind === "rally") {
+        window.location.replace("/rally");
+        return;
+      }
+
       if (!me.user || me.user.role !== "user") {
         // Clear cookie first so middleware does not bounce / → /dashboard forever
         await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});

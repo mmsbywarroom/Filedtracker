@@ -45,7 +45,7 @@ export default function HomePage() {
       setError(data.error || "OTP failed");
       return;
     }
-    window.location.href = "/dashboard";
+    window.location.href = data.kind === "rally" ? "/rally" : "/dashboard";
   }
 
   return (

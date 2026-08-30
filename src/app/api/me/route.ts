@@ -6,6 +6,15 @@ export async function GET() {
   try {
     const s = await getUserSession();
     if (!s) return NextResponse.json({ user: null });
+    if (s.kind === "rally") {
+      const rallyUser = await prisma.rallyUser.findUnique({
+        where: { id: s.sub },
+        select: { id: true, name: true, phone: true, zone: true, district: true, acName: true, vehicleNo: true },
+      });
+      return NextResponse.json({
+        user: rallyUser ? { ...rallyUser, role: "user", kind: "rally" } : null,
+      });
+    }
     const user = await prisma.user.findUnique({
       where: { id: s.sub },
       select: {
@@ -19,7 +28,7 @@ export async function GET() {
         faceRegisteredAt: true,
       },
     });
-    return NextResponse.json({ user: user ? { ...user, role: "user" } : null });
+    return NextResponse.json({ user: user ? { ...user, role: "user", kind: "field" } : null });
   } catch (e) {
     console.error("api/me", e);
     return NextResponse.json(

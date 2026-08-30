@@ -38,12 +38,23 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Incorrect OTP." }, { status: 400 });
   }
 
-  const user = await prisma.user.findUnique({ where: { phone } });
-  if (!user || !user.isActive) {
+  const field = await prisma.user.findUnique({ where: { phone } });
+  const rally = field ? null : await prisma.rallyUser.findUnique({ where: { phone } });
+  const account = field?.isActive
+    ? { id: field.id, phone: field.phone, name: field.name, kind: "field" as const }
+    : rally?.isActive
+      ? { id: rally.id, phone: rally.phone, name: rally.name, kind: "rally" as const }
+      : null;
+  if (!account) {
     return NextResponse.json({ error: "Account not found." }, { status: 404 });
   }
 
   await prisma.otpChallenge.delete({ where: { id: challenge.id } });
-  await setUserSessionCookie({ sub: user.id, phone: user.phone, name: user.name });
-  return NextResponse.json({ ok: true });
+  await setUserSessionCookie({
+    sub: account.id,
+    phone: account.phone,
+    name: account.name,
+    kind: account.kind,
+  });
+  return NextResponse.json({ ok: true, kind: account.kind });
 }

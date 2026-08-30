@@ -212,3 +212,15 @@ export async function scanFace(video: HTMLVideoElement, opts: ScanFaceOptions = 
     },
   };
 }
+
+/** Count every detected head in a still (group photo / vehicle). */
+export async function countHeads(
+  source: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement
+): Promise<number> {
+  await loadFaceModels();
+  const dets = await faceapi.detectAllFaces(
+    source,
+    new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.28 })
+  );
+  return dets.length;
+}

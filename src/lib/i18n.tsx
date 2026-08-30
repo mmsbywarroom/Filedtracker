@@ -105,6 +105,9 @@ const dict = {
     adminNote: "Admin note",
     leaveModule: "Leave requests",
     attendanceModule: "Attendance",
+    rallyUsers: "Rally users",
+    rallyLive: "Rally live",
+    rallySummary: "Rally summary",
   },
   pa: {
     aap: "ਆਮ ਆਦਮੀ ਪਾਰਟੀ",
@@ -206,6 +209,9 @@ const dict = {
     adminNote: "ਐਡਮਿਨ ਨੋਟ",
     leaveModule: "ਛੁੱਟੀ ਬੇਨਤੀਆਂ",
     attendanceModule: "ਹਾਜ਼ਰੀ",
+    rallyUsers: "ਰੈਲੀ ਯੂਜ਼ਰ",
+    rallyLive: "ਰੈਲੀ ਲਾਈਵ",
+    rallySummary: "ਰੈਲੀ ਸੰਖੇਪ",
   },
 } as const;
 
