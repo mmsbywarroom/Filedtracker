@@ -2,10 +2,10 @@ import { prisma } from "@/lib/prisma";
 import { pathDistance } from "@/lib/utils";
 
 export const AUTO_PUNCH_OUT_MS = 12 * 60 * 60 * 1000;
-/** No GPS track points for this long → treat session as dead (phone/GPS off) */
-export const STALE_TRACKING_MS = 10 * 60 * 1000;
+/** Gap with no track points before a new punch-in may start a fresh session (screen-off is OK). */
+export const RE_PUNCH_GAP_MS = 45 * 60 * 1000;
 
-export type PunchOutReason = "manual" | "gps_off" | "auto_12h" | "auto_geofence";
+export type PunchOutReason = "manual" | "gps_off" | "auto_12h" | "auto_geofence" | "tracking_gap";
 
 export async function closeOpenAttendance(opts: {
   userId: string;
@@ -35,8 +35,12 @@ export async function closeOpenAttendance(opts: {
 
   const now = new Date();
   let punchOutAt = opts.punchOutAt || now;
-  // GPS/phone died: end duty at last known track time so offline gap is not counted
-  if (!opts.punchOutAt && opts.reason === "gps_off" && lastPoint?.recordedAt) {
+  // End duty at last known track time so offline gap is not counted
+  if (
+    !opts.punchOutAt &&
+    (opts.reason === "gps_off" || opts.reason === "tracking_gap") &&
+    lastPoint?.recordedAt
+  ) {
     punchOutAt = lastPoint.recordedAt;
   }
   if (punchOutAt.getTime() < open.punchInAt.getTime()) punchOutAt = open.punchInAt;
@@ -44,6 +48,9 @@ export async function closeOpenAttendance(opts: {
 
   let address = opts.address;
   if (opts.reason === "gps_off") address = opts.address || "GPS turned off";
+  if (opts.reason === "tracking_gap") {
+    address = opts.address || "Session ended — no location updates (can punch in again)";
+  }
   if (opts.reason === "auto_12h") {
     address = opts.address || "Auto punch-out after 12 hours without punch-out";
   }
@@ -80,10 +87,10 @@ export async function closeOpenAttendance(opts: {
 }
 
 /**
- * If open session has no fresh GPS points (phone off / GPS dead), close at last known
- * location so the user can punch in again. Day hours sum all sessions.
+ * Close a long-idle open session only when user tries to punch in again.
+ * Screen off / other app does NOT close the session (no false GPS-off logs).
  */
-export async function closeOpenIfTrackingStale(userId: string) {
+export async function closeStaleSessionForRePunch(userId: string, gapMs = RE_PUNCH_GAP_MS) {
   const open = await prisma.attendance.findFirst({
     where: { userId, punchOutAt: null },
     include: { points: { orderBy: { recordedAt: "desc" }, take: 1 } },
@@ -92,16 +99,16 @@ export async function closeOpenIfTrackingStale(userId: string) {
 
   const last = open.points[0];
   const lastAt = last?.recordedAt ?? open.punchInAt;
-  if (Date.now() - lastAt.getTime() < STALE_TRACKING_MS) return null;
+  if (Date.now() - lastAt.getTime() < gapMs) return null;
 
   return closeOpenAttendance({
     userId,
     lat: last?.lat ?? open.punchInLat,
     lng: last?.lng ?? open.punchInLng,
     accuracy: last?.accuracy ?? null,
-    reason: "gps_off",
+    reason: "tracking_gap",
     punchOutAt: lastAt,
-    address: "GPS/phone stopped — closed at last known location (can punch in again)",
+    address: "No location updates for a while — session closed so you can punch in again",
   });
 }
 

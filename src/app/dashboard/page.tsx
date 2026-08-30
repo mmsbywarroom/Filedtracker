@@ -78,6 +78,8 @@ export default function DashboardPage() {
   const geoWatchId = useRef<number | null>(null);
   const geoStarted = useRef(false);
   const gpsOffLock = useRef(false);
+  const gpsDenyStreak = useRef(0);
+  const gpsDenyResetTimer = useRef<number | null>(null);
   const [gpsOffFlag, setGpsOffFlag] = useState(false);
   const [livePos, setLivePos] = useState<{ lat: number; lng: number } | null>(null);
   const [locating, setLocating] = useState(false);
@@ -170,7 +172,10 @@ export default function DashboardPage() {
       if (attRes.ok) {
         setOpen(att.open ?? null);
         const last = att.history?.[0];
-        if (!att.open && last?.punchOutReason === "gps_off") setGpsOffFlag(true);
+        if (!att.open && last?.punchOutReason === "gps_off" && last.punchOutAt) {
+          const age = Date.now() - new Date(last.punchOutAt).getTime();
+          if (age >= 0 && age < 10 * 60 * 1000) setGpsOffFlag(true);
+        }
         if (!att.open && last?.punchOutReason === "auto_12h" && last.punchOutAt) {
           const age = Date.now() - new Date(last.punchOutAt).getTime();
           if (age >= 0 && age < 10 * 60 * 1000) {
@@ -228,7 +233,13 @@ export default function DashboardPage() {
   }, [startGeoTracking]);
 
   async function autoPunchOutForGpsOff() {
-    if (gpsOffLock.current) return;
+    if (gpsOffLock.current || document.visibilityState !== "visible") return;
+    try {
+      const perm = await navigator.permissions?.query({ name: "geolocation" });
+      if (perm && perm.state !== "denied") return;
+    } catch {
+      if (gpsDenyStreak.current < 2) return;
+    }
     gpsOffLock.current = true;
     const last =
       lastFix.current ||
@@ -308,6 +319,7 @@ export default function DashboardPage() {
 
     const watch = navigator.geolocation.watchPosition(
       (pos) => {
+        gpsDenyStreak.current = 0;
         const accLimit = isIosBrowser() ? 500 : 200;
         if (pos.coords.accuracy > accLimit) return;
         const next = { lat: pos.coords.latitude, lng: pos.coords.longitude };
@@ -319,9 +331,15 @@ export default function DashboardPage() {
         setOpen((cur) => (cur ? { ...cur, points: [...cur.points, point] } : cur));
       },
       (err) => {
-        if (err.code === 1) autoPunchOutForGpsOff();
+        if (err.code !== 1 || document.visibilityState !== "visible") return;
+        gpsDenyStreak.current += 1;
+        if (gpsDenyResetTimer.current != null) window.clearTimeout(gpsDenyResetTimer.current);
+        gpsDenyResetTimer.current = window.setTimeout(() => {
+          gpsDenyStreak.current = 0;
+        }, 90_000);
+        if (gpsDenyStreak.current >= 2) void autoPunchOutForGpsOff();
       },
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
+      { enableHighAccuracy: true, maximumAge: 60_000, timeout: 30_000 }
     );
     const t = setInterval(flush, 8000);
     const onHide = () => {
@@ -331,7 +349,8 @@ export default function DashboardPage() {
 
     let perm: PermissionStatus | null = null;
     const onPerm = () => {
-      if (perm && perm.state !== "granted") autoPunchOutForGpsOff();
+      if (document.visibilityState !== "visible" || !perm || perm.state !== "denied") return;
+      void autoPunchOutForGpsOff();
     };
     navigator.permissions
       ?.query({ name: "geolocation" })
@@ -346,6 +365,7 @@ export default function DashboardPage() {
       clearInterval(t);
       document.removeEventListener("visibilitychange", onHide);
       perm?.removeEventListener("change", onPerm);
+      if (gpsDenyResetTimer.current != null) window.clearTimeout(gpsDenyResetTimer.current);
       flush();
       wake?.release().catch(() => {});
     };
