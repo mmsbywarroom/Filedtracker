@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Holiday" ADD COLUMN IF NOT EXISTS "designations" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];

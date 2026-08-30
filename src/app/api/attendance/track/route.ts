@@ -34,18 +34,23 @@ export async function POST(req: Request) {
   }
 
   const cleaned: { lat: number; lng: number; recordedAt: Date; accuracy: number | null }[] = [];
-  let prev = open.points[0] ? { lat: open.points[0].lat, lng: open.points[0].lng } : null;
+  let prev = open.points[0]
+    ? { lat: open.points[0].lat, lng: open.points[0].lng, at: open.points[0].recordedAt.getTime() }
+    : { lat: open.punchInLat, lng: open.punchInLng, at: open.punchInAt.getTime() };
   for (const p of points.slice(0, 80)) {
     const lat = Number(p.lat);
     const lng = Number(p.lng);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+    const recordedAt = p.recordedAt ? new Date(p.recordedAt) : new Date();
+    const at = Number.isFinite(recordedAt.getTime()) ? recordedAt.getTime() : Date.now();
     const next = { lat, lng };
-    if (prev && !isPlausibleStep(prev, next, Number(p.accuracy))) continue;
-    prev = next;
+    const dt = Math.max(0, at - prev.at);
+    if (!isPlausibleStep(prev, next, Number(p.accuracy), dt)) continue;
+    prev = { ...next, at };
     cleaned.push({
       lat,
       lng,
-      recordedAt: p.recordedAt ? new Date(p.recordedAt) : new Date(),
+      recordedAt,
       accuracy: Number.isFinite(Number(p.accuracy)) ? Number(p.accuracy) : null,
     });
   }
@@ -88,10 +93,12 @@ export async function POST(req: Request) {
   });
 
   let extra = 0;
-  prev = open.points[0] ? { lat: open.points[0].lat, lng: open.points[0].lng } : null;
+  let walk = open.points[0]
+    ? { lat: open.points[0].lat, lng: open.points[0].lng }
+    : { lat: open.punchInLat, lng: open.punchInLng };
   for (const p of cleaned) {
-    if (prev) extra += haversineMeters(prev, p);
-    prev = p;
+    extra += haversineMeters(walk, p);
+    walk = p;
   }
   await prisma.attendance.update({
     where: { id: open.id },

@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { downsample } from "@/lib/utils";
+import { downsample, sessionTravelMeters } from "@/lib/utils";
 import { sanitizeFaceImage } from "@/lib/faceImage";
 import { assertInsideAssignedAssembly } from "@/lib/assemblyGeofence";
 import { assertInsideCallCenterSite, isCallCenterDesignation } from "@/lib/callCenterGeofence";
 import { autoPunchOutIfStale, closeStaleSessionForRePunch } from "@/lib/punchOut";
 import { requireUserFaceMatch } from "@/lib/requireFaceMatch";
-import { assertPanIndiaPunchLocation, isPanIndiaPunchPhone } from "@/lib/panIndiaPunch";
+import { findHolidayToday, holidayAppliesTo } from "@/lib/holidays";
 
 function istDayBounds(d = new Date()) {
   const ymd = d.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
@@ -42,6 +42,18 @@ export async function GET() {
     orderBy: { punchInAt: "desc" },
     take: 1,
   });
+  const { start, end } = istDayBounds();
+  const todayRows = await prisma.attendance.findMany({
+    where: { userId: s.sub, punchInAt: { gte: start, lte: end } },
+    select: {
+      id: true,
+      distanceMeters: true,
+      punchInLat: true,
+      punchInLng: true,
+      punchOutLat: true,
+      punchOutLng: true,
+    },
+  });
   const mapId = openFresh?.id || history[0]?.id;
   const openPts = [...(openFresh?.points || [])].reverse();
   let mapPoints: { lat: number; lng: number; recordedAt: Date }[] = [];
@@ -55,8 +67,39 @@ export async function GET() {
     });
     mapPoints = downsample([...pts].reverse(), 280);
   }
+
+  const openDistance = openFresh
+    ? sessionTravelMeters({
+        stored: openFresh.distanceMeters,
+        punchIn: { lat: openFresh.punchInLat, lng: openFresh.punchInLng },
+        points: openPts,
+        punchOut:
+          openFresh.punchOutLat != null && openFresh.punchOutLng != null
+            ? { lat: openFresh.punchOutLat, lng: openFresh.punchOutLng }
+            : null,
+      })
+    : 0;
+
+  const todayDistanceMeters = todayRows.reduce((sum, r) => {
+    if (openFresh && r.id === openFresh.id) return sum + openDistance;
+    return (
+      sum +
+      sessionTravelMeters({
+        stored: r.distanceMeters,
+        punchIn: { lat: r.punchInLat, lng: r.punchInLng },
+        punchOut:
+          r.punchOutLat != null && r.punchOutLng != null
+            ? { lat: r.punchOutLat, lng: r.punchOutLng }
+            : null,
+      })
+    );
+  }, 0);
+
   return NextResponse.json({
-    open: openFresh ? { ...openFresh, points: mapPoints } : null,
+    open: openFresh
+      ? { ...openFresh, points: mapPoints, distanceMeters: openDistance }
+      : null,
+    todayDistanceMeters,
     history: history.map((h) => ({ ...h, points: h.id === mapId ? mapPoints : [] })),
   });
 }
@@ -115,6 +158,15 @@ export async function POST(req: Request) {
   if (onLeave) {
     return NextResponse.json(
       { error: "You are on approved leave today. Punch in is not allowed." },
+      { status: 403 }
+    );
+  }
+  const holiday = await findHolidayToday();
+  if (holidayAppliesTo(holiday, user.designation)) {
+    return NextResponse.json(
+      {
+        error: `Today is a holiday for ${user.designation} (${holiday.reason}). Punch in is not required.`,
+      },
       { status: 403 }
     );
   }

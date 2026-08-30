@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { sessionTravelMeters } from "@/lib/utils";
 
 export async function GET(req: Request) {
   const s = await requireUser();
@@ -55,7 +56,14 @@ export async function GET(req: Request) {
       punchOutLng: r.punchOutLng,
       punchInAddress: r.punchInAddress,
       punchOutAddress: r.punchOutAddress,
-      distanceMeters: r.distanceMeters,
+      distanceMeters: sessionTravelMeters({
+        stored: r.distanceMeters,
+        punchIn: { lat: r.punchInLat, lng: r.punchInLng },
+        punchOut:
+          r.punchOutLat != null && r.punchOutLng != null
+            ? { lat: r.punchOutLat, lng: r.punchOutLng }
+            : null,
+      }),
       marks: r._count.points,
       status: r.punchOutAt ? "done" : "live",
     })),

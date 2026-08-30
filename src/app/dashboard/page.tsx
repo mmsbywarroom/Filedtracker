@@ -5,7 +5,7 @@ import Link from "next/link";
 import { FaceCapture } from "@/components/FaceCapture";
 import { BrandMark } from "@/components/BrandMark";
 import RouteMap from "@/components/RouteMapDynamic";
-import { formatDuration, formatKm, isPlausibleStep, pathDistance } from "@/lib/utils";
+import { formatDuration, formatKm, isPlausibleStep, sessionTravelMeters } from "@/lib/utils";
 import {
   captureGpsFix,
   isIosBrowser,
@@ -73,6 +73,7 @@ export default function DashboardPage() {
   const [okMsg, setOkMsg] = useState(false);
   const buffer = useRef<Point[]>([]);
   const lastFix = useRef<{ lat: number; lng: number } | null>(null);
+  const lastRecorded = useRef<{ lat: number; lng: number; at: number } | null>(null);
   const liveAcc = useRef<number>(Infinity);
   const punchGpsRef = useRef<PunchGps | null>(null);
   const geoWatchId = useRef<number | null>(null);
@@ -82,6 +83,7 @@ export default function DashboardPage() {
   const gpsDenyResetTimer = useRef<number | null>(null);
   const [gpsOffFlag, setGpsOffFlag] = useState(false);
   const [livePos, setLivePos] = useState<{ lat: number; lng: number } | null>(null);
+  const [todayDistanceMeters, setTodayDistanceMeters] = useState(0);
   const [locating, setLocating] = useState(false);
   const [gpsError, setGpsError] = useState("");
   const [bootError, setBootError] = useState("");
@@ -176,6 +178,7 @@ export default function DashboardPage() {
       const att = await attRes.json().catch(() => ({}));
       if (attRes.ok) {
         setOpen(att.open ?? null);
+        setTodayDistanceMeters(Number(att.todayDistanceMeters) || 0);
         const last = att.history?.[0];
         if (!att.open && last?.punchOutReason === "gps_off" && last.punchOutAt) {
           const age = Date.now() - new Date(last.punchOutAt).getTime();
@@ -283,6 +286,10 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!open) return;
     lastFix.current = open.points[open.points.length - 1] || { lat: open.punchInLat, lng: open.punchInLng };
+    const lastPt = open.points[open.points.length - 1];
+    lastRecorded.current = lastPt
+      ? { lat: lastPt.lat, lng: lastPt.lng, at: new Date(lastPt.recordedAt).getTime() || Date.now() }
+      : { lat: open.punchInLat, lng: open.punchInLng, at: new Date(open.punchInAt).getTime() };
     gpsOffLock.current = false;
     let wake: { release: () => Promise<void> } | null = null;
     navigator.wakeLock?.request("screen").then((lock) => {
@@ -322,19 +329,23 @@ export default function DashboardPage() {
       }
     };
 
+    const recordFix = (pos: GeolocationPosition) => {
+      gpsDenyStreak.current = 0;
+      const acc = pos.coords.accuracy || 9999;
+      const next = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      setLivePos(next);
+      if (acc > 2000) return;
+      const from = lastRecorded.current;
+      const dt = from ? Date.now() - from.at : Date.now() - new Date(open.punchInAt).getTime();
+      if (from && !isPlausibleStep(from, next, acc, dt)) return;
+      lastRecorded.current = { ...next, at: Date.now() };
+      const point = { ...next, recordedAt: new Date().toISOString(), accuracy: acc };
+      buffer.current.push(point);
+      setOpen((cur) => (cur ? { ...cur, points: [...cur.points, point] } : cur));
+    };
+
     const watch = navigator.geolocation.watchPosition(
-      (pos) => {
-        gpsDenyStreak.current = 0;
-        const accLimit = isIosBrowser() ? 500 : 200;
-        if (pos.coords.accuracy > accLimit) return;
-        const next = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        setLivePos(next);
-        if (lastFix.current && !isPlausibleStep(lastFix.current, next, pos.coords.accuracy)) return;
-        lastFix.current = next;
-        const point = { ...next, recordedAt: new Date().toISOString(), accuracy: pos.coords.accuracy };
-        buffer.current.push(point);
-        setOpen((cur) => (cur ? { ...cur, points: [...cur.points, point] } : cur));
-      },
+      recordFix,
       (err) => {
         if (err.code !== 1 || document.visibilityState !== "visible") return;
         gpsDenyStreak.current += 1;
@@ -344,11 +355,27 @@ export default function DashboardPage() {
         }, 90_000);
         if (gpsDenyStreak.current >= 2) void autoPunchOutForGpsOff();
       },
-      { enableHighAccuracy: true, maximumAge: 60_000, timeout: 30_000 }
+      { enableHighAccuracy: true, maximumAge: 15_000, timeout: 30_000 }
     );
     const t = setInterval(flush, 8000);
+    const ping = window.setInterval(() => {
+      navigator.geolocation.getCurrentPosition(recordFix, () => {}, {
+        enableHighAccuracy: true,
+        maximumAge: 20_000,
+        timeout: 20_000,
+      });
+    }, 40_000);
     const onHide = () => {
-      if (document.visibilityState === "hidden") flush();
+      if (document.visibilityState === "hidden") {
+        flush();
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(recordFix, () => {}, {
+        enableHighAccuracy: true,
+        maximumAge: 0,
+        timeout: 20_000,
+      });
+      flush();
     };
     document.addEventListener("visibilitychange", onHide);
 
@@ -368,6 +395,7 @@ export default function DashboardPage() {
     return () => {
       navigator.geolocation.clearWatch(watch);
       clearInterval(t);
+      window.clearInterval(ping);
       document.removeEventListener("visibilitychange", onHide);
       perm?.removeEventListener("change", onPerm);
       if (gpsDenyResetTimer.current != null) window.clearTimeout(gpsDenyResetTimer.current);
@@ -542,11 +570,19 @@ export default function DashboardPage() {
   const live = useMemo(() => {
     if (!open) return null;
     const start = new Date(open.punchInAt).getTime();
+    const sessionMeters = sessionTravelMeters({
+      stored: open.distanceMeters,
+      punchIn: { lat: open.punchInLat, lng: open.punchInLng },
+      points: open.points,
+      live: livePos,
+    });
+    const otherToday = Math.max(0, todayDistanceMeters - (open.distanceMeters || 0));
     return {
       durationMs: Date.now() - start,
       points: open.points,
+      travelMeters: otherToday + sessionMeters,
     };
-  }, [open]);
+  }, [open, livePos, todayDistanceMeters]);
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -660,13 +696,7 @@ export default function DashboardPage() {
                   {t("punchOut")}
                 </button>
                 <span className="min-w-0 break-words text-sm text-navy/60">
-                  {t("live")} · {formatDuration(live?.durationMs || 0)} ·{" "}
-                  {formatKm(
-                    Math.max(
-                      open.distanceMeters,
-                      pathDistance([{ lat: open.punchInLat, lng: open.punchInLng }, ...open.points])
-                    )
-                  )}
+                  {t("live")} · {formatDuration(live?.durationMs || 0)} · {formatKm(live?.travelMeters || 0)}
                 </span>
               </div>
             ) : (
@@ -713,7 +743,7 @@ export default function DashboardPage() {
                 locationError={gpsError}
                 onLocateMe={enableLocation}
                 durationMs={live?.durationMs}
-                distanceMeters={open.distanceMeters}
+                distanceMeters={live?.travelMeters}
               />
             </div>
           ) : (

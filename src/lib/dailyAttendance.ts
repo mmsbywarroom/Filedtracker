@@ -2,6 +2,8 @@ import { AUTO_PUNCH_OUT_MS } from "@/lib/punchOut";
 
 export const ATTENDANCE_STATUSES = ["present", "half_day", "absent", "leave"] as const;
 export type AttendanceStatus = (typeof ATTENDANCE_STATUSES)[number];
+/** Display-only: no punch yet, and 1:00 PM IST cutoff has not passed. */
+export type ResolvedAttendanceStatus = AttendanceStatus | "pending";
 
 /** Punch in by this IST time + 6–12h worked → Present */
 export const PRESENT_PUNCH_BEFORE_MINUTES = 10 * 60 + 30; // 10:30 AM
@@ -41,6 +43,15 @@ export function istMinutesOfDay(d: Date) {
   return hour * 60 + minute;
 }
 
+/** 1:00 PM IST on the given calendar day — no-punch users become Absent after this. */
+export function noPunchAbsentCutoff(dateYmd: string) {
+  return new Date(`${dateYmd}T13:00:00+05:30`);
+}
+
+export function isAfterNoPunchAbsentCutoff(dateYmd: string, now = new Date()) {
+  return now.getTime() >= noPunchAbsentCutoff(dateYmd).getTime();
+}
+
 export function firstPunchIn(sessions: PunchRow[]) {
   if (!sessions.length) return null;
   return sessions.reduce((a, b) => (a.punchInAt < b.punchInAt ? a : b)).punchInAt;
@@ -61,7 +72,8 @@ export function hoursWorkedOnDay(sessions: PunchRow[], asOf = new Date()) {
  * Auto day status from first punch-in time (IST) and hours worked:
  * - by 10:30 + 6–12h (or >12h) → present
  * - after 10:30 and by 1:00 PM → half_day
- * - after 1:00 PM or no punch or early punch with <6h → absent
+ * - after 1:00 PM or no punch (after 1:00 PM) or early punch with <6h → absent
+ * No punch before 1:00 PM is handled in resolveDayAttendanceStatus as pending.
  */
 export function autoAttendanceStatus(opts: {
   firstPunchIn: Date | null;
@@ -76,10 +88,11 @@ export function autoAttendanceStatus(opts: {
   return "absent";
 }
 
-export function statusLabel(status: AttendanceStatus) {
+export function statusLabel(status: ResolvedAttendanceStatus) {
   if (status === "present") return "Present";
   if (status === "half_day") return "Half-day";
   if (status === "leave") return "Leave";
+  if (status === "pending") return "Pending punch-in";
   return "Absent";
 }
 
@@ -116,14 +129,17 @@ export function autoReason(
   return `First punch ${punchLabel} · ${hours.toFixed(1)}h${sessionsNote} = absent`;
 }
 
-/** Resolve final day status (manual mark → leave → auto punch rules). */
+/** Resolve final day status (manual mark → holiday → leave → auto punch rules). */
 export function resolveDayAttendanceStatus(opts: {
   sessions: PunchRow[];
   asOf?: Date;
+  dateYmd?: string;
   onApprovedLeave: boolean;
+  isHoliday?: boolean;
+  holidayReason?: string | null;
   manual?: { status: string; source: string; note?: string | null } | null;
 }): {
-  status: AttendanceStatus;
+  status: ResolvedAttendanceStatus;
   source: "auto" | "manual";
   reason: string;
   hours: number;
@@ -131,6 +147,7 @@ export function resolveDayAttendanceStatus(opts: {
   sessionCount: number;
 } {
   const asOf = opts.asOf ?? new Date();
+  const dateYmd = opts.dateYmd ?? istDateString(asOf);
   const hours = hoursWorkedOnDay(opts.sessions, asOf);
   const hadPunch = opts.sessions.length > 0;
   const firstIn = firstPunchIn(opts.sessions);
@@ -147,11 +164,31 @@ export function resolveDayAttendanceStatus(opts: {
       sessionCount,
     };
   }
+  if (opts.isHoliday) {
+    return {
+      status: "leave",
+      source: "auto",
+      reason: opts.holidayReason || "Holiday for this designation",
+      hours,
+      firstIn,
+      sessionCount,
+    };
+  }
   if (opts.onApprovedLeave || manual?.status === "leave") {
     return {
       status: "leave",
       source: manual?.source === "manual" ? "manual" : "auto",
       reason: manual?.note || autoReason("leave", hours, hadPunch, true, firstIn, sessionCount),
+      hours,
+      firstIn,
+      sessionCount,
+    };
+  }
+  if (!hadPunch && !isAfterNoPunchAbsentCutoff(dateYmd)) {
+    return {
+      status: "pending",
+      source: "auto",
+      reason: "No punch-in yet — marked Absent after 1:00 PM",
       hours,
       firstIn,
       sessionCount,

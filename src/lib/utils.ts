@@ -48,7 +48,48 @@ export function pathDistance(points: LatLng[]) {
   return d;
 }
 
-export function splitTrack<T extends LatLng>(points: T[], maxGapMeters = 280): T[][] {
+/** Field travel: ignore GPS jitter, keep bike/car hops after screen-off. ~180 km/h cap. */
+const TRACK_MIN_STEP_M = 8;
+const TRACK_MAX_ACCURACY_M = 2000;
+const TRACK_MAX_SPEED_MPS = 50;
+const TRACK_MAX_GAP_M = 80_000;
+
+export function isPlausibleStep(
+  from: LatLng,
+  to: LatLng,
+  accuracy?: number | null,
+  dtMs?: number | null
+) {
+  if (accuracy != null && Number.isFinite(accuracy) && accuracy > TRACK_MAX_ACCURACY_M) return false;
+  const gap = haversineMeters(from, to);
+  if (gap < TRACK_MIN_STEP_M) return false;
+  const dt = dtMs != null && Number.isFinite(dtMs) && dtMs > 0 ? dtMs : 30 * 60 * 1000;
+  const maxGap = Math.min(TRACK_MAX_GAP_M, Math.max(20_000, (dt / 1000) * TRACK_MAX_SPEED_MPS));
+  if (gap > maxGap) return false;
+  return true;
+}
+
+/** Best available km for a session: stored path, polyline, or punch-in → last known point. */
+export function sessionTravelMeters(opts: {
+  stored?: number | null;
+  punchIn: LatLng;
+  points?: LatLng[];
+  punchOut?: LatLng | null;
+  live?: LatLng | null;
+}) {
+  const pts = opts.points || [];
+  const end = opts.live || opts.punchOut || pts[pts.length - 1] || null;
+  const path = pathDistance([
+    opts.punchIn,
+    ...pts,
+    ...(opts.punchOut ? [opts.punchOut] : []),
+    ...(opts.live ? [opts.live] : []),
+  ]);
+  const crow = end ? haversineMeters(opts.punchIn, end) : 0;
+  return Math.max(opts.stored || 0, path, crow);
+}
+
+export function splitTrack<T extends LatLng>(points: T[], maxGapMeters = 8000): T[][] {
   if (!points.length) return [];
   const segs: T[][] = [[points[0]]];
   for (let i = 1; i < points.length; i++) {
@@ -66,13 +107,5 @@ export function downsample<T>(items: T[], max = 320): T[] {
   for (let i = 0; i < max - 1; i++) out.push(items[Math.floor(i * step)]);
   out.push(items[items.length - 1]);
   return out;
-}
-
-export function isPlausibleStep(from: LatLng, to: LatLng, accuracy?: number | null) {
-  if (accuracy != null && accuracy > 200) return false;
-  const gap = haversineMeters(from, to);
-  if (gap < 2) return false;
-  if (gap > 500) return false;
-  return true;
 }
 

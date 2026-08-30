@@ -7,14 +7,17 @@ import {
   istDateString,
   istDayBounds,
   resolveDayAttendanceStatus,
-  type AttendanceStatus,
+  statusLabel,
+  type ResolvedAttendanceStatus,
 } from "@/lib/dailyAttendance";
+import { holidayAppliesTo, holidayLeaveReason } from "@/lib/holidays";
 
 function groupCounts(
   users: { id: string; key: string; isActive: boolean; faceRegistered: boolean }[],
   punchedIds: Set<string>,
   liveIds: Set<string>,
-  leaveIds: Set<string>
+  leaveIds: Set<string>,
+  pendingPunchIds: Set<string>
 ) {
   const map = new Map<
     string,
@@ -58,7 +61,7 @@ function groupCounts(
       row.leave += 1;
     } else {
       if (punchedIds.has(u.id)) row.punched += 1;
-      else if (u.isActive) row.pendingPunchIn += 1;
+      else if (pendingPunchIds.has(u.id)) row.pendingPunchIn += 1;
       if (liveIds.has(u.id)) row.live += 1;
       else if (punchedIds.has(u.id)) row.pendingLive += 1;
     }
@@ -195,7 +198,7 @@ export async function GET(req: Request) {
 
     const userIds = users.map((u) => u.id);
 
-    const [punches, leaveMarks, allMarks, approvedLeaves] = await Promise.all([
+    const [punches, leaveMarks, allMarks, approvedLeaves, holiday] = await Promise.all([
       prisma.attendance.findMany({
         where: {
           punchInAt: { gte: start, lte: end },
@@ -237,13 +240,20 @@ export async function GET(req: Request) {
             select: { userId: true },
           })
         : Promise.resolve([]),
+      prisma.holiday.findUnique({ where: { date: dateOnly } }),
     ]);
 
     const punchedIds = new Set(punches.map((p) => p.userId));
     const liveIds = new Set(punches.filter((p) => !p.punchOutAt).map((p) => p.userId));
-    // Dashboard Leave card = Attendance leave marks (exclusive with Live/Punched)
     const leaveIds = new Set(leaveMarks.map((m) => m.userId));
     const leaveNoteByUser = new Map(leaveMarks.map((m) => [m.userId, m.note || ""]));
+    if (holiday) {
+      for (const u of users) {
+        if (!holidayAppliesTo(holiday, u.designation)) continue;
+        leaveIds.add(u.id);
+        if (!leaveNoteByUser.has(u.id)) leaveNoteByUser.set(u.id, holidayLeaveReason(holiday.reason, u.designation));
+      }
+    }
     const markByUser = new Map(allMarks.map((m) => [m.userId, m]));
     const approvedLeaveIds = new Set(approvedLeaves.map((l) => l.userId));
 
@@ -268,7 +278,7 @@ export async function GET(req: Request) {
       }
     }
 
-    const dayStatusByUser = new Map<string, AttendanceStatus>();
+    const dayStatusByUser = new Map<string, ResolvedAttendanceStatus>();
     let presentOnDate = 0;
     let halfDayOnDate = 0;
     let absentOnDate = 0;
@@ -279,14 +289,19 @@ export async function GET(req: Request) {
       const resolved = resolveDayAttendanceStatus({
         sessions: punchesByUser.get(u.id) || [],
         asOf,
+        dateYmd: date,
         onApprovedLeave: approvedLeaveIds.has(u.id),
+        isHoliday: holidayAppliesTo(holiday, u.designation),
+        holidayReason: holidayAppliesTo(holiday, u.designation)
+          ? holidayLeaveReason(holiday!.reason, u.designation)
+          : null,
         manual: mark ? { status: mark.status, source: mark.source, note: mark.note } : null,
       });
       dayStatusByUser.set(u.id, resolved.status);
       if (resolved.status === "present") presentOnDate += 1;
       else if (resolved.status === "half_day") halfDayOnDate += 1;
       else if (resolved.status === "leave") attendanceLeaveOnDate += 1;
-      else absentOnDate += 1;
+      else if (resolved.status === "absent") absentOnDate += 1;
     }
 
     const activeUsers = users.filter((u) => u.isActive).length;
@@ -295,7 +310,10 @@ export async function GET(req: Request) {
     // Leave overrides punch/live for dashboard day counts (no double counting)
     const punchedNotLeave = users.filter((u) => punchedIds.has(u.id) && !leaveIds.has(u.id));
     const liveNotLeave = users.filter((u) => liveIds.has(u.id) && !leaveIds.has(u.id));
-    const pendingPunchIn = users.filter((u) => u.isActive && !punchedIds.has(u.id) && !leaveIds.has(u.id)).length;
+    const pendingPunchIds = new Set(
+      users.filter((u) => u.isActive && dayStatusByUser.get(u.id) === "pending").map((u) => u.id)
+    );
+    const pendingPunchIn = pendingPunchIds.size;
     const pendingFace = users.filter((u) => u.isActive && !u.faceRegisteredAt).length;
     const pendingLive = punchedNotLeave.filter((u) => !liveIds.has(u.id)).length;
 
@@ -311,7 +329,7 @@ export async function GET(req: Request) {
       else if (metric === "halfDay") filtered = users.filter((u) => dayStatusByUser.get(u.id) === "half_day");
       else if (metric === "absent") filtered = users.filter((u) => dayStatusByUser.get(u.id) === "absent");
       else if (metric === "pendingPunchIn") {
-        filtered = users.filter((u) => u.isActive && !punchedIds.has(u.id) && !leaveIds.has(u.id));
+        filtered = users.filter((u) => pendingPunchIds.has(u.id));
       } else if (metric === "pendingFace") filtered = users.filter((u) => u.isActive && !u.faceRegisteredAt);
       else if (metric === "pendingLive") {
         filtered = users.filter((u) => punchedIds.has(u.id) && !liveIds.has(u.id) && !leaveIds.has(u.id));
@@ -353,8 +371,7 @@ export async function GET(req: Request) {
             onLeaveToday,
             leaveRemark: onLeaveToday ? leaveNoteByUser.get(u.id) || "Marked leave on Attendance" : null,
             dayStatus,
-            dayStatusLabel:
-              dayStatus === "half_day" ? "Half-day" : dayStatus.charAt(0).toUpperCase() + dayStatus.slice(1),
+            dayStatusLabel: statusLabel(dayStatus),
           };
         })
         .sort((a, b) => a.name.localeCompare(b.name));
@@ -379,7 +396,8 @@ export async function GET(req: Request) {
         })),
         punchedIds,
         liveIds,
-        leaveIds
+        leaveIds,
+        pendingPunchIds
       );
 
     const byCallCenterSite = CALL_CENTER_SITE_NAMES.map((site) => {
@@ -393,7 +411,8 @@ export async function GET(req: Request) {
         })),
         punchedIds,
         liveIds,
-        leaveIds
+        leaveIds,
+        pendingPunchIds
       )[0];
       return row || emptyGroup(site);
     });

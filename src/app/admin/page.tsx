@@ -616,7 +616,7 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
           className="bg-red-600"
           label="Absent"
           value={data?.absentOnDate || 0}
-          hint="No punch, after 1:00, or under 6h"
+          hint="After 1:00 PM: no punch, late punch, or under 6h"
           active={metric === "absent" && !groupFilter}
           onClick={() => loadMetric("absent")}
         />
@@ -624,7 +624,7 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
           className="bg-amber-600"
           label="Pending punchin"
           value={data?.pendingPunchIn || 0}
-          hint="Active, not punched, not on leave"
+          hint="Not punched yet — becomes Absent after 1:00 PM"
           active={metric === "pendingPunchIn" && !groupFilter}
           onClick={() => loadMetric("pendingPunchIn")}
         />

@@ -203,3 +203,16 @@ model FaceResetLog {
   @@index([userId])
   @@index([adminId])
 }
+
+model Holiday {
+  id            String   @id @default(cuid())
+  date          DateTime @unique @db.Date
+  reason        String
+  /// Empty = nobody. Selected designations get Leave; only they cannot punch in.
+  designations  String[] @default([])
+  createdBy     String   @default("")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([date])
+}

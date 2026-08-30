@@ -12,6 +12,7 @@ import {
   statusLabel,
 } from "@/lib/dailyAttendance";
 import { adminPresentLabel, adminPresentRemark, ensureAdminPresentPunch, removeAdminPresentPunch, closeOpenPunchForAdminLeave } from "@/lib/adminPresentPunch";
+import { holidayAppliesTo, holidayLeaveReason } from "@/lib/holidays";
 
 export async function GET(req: Request) {
   const s = await requireAdmin();
@@ -49,11 +50,11 @@ export async function GET(req: Request) {
     return NextResponse.json({
       date,
       rows: [],
-      summary: { present: 0, halfDay: 0, absent: 0, leave: 0, total: 0 },
+      summary: { present: 0, halfDay: 0, absent: 0, leave: 0, pending: 0, total: 0 },
     });
   }
 
-  const [punches, leaves, marks] = await Promise.all([
+  const [punches, leaves, marks, holiday] = await Promise.all([
     prisma.attendance.findMany({
       where: { userId: { in: ids }, punchInAt: { gte: start, lte: end } },
       select: { userId: true, punchInAt: true, punchOutAt: true },
@@ -70,6 +71,7 @@ export async function GET(req: Request) {
     prisma.dailyAttendanceMark.findMany({
       where: { userId: { in: ids }, date: dateOnly },
     }),
+    prisma.holiday.findUnique({ where: { date: dateOnly } }),
   ]);
 
   const punchesByUser = new Map<string, { punchInAt: Date; punchOutAt: Date | null }[]>();
@@ -85,6 +87,7 @@ export async function GET(req: Request) {
   let halfDay = 0;
   let absent = 0;
   let leave = 0;
+  let pending = 0;
 
   const allRows = users
     .filter((u) => canSeeUser(s.admin, u))
@@ -94,7 +97,12 @@ export async function GET(req: Request) {
       const resolved = resolveDayAttendanceStatus({
         sessions,
         asOf,
+        dateYmd: date,
         onApprovedLeave: onLeave.has(u.id),
+        isHoliday: holidayAppliesTo(holiday, u.designation),
+        holidayReason: holidayAppliesTo(holiday, u.designation)
+          ? holidayLeaveReason(holiday!.reason, u.designation)
+          : null,
         manual: manual
           ? { status: manual.status, source: manual.source, note: manual.note }
           : null,
@@ -149,18 +157,19 @@ export async function GET(req: Request) {
     if (r.status === "present") present += 1;
     else if (r.status === "half_day") halfDay += 1;
     else if (r.status === "leave") leave += 1;
+    else if (r.status === "pending") pending += 1;
     else absent += 1;
   }
 
   return NextResponse.json({
     date,
     rows,
-    summary: { present, halfDay, absent, leave, total: rows.length },
+    summary: { present, halfDay, absent, leave, pending, total: rows.length },
     rules: {
       present: `Punch in by 10:30 AM and stay on duty 6–12 hours`,
       halfDay: `Punch in after 10:30 AM and by 1:00 PM`,
-      absent: `No punch-in, punch after 1:00 PM, or early punch with under ${PRESENT_MIN_HOURS}h`,
-      leave: "Approved leave or marked leave on Attendance",
+      absent: `After 1:00 PM: no punch-in, punch after 1:00 PM, or early punch with under ${PRESENT_MIN_HOURS}h`,
+      leave: "Approved leave, holiday calendar (selected designations), or marked leave on Attendance",
     },
   });
 }

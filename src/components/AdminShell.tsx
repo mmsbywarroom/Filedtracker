@@ -6,7 +6,7 @@ import { ReactNode, useEffect, useState } from "react";
 import { BrandMark } from "@/components/BrandMark";
 import { LangToggle, useLang } from "@/lib/i18n";
 
-const SUPER_ONLY = ["/admin/create", "/admin/admins", "/admin/face-reset-logs"];
+const SUPER_ONLY = ["/admin/create", "/admin/admins", "/admin/face-reset-logs", "/admin/holidays"];
 
 export default function AdminShell({ children }: { children: ReactNode }) {
   const { t } = useLang();
@@ -59,6 +59,9 @@ export default function AdminShell({ children }: { children: ReactNode }) {
     },
     { href: "/admin/records", label: t("dailyRecords"), match: (p: string) => p.startsWith("/admin/records"), group: "Attendance" },
     { href: "/admin/leaves", label: t("leaveModule"), match: (p: string) => p.startsWith("/admin/leaves"), group: "Attendance" },
+    ...(isSuper
+      ? [{ href: "/admin/holidays", label: t("holidays"), match: (p: string) => p.startsWith("/admin/holidays"), group: "Attendance" }]
+      : []),
     { href: "/admin/rally-users", label: t("rallyUsers"), match: (p: string) => p.startsWith("/admin/rally-users"), group: "Rally" },
     { href: "/admin/rally-live", label: t("rallyLive"), match: (p: string) => p.startsWith("/admin/rally-live"), group: "Rally" },
     { href: "/admin/rally-summary", label: t("rallySummary"), match: (p: string) => p.startsWith("/admin/rally-summary"), group: "Rally" },

@@ -6,6 +6,7 @@ import { SearchSelect } from "@/components/SearchSelect";
 import { hierarchyDesignations } from "@/lib/hierarchy";
 
 type AttStatus = "present" | "half_day" | "absent" | "leave";
+type RowStatus = AttStatus | "pending";
 
 type Row = {
   userId: string;
@@ -16,7 +17,7 @@ type Row = {
   sectorAllotted: string;
   zone: string;
   district: string;
-  status: AttStatus;
+  status: RowStatus;
   statusLabel: string;
   source: "auto" | "manual";
   reason: string;
@@ -26,7 +27,7 @@ type Row = {
   sessionCount?: number;
 };
 
-type Summary = { present: number; halfDay: number; absent: number; leave: number; total: number };
+type Summary = { present: number; halfDay: number; absent: number; leave: number; pending: number; total: number };
 
 function todayIst() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
@@ -41,11 +42,13 @@ function statusClass(status: string) {
   if (status === "present") return "bg-emerald-50 text-emerald-700";
   if (status === "half_day") return "bg-amber-50 text-amber-800";
   if (status === "leave") return "bg-sky-50 text-sky-800";
+  if (status === "pending") return "bg-orange-50 text-orange-800";
   return "bg-red-50 text-red-700";
 }
 
-function statusTitle(status: AttStatus) {
+function statusTitle(status: RowStatus) {
   if (status === "half_day") return "Half-day";
+  if (status === "pending") return "Pending punch-in";
   return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
@@ -122,11 +125,12 @@ export default function AttendanceModulePage() {
   }, [allRows, zone, district, assembly, designation, sector, statusFilter, q]);
 
   const summary = useMemo(() => {
-    const s: Summary = { present: 0, halfDay: 0, absent: 0, leave: 0, total: rows.length };
+    const s: Summary = { present: 0, halfDay: 0, absent: 0, leave: 0, pending: 0, total: rows.length };
     for (const r of rows) {
       if (r.status === "present") s.present += 1;
       else if (r.status === "half_day") s.halfDay += 1;
       else if (r.status === "leave") s.leave += 1;
+      else if (r.status === "pending") s.pending += 1;
       else s.absent += 1;
     }
     return s;
@@ -174,12 +178,12 @@ export default function AttendanceModulePage() {
       <p className="text-xs uppercase tracking-[0.2em] text-teal">Attendance</p>
       <h1 className="text-2xl font-semibold">Date-wise attendance</h1>
       <p className="mt-1 text-sm text-navy/55">
-        Auto: punch by 10:30 + 6–12h = Present · after 10:30 to 1:00 = Half-day · after 1:00 or no punch = Absent ·
-        leave mark / approved leave = Leave. Multiple punch-ins the same day (e.g. after GPS/phone off) are added
-        together for hours. Manual change requires a reason.
+        Auto: punch by 10:30 + 6–12h = Present · after 10:30 to 1:00 = Half-day · after 1:00 PM no punch = Absent ·
+        until 1:00 PM, no punch stays Pending. Leave mark / approved leave / holiday (that designation) = Leave. Multiple punch-ins
+        the same day (e.g. after GPS/phone off) are added together for hours. Manual change requires a reason.
       </p>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
         <div className="rounded-2xl bg-emerald-600 px-4 py-3 text-white shadow-card">
           <p className="text-xs uppercase tracking-wider text-white/75">Present</p>
           <p className="text-2xl font-semibold">{summary.present}</p>
@@ -188,8 +192,13 @@ export default function AttendanceModulePage() {
           <p className="text-xs uppercase tracking-wider text-white/75">Half-day</p>
           <p className="text-2xl font-semibold">{summary.halfDay}</p>
         </div>
+        <div className="rounded-2xl bg-orange-500 px-4 py-3 text-white shadow-card">
+          <p className="text-xs uppercase tracking-wider text-white/75">Pending</p>
+          <p className="text-2xl font-semibold">{summary.pending}</p>
+        </div>
         <div className="rounded-2xl bg-red-600 px-4 py-3 text-white shadow-card">
           <p className="text-xs uppercase tracking-wider text-white/75">Absent</p>
+          <p className="text-xs text-white/70">After 1:00 PM</p>
           <p className="text-2xl font-semibold">{summary.absent}</p>
         </div>
         <div className="rounded-2xl bg-sky-600 px-4 py-3 text-white shadow-card">
@@ -227,6 +236,7 @@ export default function AttendanceModulePage() {
             <option value="">All statuses</option>
             <option value="present">Present</option>
             <option value="half_day">Half-day</option>
+            <option value="pending">Pending punch-in</option>
             <option value="absent">Absent</option>
             <option value="leave">Leave</option>
           </select>
@@ -334,6 +344,7 @@ export default function AttendanceModulePage() {
                       onChange={(e) => requestStatus(r.userId, r.name, e.target.value as AttStatus, r.status)}
                       className={`rounded-xl border border-navy/10 px-2 py-1.5 text-xs font-semibold ${statusClass(r.status)}`}
                     >
+                      {r.status === "pending" ? <option value="pending">Pending punch-in</option> : null}
                       <option value="present">Present</option>
                       <option value="half_day">Half-day</option>
                       <option value="absent">Absent</option>

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canSeeUser, userScopeWhere } from "@/lib/hierarchy";
-import { haversineMeters } from "@/lib/utils";
+import { sessionTravelMeters } from "@/lib/utils";
 
 /**
  * Fast daily list — no face image blobs (base64 faces made this endpoint multi‑MB / very slow).
@@ -101,15 +101,14 @@ export async function GET(req: Request) {
         punchOutAt: r.punchOutAt,
         punchInAddress: r.punchInAddress,
         punchOutAddress: r.punchOutAddress,
-        distanceMeters:
-          r.distanceMeters > 1
-            ? r.distanceMeters
-            : r.punchOutLat != null && r.punchOutLng != null
-              ? haversineMeters(
-                  { lat: r.punchInLat, lng: r.punchInLng },
-                  { lat: r.punchOutLat, lng: r.punchOutLng }
-                )
-              : r.distanceMeters,
+        distanceMeters: sessionTravelMeters({
+          stored: r.distanceMeters,
+          punchIn: { lat: r.punchInLat, lng: r.punchInLng },
+          punchOut:
+            r.punchOutLat != null && r.punchOutLng != null
+              ? { lat: r.punchOutLat, lng: r.punchOutLng }
+              : null,
+        }),
         marks: marksById.get(r.id) || 0,
         status: r.punchOutAt ? "Completed" : "Live",
         punchOutReason: r.punchOutReason,

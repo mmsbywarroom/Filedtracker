@@ -4,7 +4,7 @@ import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { normalizePhone } from "@/lib/security";
 import { DESIGNATIONS, isSuperAdmin, userScopeWhere } from "@/lib/hierarchy";
-import { normalizeUserAssemblies } from "@/lib/userAssemblies";
+import { findHolidayToday, holidayAppliesTo } from "@/lib/holidays";
 
 const userSchema = z.object({
   name: z.string().min(2).max(80),
@@ -51,6 +51,7 @@ export async function GET() {
           select: { userId: true },
         });
   const onLeaveToday = new Set(onLeaveRows.map((r) => r.userId));
+  const holiday = await findHolidayToday();
 
   return NextResponse.json({
     users: users.map((u) => ({
@@ -65,7 +66,7 @@ export async function GET() {
       district: u.district,
       cluster: u.cluster,
       isActive: u.isActive,
-      onLeaveToday: onLeaveToday.has(u.id),
+      onLeaveToday: holidayAppliesTo(holiday, u.designation) || onLeaveToday.has(u.id),
       faceRegistered: Boolean(u.faceRegisteredAt),
       faceImage: u.faceImage,
       lastPunchIn: u.attendances[0]?.punchInAt ?? null,
