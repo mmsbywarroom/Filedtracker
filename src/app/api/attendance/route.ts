@@ -8,6 +8,7 @@ import { assertInsideCallCenterSite, isCallCenterDesignation } from "@/lib/callC
 import { autoPunchOutIfStale, closeStaleSessionForRePunch } from "@/lib/punchOut";
 import { requireUserFaceMatch } from "@/lib/requireFaceMatch";
 import { findHolidayToday, holidayAppliesTo } from "@/lib/holidays";
+import { assertPanIndiaPunchLocation, isPanIndiaPunchPhone } from "@/lib/panIndiaPunch";
 
 function istDayBounds(d = new Date()) {
   const ymd = d.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
@@ -162,7 +163,7 @@ export async function POST(req: Request) {
     );
   }
   const holiday = await findHolidayToday();
-  if (holidayAppliesTo(holiday, user.designation)) {
+  if (holiday && holidayAppliesTo(holiday, user.designation)) {
     return NextResponse.json(
       {
         error: `Today is a holiday for ${user.designation} (${holiday.reason}). Punch in is not required.`,

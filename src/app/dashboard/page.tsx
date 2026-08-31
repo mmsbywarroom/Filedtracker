@@ -17,6 +17,22 @@ import { LangToggle, useLang } from "@/lib/i18n";
 
 const AUTO_12H_MS = 12 * 60 * 60 * 1000;
 
+async function readApiJson<T extends Record<string, unknown>>(res: Response): Promise<T> {
+  const text = await res.text();
+  if (!text.trim()) {
+    throw new Error(
+      res.ok
+        ? "Server returned empty response. Try again."
+        : `Server error (${res.status}). Wait a minute and try again.`
+    );
+  }
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error(`Server error (${res.status}). Try again in a minute.`);
+  }
+}
+
 type User = {
   id: string;
   name: string;
@@ -415,7 +431,7 @@ export default function DashboardPage() {
       12000,
       "Face check timed out. Check network and tap Confirm again."
     );
-    const data = await res.json();
+    const data = await readApiJson<{ error?: string; matched?: boolean; hint?: string }>(res);
     if (!res.ok) throw new Error(data.error || "Face check failed.");
     if (!data.matched) {
       throw new Error(
@@ -433,7 +449,7 @@ export default function DashboardPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ descriptor, image, samples }),
       });
-      const data = await res.json();
+      const data = await readApiJson<{ error?: string }>(res);
       if (!res.ok) throw new Error(data.error || "Could not save face.");
       setMode("idle");
       setOkMsg(true);
@@ -492,7 +508,7 @@ export default function DashboardPage() {
         20000,
         "Punch timed out. Check network and try again."
       );
-      const data = await res.json();
+      const data = await readApiJson<{ error?: string }>(res);
       if (!res.ok) throw new Error(data.error || "Could not save punch.");
       punchGpsRef.current = null;
       setMode("idle");
