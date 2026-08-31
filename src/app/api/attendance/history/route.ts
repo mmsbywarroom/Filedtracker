@@ -59,10 +59,12 @@ export async function GET(req: Request) {
       distanceMeters: sessionTravelMeters({
         stored: r.distanceMeters,
         punchIn: { lat: r.punchInLat, lng: r.punchInLng },
+        punchInAt: r.punchInAt,
         punchOut:
           r.punchOutLat != null && r.punchOutLng != null
             ? { lat: r.punchOutLat, lng: r.punchOutLng }
             : null,
+        punchOutAt: r.punchOutAt,
       }),
       marks: r._count.points,
       status: r.punchOutAt ? "done" : "live",

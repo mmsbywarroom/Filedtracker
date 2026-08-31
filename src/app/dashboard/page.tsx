@@ -350,7 +350,7 @@ export default function DashboardPage() {
       const acc = pos.coords.accuracy || 9999;
       const next = { lat: pos.coords.latitude, lng: pos.coords.longitude };
       setLivePos(next);
-      if (acc > 2000) return;
+      if (acc > 120) return;
       const from = lastRecorded.current;
       const dt = from ? Date.now() - from.at : Date.now() - new Date(open.punchInAt).getTime();
       if (from && !isPlausibleStep(from, next, acc, dt)) return;
@@ -587,8 +587,8 @@ export default function DashboardPage() {
     if (!open) return null;
     const start = new Date(open.punchInAt).getTime();
     const sessionMeters = sessionTravelMeters({
-      stored: open.distanceMeters,
       punchIn: { lat: open.punchInLat, lng: open.punchInLng },
+      punchInAt: open.punchInAt,
       points: open.points,
       live: livePos,
     });

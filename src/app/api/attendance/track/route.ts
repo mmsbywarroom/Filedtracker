@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { haversineMeters, isPlausibleStep } from "@/lib/utils";
+import { isPlausibleStep, sessionTravelMeters } from "@/lib/utils";
 import { autoPunchOutIfStale, closeOpenAttendance } from "@/lib/punchOut";
 import { assertInsideCallCenterSite, isCallCenterDesignation } from "@/lib/callCenterGeofence";
 import { isPanIndiaPunchPhone } from "@/lib/panIndiaPunch";
@@ -92,17 +92,19 @@ export async function POST(req: Request) {
     data: cleaned.map((p) => ({ ...p, attendanceId: open.id })),
   });
 
-  let extra = 0;
-  let walk = open.points[0]
-    ? { lat: open.points[0].lat, lng: open.points[0].lng }
-    : { lat: open.punchInLat, lng: open.punchInLng };
-  for (const p of cleaned) {
-    extra += haversineMeters(walk, p);
-    walk = p;
-  }
+  const allPoints = await prisma.trackPoint.findMany({
+    where: { attendanceId: open.id },
+    orderBy: { recordedAt: "asc" },
+    select: { lat: true, lng: true, recordedAt: true, accuracy: true },
+  });
+  const distanceMeters = sessionTravelMeters({
+    punchIn: { lat: open.punchInLat, lng: open.punchInLng },
+    punchInAt: open.punchInAt,
+    points: allPoints,
+  });
   await prisma.attendance.update({
     where: { id: open.id },
-    data: { distanceMeters: { increment: extra } },
+    data: { distanceMeters },
   });
 
   return NextResponse.json({ ok: true });

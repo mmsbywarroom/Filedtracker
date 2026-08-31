@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { pathDistance, haversineMeters } from "@/lib/utils";
+import { sessionTravelMeters } from "@/lib/utils";
 
 export const AUTO_PUNCH_OUT_MS = 12 * 60 * 60 * 1000;
 /** Gap with no track points before a new punch-in may start a fresh session (screen-off is OK). */
@@ -27,16 +27,19 @@ export async function closeOpenAttendance(opts: {
   const lastPoint = open.points[open.points.length - 1];
   const lat = Number.isFinite(opts.lat) ? opts.lat : lastPoint?.lat ?? open.punchInLat;
   const lng = Number.isFinite(opts.lng) ? opts.lng : lastPoint?.lng ?? open.punchInLng;
-  const path = pathDistance([
-    { lat: open.punchInLat, lng: open.punchInLng },
-    ...open.points.map((p) => ({ lat: p.lat, lng: p.lng })),
-    { lat, lng },
-  ]);
-  const crow = haversineMeters(
-    { lat: open.punchInLat, lng: open.punchInLng },
-    { lat, lng }
-  );
-  const distance = Math.max(open.distanceMeters || 0, path, crow);
+  const path = sessionTravelMeters({
+    punchIn: { lat: open.punchInLat, lng: open.punchInLng },
+    punchInAt: open.punchInAt,
+    points: open.points.map((p) => ({
+      lat: p.lat,
+      lng: p.lng,
+      recordedAt: p.recordedAt,
+      accuracy: p.accuracy,
+    })),
+    punchOut: { lat, lng },
+    punchOutAt: opts.punchOutAt || new Date(),
+  });
+  const distance = path;
 
   const now = new Date();
   let punchOutAt = opts.punchOutAt || now;

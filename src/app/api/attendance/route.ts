@@ -49,10 +49,12 @@ export async function GET() {
     select: {
       id: true,
       distanceMeters: true,
+      punchInAt: true,
       punchInLat: true,
       punchInLng: true,
       punchOutLat: true,
       punchOutLng: true,
+      punchOutAt: true,
     },
   });
   const mapId = openFresh?.id || history[0]?.id;
@@ -73,11 +75,18 @@ export async function GET() {
     ? sessionTravelMeters({
         stored: openFresh.distanceMeters,
         punchIn: { lat: openFresh.punchInLat, lng: openFresh.punchInLng },
-        points: openPts,
+        punchInAt: openFresh.punchInAt,
+        points: openPts.map((p) => ({
+          lat: p.lat,
+          lng: p.lng,
+          recordedAt: p.recordedAt,
+          accuracy: p.accuracy,
+        })),
         punchOut:
           openFresh.punchOutLat != null && openFresh.punchOutLng != null
             ? { lat: openFresh.punchOutLat, lng: openFresh.punchOutLng }
             : null,
+        punchOutAt: openFresh.punchOutAt,
       })
     : 0;
 
@@ -88,10 +97,12 @@ export async function GET() {
       sessionTravelMeters({
         stored: r.distanceMeters,
         punchIn: { lat: r.punchInLat, lng: r.punchInLng },
+        punchInAt: r.punchInAt,
         punchOut:
           r.punchOutLat != null && r.punchOutLng != null
             ? { lat: r.punchOutLat, lng: r.punchOutLng }
             : null,
+        punchOutAt: r.punchOutAt,
       })
     );
   }, 0);
