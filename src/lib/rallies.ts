@@ -20,6 +20,15 @@ export async function findLiveRally() {
   return prisma.rally.findFirst({ where: { isActive: true }, orderBy: { createdAt: "desc" } });
 }
 
+/** Admin views: explicit rally id, else live/default rally. */
+export async function resolveRally(rallyId?: string | null) {
+  const id = rallyId?.trim();
+  if (id) {
+    return prisma.rally.findUnique({ where: { id } });
+  }
+  return findLiveRally();
+}
+
 export function isRallyOnDate(rally: { scheduledDate: Date } | null | undefined, dateYmd = istDateString()) {
   if (!rally) return false;
   return rallyDateYmd(rally.scheduledDate) === dateYmd;

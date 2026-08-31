@@ -3,14 +3,9 @@ import Papa from "papaparse";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { normalizePhone } from "@/lib/security";
-import { CSV_COLUMNS } from "@/lib/utils";
 import { DESIGNATIONS, isSuperAdmin, parseAssembliesInput } from "@/lib/hierarchy";
 import { normalizeUserAssemblies } from "@/lib/userAssemblies";
-
-function pick(row: Record<string, string>, key: string) {
-  const found = Object.keys(row).find((k) => k.trim().toLowerCase() === key.toLowerCase());
-  return found ? String(row[found] || "").trim() : "";
-}
+import { pickUserCsv, USER_CSV_ALIASES } from "@/lib/userCsvFields";
 
 export async function POST(req: Request) {
   const s = await requireAdmin();
@@ -34,19 +29,21 @@ export async function POST(req: Request) {
 
   for (let i = 0; i < parsed.data.length; i++) {
     const row = parsed.data[i];
-    const name = pick(row, CSV_COLUMNS[0]);
-    const phoneRaw = pick(row, CSV_COLUMNS[1]);
-    const assemblyName = pick(row, CSV_COLUMNS[2]);
-    const sectorAllotted = pick(row, CSV_COLUMNS[3]);
-    const zone = pick(row, CSV_COLUMNS[4]);
-    const district = pick(row, CSV_COLUMNS[5]);
-    const designation = pick(row, "Designation") || "Sector Incharge";
+    const name = pickUserCsv(row, USER_CSV_ALIASES.name);
+    const phoneRaw = pickUserCsv(row, USER_CSV_ALIASES.phone);
+    const assemblyName = pickUserCsv(row, USER_CSV_ALIASES.assemblyName);
+    const sectorAllotted = pickUserCsv(row, USER_CSV_ALIASES.sectorAllotted);
+    const zone = pickUserCsv(row, USER_CSV_ALIASES.zone);
+    const district = pickUserCsv(row, USER_CSV_ALIASES.district);
+    const designation = pickUserCsv(row, USER_CSV_ALIASES.designation) || "Sector Incharge";
     if (!DESIGNATIONS.includes(designation as (typeof DESIGNATIONS)[number])) {
       errors.push({ row: i + 2, error: `Invalid designation "${designation}"` });
       continue;
     }
-    const cluster = pick(row, "Cluster");
-    const assembliesRaw = pick(row, "Assemblies") || pick(row, "Mapped Assemblies");
+    const cluster = pickUserCsv(row, USER_CSV_ALIASES.cluster);
+    const assembliesRaw =
+      pickUserCsv(row, USER_CSV_ALIASES.assemblies) ||
+      pickUserCsv(row, ["Mapped Assemblies"]);
     const { assemblyName: asm, assemblies } = normalizeUserAssemblies(
       designation,
       assemblyName,
@@ -70,7 +67,7 @@ export async function POST(req: Request) {
     if (designation === "ALC" && assemblies.length < 1) {
       errors.push({
         row: i + 2,
-        error: `ALC needs Assemblies column (${name || phone})`,
+        error: `ALC needs Assembly Name or Assemblies column (${name || phone})`,
       });
       continue;
     }

@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { PaginationBar } from "@/components/PaginationBar";
+import { fmtRallyDate, pickDefaultRallyId, RallyPicker } from "@/components/RallyPicker";
 
 type Rally = {
   id: string;
@@ -45,13 +46,6 @@ function todayYmd() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 }
 
-function fmtRallyDate(ymd?: string) {
-  if (!ymd) return "";
-  const [y, m, d] = ymd.split("-");
-  if (!y || !m || !d) return ymd;
-  return `${d}-${m}-${y}`;
-}
-
 export default function AdminRallyUsersPage() {
   const [rallies, setRallies] = useState<Rally[]>([]);
   const [users, setUsers] = useState<RallyUser[]>([]);
@@ -78,8 +72,13 @@ export default function AdminRallyUsersPage() {
     const data = await res.json();
     const list: Rally[] = data.rallies || [];
     setRallies(list);
-    const today = todayYmd();
-    setRallyId((cur) => cur || list.find((r) => r.scheduledDate === today)?.id || list.find((r) => r.isActive)?.id || list[0]?.id || "");
+    const def = pickDefaultRallyId(list);
+    setRallyId((cur) => {
+      if (cur && list.some((r) => r.id === cur)) return cur;
+      const saved = sessionStorage.getItem("admin_rally_users");
+      if (saved && list.some((r) => r.id === saved)) return saved;
+      return def;
+    });
   }
 
   async function loadUsers(id?: string) {
@@ -98,7 +97,12 @@ export default function AdminRallyUsersPage() {
   }, []);
 
   useEffect(() => {
-    if (rallyId) void loadUsers(rallyId);
+    if (rallyId) {
+      sessionStorage.setItem("admin_rally_users", rallyId);
+      void loadUsers(rallyId);
+    } else {
+      setUsers([]);
+    }
   }, [rallyId, qApplied]);
 
   async function createRally(e: FormEvent) {
@@ -133,7 +137,7 @@ export default function AdminRallyUsersPage() {
 
   async function uploadCsv(file: File) {
     if (!rallyId) {
-      setMsg("Create a rally first.");
+      setMsg("Pehle rally create karo, phir dropdown se rally choose karo.");
       return;
     }
     setMsg("Uploading…");
@@ -156,7 +160,7 @@ export default function AdminRallyUsersPage() {
   async function saveUser(e: FormEvent) {
     e.preventDefault();
     if (!rallyId) {
-      setMsg("Create a rally first.");
+      setMsg("Pehle rally create karo, phir dropdown se rally choose karo.");
       return;
     }
     setBusy(true);
@@ -224,7 +228,7 @@ export default function AdminRallyUsersPage() {
       <p className="admin-page-kicker">Rally</p>
       <h1 className="admin-page-title">Rally users</h1>
       <p className="admin-page-sub">
-        Schedule a rally date, then add users. Check-in opens only on that date — you can prepare CSV days ahead.
+        Step 1: Create rally · Step 2: Choose rally from dropdown · Step 3: CSV upload / add user — sab selected rally ke liye.
       </p>
 
       <section className="admin-panel mt-5 p-4">
@@ -265,32 +269,32 @@ export default function AdminRallyUsersPage() {
             Create rally
           </button>
         </form>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <label className="text-sm text-navy/60">Select rally</label>
-          <select
-            value={rallyId}
-            onChange={(e) => setRallyId(e.target.value)}
-            className="px-3 py-2"
-          >
-            {rallies.map((r) => (
-              <option key={r.id} value={r.id}>
-                {fmtRallyDate(r.scheduledDate)} · {r.name} {r.isActive ? "(active)" : ""} · {r.userCount} users
-              </option>
-            ))}
-          </select>
-        </div>
+      </section>
+
+      <section className="admin-panel mt-4 p-4">
+        <h2 className="text-sm font-semibold">Select rally</h2>
+        <p className="mt-1 text-xs text-navy/55">
+          Jo rally yahan choose karoge — usi ke users neeche dikhenge, usi mein CSV jayegi, aur naya user bhi usi rally mein add hoga.
+        </p>
+        <RallyPicker
+          label="Rally"
+          value={rallyId}
+          rallies={rallies}
+          onChange={setRallyId}
+          className="mt-3"
+        />
       </section>
 
       <section className="admin-panel mt-4 p-4">
         <h2 className="text-sm font-semibold">CSV upload</h2>
         <p className="mt-1 text-xs text-navy/55">
-          Columns: Zone, District, Ac Name, Village/Ward, User Name, Number, Vehicle No, POC Name, POC Number, Vehicle Type
+          Selected rally mein upload hoga. Columns: Zone, District, Ac Name, Village/Ward, User Name, Number, Vehicle No, POC Name, POC Number, Vehicle Type
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
           <a href="/sample-rally-users.csv" download className="admin-btn-secondary">
             Download CSV template
           </a>
-          <button type="button" onClick={() => fileRef.current?.click()} className="admin-btn-teal-soft">
+          <button type="button" onClick={() => fileRef.current?.click()} disabled={!rallyId} className="admin-btn-teal-soft disabled:opacity-40">
             Upload CSV
           </button>
           <input
@@ -309,6 +313,7 @@ export default function AdminRallyUsersPage() {
 
       <section className="admin-panel mt-4 p-4">
         <h2 className="text-sm font-semibold">{editing ? "Edit user" : "Create user"}</h2>
+        <p className="mt-1 text-xs text-navy/55">Selected rally mein user add hoga.</p>
         <form onSubmit={saveUser} className="mt-3 grid gap-3 md:grid-cols-3 lg:grid-cols-5">
           {field("name", "User Name")}
           {field("phone", "Number")}
@@ -321,7 +326,7 @@ export default function AdminRallyUsersPage() {
           {field("pocName", "POC Name")}
           {field("pocNumber", "POC Number")}
           <div className="flex items-end gap-2">
-            <button disabled={busy} className="admin-btn-primary">
+            <button disabled={busy || !rallyId} className="admin-btn-primary disabled:opacity-40">
               {editing ? "Save" : "Add user"}
             </button>
             {editing && (
@@ -374,7 +379,9 @@ export default function AdminRallyUsersPage() {
         <button type="button" disabled={busy} className="admin-btn-warn" onClick={() => bulkDelete(true)}>
           Delete all
         </button>
-        <p className="text-sm text-navy/55">{users.length} users</p>
+        <p className="text-sm text-navy/55">
+          {rallyId ? `${users.length} users · selected rally` : "Rally choose karo"}
+        </p>
       </div>
 
       <section className="admin-panel mt-4">
@@ -460,7 +467,7 @@ export default function AdminRallyUsersPage() {
               {!pageRows.length && (
                 <tr>
                   <td colSpan={12} className="py-8 text-center text-navy/50">
-                    No rally users yet. Create a rally and upload CSV.
+                    No users in this rally. Upload CSV or add user above.
                   </td>
                 </tr>
               )}

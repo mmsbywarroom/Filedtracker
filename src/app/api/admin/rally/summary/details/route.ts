@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { remainingEtaSeconds, formatEta, RALLY_REACHED_METERS, isRallyNoMove } from "@/lib/rallyGeo";
-import { findLiveRally } from "@/lib/rallies";
+import { resolveRally } from "@/lib/rallies";
 
 type Metric = "users" | "uniqueVehicles" | "started" | "pending" | "reached" | "noMove" | "m30" | "h1" | "h2" | "h2_5" | "over" | "heads";
 type GroupBy = "zone" | "district" | "ac" | "vehicle";
@@ -23,8 +23,9 @@ export async function GET(req: Request) {
   const metric = (q.get("metric") || "users") as Metric;
   const groupBy = (q.get("groupBy") || "") as GroupBy | "";
   const groupValue = q.get("groupValue") || "";
+  const rallyId = q.get("rallyId");
 
-  const rally = await findLiveRally();
+  const rally = await resolveRally(rallyId);
   if (!rally) return NextResponse.json({ rows: [] });
 
   const users = await prisma.rallyUser.findMany({

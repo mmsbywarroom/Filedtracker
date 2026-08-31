@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { isPlausibleStep, sessionTravelMeters } from "@/lib/utils";
+import { sessionTravelMeters, shouldCreditTrackStep } from "@/lib/utils";
 import { autoPunchOutIfStale, closeOpenAttendance } from "@/lib/punchOut";
 import { assertInsideCallCenterSite, isCallCenterDesignation } from "@/lib/callCenterGeofence";
 import { isPanIndiaPunchPhone } from "@/lib/panIndiaPunch";
@@ -45,7 +45,7 @@ export async function POST(req: Request) {
     const at = Number.isFinite(recordedAt.getTime()) ? recordedAt.getTime() : Date.now();
     const next = { lat, lng };
     const dt = Math.max(0, at - prev.at);
-    if (!isPlausibleStep(prev, next, Number(p.accuracy), dt)) continue;
+    if (!shouldCreditTrackStep(prev, next, Number(p.accuracy), dt)) continue;
     prev = { ...next, at };
     cleaned.push({
       lat,

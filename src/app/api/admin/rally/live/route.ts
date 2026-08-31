@@ -2,12 +2,13 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { remainingEtaSeconds, formatEta, RALLY_REACHED_METERS, isRallyNoMove } from "@/lib/rallyGeo";
-import { findLiveRally } from "@/lib/rallies";
+import { resolveRally, rallyDateYmd } from "@/lib/rallies";
 
-export async function GET() {
+export async function GET(req: Request) {
   const s = await requireAdmin();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const rally = await findLiveRally();
+  const rallyId = new URL(req.url).searchParams.get("rallyId");
+  const rally = await resolveRally(rallyId);
   if (!rally) return NextResponse.json({ rally: null, rows: [] });
 
   const checkins = await prisma.rallyCheckin.findMany({

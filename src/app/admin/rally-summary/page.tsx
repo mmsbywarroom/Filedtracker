@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { downloadCsv, downloadPdf } from "@/lib/reportExport";
+import { fmtRallyDate, pickDefaultRallyId, RallyPicker, type RallyOption } from "@/components/RallyPicker";
 
 type Counts = {
   users: number;
@@ -149,8 +150,10 @@ function CellBtn({ value, active, onClick }: { value: number; active?: boolean; 
 }
 
 export default function RallySummaryPage() {
+  const [rallies, setRallies] = useState<RallyOption[]>([]);
+  const [rallyId, setRallyId] = useState("");
   const [data, setData] = useState<{
-    rally: { name: string } | null;
+    rally: { id?: string; name: string; scheduledDate?: string } | null;
     totals: Counts;
     byZone: Counts[];
     byDistrict: Counts[];
@@ -163,8 +166,26 @@ export default function RallySummaryPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const detailRef = useRef<HTMLElement>(null);
 
+  async function loadRallies() {
+    const res = await fetch("/api/admin/rallies", { cache: "no-store" });
+    if (res.status === 401) {
+      window.location.href = "/admin/login";
+      return;
+    }
+    const json = await res.json();
+    const list: RallyOption[] = json.rallies || [];
+    setRallies(list);
+    setRallyId((cur) => {
+      if (cur && list.some((r) => r.id === cur)) return cur;
+      const saved = sessionStorage.getItem("admin_rally_summary");
+      if (saved && list.some((r) => r.id === saved)) return saved;
+      return pickDefaultRallyId(list);
+    });
+  }
+
   async function load() {
-    const res = await fetch("/api/admin/rally/summary", { cache: "no-store" });
+    if (!rallyId) return;
+    const res = await fetch(`/api/admin/rally/summary?rallyId=${encodeURIComponent(rallyId)}`, { cache: "no-store" });
     if (res.status === 401) {
       window.location.href = "/admin/login";
       return;
@@ -173,10 +194,11 @@ export default function RallySummaryPage() {
   }
 
   async function openMetric(m: Metric, g?: { groupBy: GroupBy; groupValue: string } | null) {
+    if (!rallyId) return;
     setMetric(m);
     setGroup(g || null);
     setDetailLoading(true);
-    const params = new URLSearchParams({ metric: m });
+    const params = new URLSearchParams({ metric: m, rallyId });
     if (g) {
       params.set("groupBy", g.groupBy);
       params.set("groupValue", g.groupValue);
@@ -189,12 +211,19 @@ export default function RallySummaryPage() {
   }
 
   useEffect(() => {
+    void loadRallies();
+  }, []);
+
+  useEffect(() => {
+    if (!rallyId) return;
+    sessionStorage.setItem("admin_rally_summary", rallyId);
     void load();
     const t = window.setInterval(() => void load(), 20000);
     return () => clearInterval(t);
-  }, []);
+  }, [rallyId]);
 
-  if (!data) return <main className="px-4 py-6">Loading…</main>;
+  if (!rallies.length) return <main className="px-4 py-6">Loading rallies…</main>;
+  if (!data) return <main className="px-4 py-6">Loading summary…</main>;
 
   const t = data.totals;
   const overallExport = [
@@ -303,7 +332,20 @@ export default function RallySummaryPage() {
     <main className="px-4 py-6 md:px-8">
       <p className="admin-page-kicker">Rally</p>
       <h1 className="admin-page-title">Rally summary</h1>
-      <p className="admin-page-sub">{data.rally ? data.rally.name : "No active rally"} · tap a card or number like the dashboard</p>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+        <RallyPicker
+          label="Select rally"
+          value={rallyId}
+          rallies={rallies}
+          onChange={setRallyId}
+        />
+        <p className="admin-page-sub mb-0">
+          {data.rally
+            ? `${data.rally.scheduledDate ? fmtRallyDate(data.rally.scheduledDate) + " · " : ""}${data.rally.name}`
+            : "No rally selected"}{" "}
+          · tap a card or number
+        </p>
+      </div>
 
       <section className="mt-6">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">

@@ -47,13 +47,15 @@ export type TrackPoint = LatLng & {
   accuracy?: number | null;
 };
 
-/** Ignore GPS jitter; cap speed so tower jumps don't become fake km. */
-const TRACK_MIN_STEP_M = 12;
-const TRACK_MAX_ACCURACY_M = 120;
-/** ~58 km/h — realistic max for field / village travel. */
-const TRACK_MAX_SPEED_MPS = 16;
-/** Never credit more than this in one GPS hop (screen-off / tower switch). */
-const TRACK_ABSOLUTE_MAX_STEP_M = 2500;
+/** Ignore GPS jitter; only count when you actually leave a ~35 m area. */
+const TRACK_MIN_STEP_M = 20;
+const TRACK_MIN_CREDIT_M = 35;
+const TRACK_MAX_ACCURACY_M = 65;
+/** ~45 km/h — field / village travel. */
+const TRACK_MAX_SPEED_MPS = 12.5;
+const TRACK_ABSOLUTE_MAX_STEP_M = 2000;
+/** Phone on desk — all fixes inside this radius ⇒ 0 km. */
+const TRACK_STATIONARY_RADIUS_M = 45;
 
 export function isPlausibleStep(
   from: LatLng,
@@ -64,11 +66,23 @@ export function isPlausibleStep(
   if (accuracy != null && Number.isFinite(accuracy) && accuracy > TRACK_MAX_ACCURACY_M) return false;
   const gap = haversineMeters(from, to);
   if (gap < TRACK_MIN_STEP_M) return false;
-  const dt =
-    dtMs != null && Number.isFinite(dtMs) && dtMs > 0 ? dtMs : 60_000;
-  const slack = Math.min(60, Math.max(15, (accuracy ?? 35) * 0.4));
+  const dt = dtMs != null && Number.isFinite(dtMs) && dtMs > 0 ? dtMs : 60_000;
+  const slack = Math.min(40, Math.max(10, (accuracy ?? 25) * 0.35));
   const maxGap = Math.min(TRACK_ABSOLUTE_MAX_STEP_M, (dt / 1000) * TRACK_MAX_SPEED_MPS + slack);
   return gap <= maxGap;
+}
+
+/** Client + server: save/count a fix only after real movement (not GPS drift). */
+export function shouldCreditTrackStep(
+  from: LatLng,
+  to: LatLng,
+  accuracy?: number | null,
+  dtMs?: number | null
+) {
+  if (accuracy != null && Number.isFinite(accuracy) && accuracy > TRACK_MAX_ACCURACY_M) return false;
+  const gap = haversineMeters(from, to);
+  if (gap < TRACK_MIN_CREDIT_M) return false;
+  return isPlausibleStep(from, to, accuracy, dtMs);
 }
 
 function pointTime(p: TrackPoint, fallback: number) {
@@ -77,27 +91,57 @@ function pointTime(p: TrackPoint, fallback: number) {
   return Number.isFinite(t) ? t : fallback;
 }
 
-/** Sum only GPS hops that pass speed + accuracy checks. */
+function trackScatterMeters(points: LatLng[]) {
+  if (points.length < 2) return 0;
+  let latSum = 0;
+  let lngSum = 0;
+  for (const p of points) {
+    latSum += p.lat;
+    lngSum += p.lng;
+  }
+  const centroid = { lat: latSum / points.length, lng: lngSum / points.length };
+  return Math.max(...points.map((p) => haversineMeters(centroid, p)));
+}
+
+/** Sum distance only when GPS shows sustained movement away from last credited spot. */
 export function filteredPathDistance(points: TrackPoint[]) {
   if (points.length < 2) return 0;
+
+  const start = points[0];
+  const end = points[points.length - 1];
+  const net = haversineMeters(start, end);
+  const scatter = trackScatterMeters(points);
+
+  if (scatter < TRACK_STATIONARY_RADIUS_M && net < TRACK_STATIONARY_RADIUS_M) return 0;
+
   let total = 0;
-  let prev = points[0];
-  let prevAt = pointTime(prev, Date.now());
+  let anchor = points[0];
+  let anchorAt = pointTime(anchor, Date.now());
+
   for (let i = 1; i < points.length; i++) {
     const cur = points[i];
-    const curAt = pointTime(cur, prevAt + 60_000);
-    const dt = Math.max(0, curAt - prevAt);
-    if (isPlausibleStep(prev, cur, cur.accuracy ?? prev.accuracy, dt)) {
-      total += haversineMeters(prev, cur);
-      prev = cur;
-      prevAt = curAt;
-    } else {
-      // Bad hop — start fresh from here (don't chain through a tower jump).
-      prev = cur;
-      prevAt = curAt;
+    const curAt = pointTime(cur, anchorAt + 60_000);
+    const acc = cur.accuracy ?? null;
+    if (acc != null && acc > TRACK_MAX_ACCURACY_M) continue;
+
+    const gap = haversineMeters(anchor, cur);
+    const dt = Math.max(0, curAt - anchorAt);
+    if (gap < TRACK_MIN_CREDIT_M) continue;
+    if (!isPlausibleStep(anchor, cur, acc, dt)) {
+      anchor = cur;
+      anchorAt = curAt;
+      continue;
     }
+
+    total += gap;
+    anchor = cur;
+    anchorAt = curAt;
   }
-  return total;
+
+  // Zigzag drift: long path but end point still near start
+  if (total > net * 1.5 + 15 && net < 150) return Math.round(Math.max(net, 0));
+
+  return Math.round(total);
 }
 
 export function pathDistance(points: LatLng[]) {

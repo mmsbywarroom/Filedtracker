@@ -201,7 +201,7 @@ function CreateUserForm() {
         <div className="rounded-[1.75rem] bg-white p-5 shadow-card">
           <h2 className="font-semibold">CSV upload</h2>
           <p className="mt-1 text-xs text-navy/50">
-            Required: Sector Incharge Name, Sector Incharge Number, Assembly Name, Sector Allotted, Zone, District.
+            Required: Sector Incharge Name, Sector Incharge Number (or SectorInchargeNumber), Assembly Name, Sector Allotted, Zone, District.
             Optional: Designation, Cluster, Assemblies (ALC only — pipe-separated e.g. Sahnewal|Ludhiana East).
           </p>
           <a

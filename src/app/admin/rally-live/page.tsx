@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { countHeadsFromDataUrl, loadPersonCountModel } from "@/lib/headCount";
 import { PhotoViewer } from "@/components/PhotoViewer";
+import { fmtRallyDate, pickDefaultRallyId, RallyPicker, type RallyOption } from "@/components/RallyPicker";
 
 type Row = {
   id: string;
@@ -33,7 +34,9 @@ type Row = {
 };
 
 export default function RallyLivePage() {
-  const [rally, setRally] = useState<{ name: string } | null>(null);
+  const [rallies, setRallies] = useState<RallyOption[]>([]);
+  const [rallyId, setRallyId] = useState("");
+  const [rally, setRally] = useState<{ name: string; scheduledDate?: string } | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
   const [view, setView] = useState<Row | null>(null);
   const [counting, setCounting] = useState("");
@@ -44,8 +47,26 @@ export default function RallyLivePage() {
 
   rowsRef.current = rows;
 
+  async function loadRallies() {
+    const res = await fetch("/api/admin/rallies", { cache: "no-store" });
+    if (res.status === 401) {
+      window.location.href = "/admin/login";
+      return;
+    }
+    const json = await res.json();
+    const list: RallyOption[] = json.rallies || [];
+    setRallies(list);
+    setRallyId((cur) => {
+      if (cur && list.some((r) => r.id === cur)) return cur;
+      const saved = sessionStorage.getItem("admin_rally_live");
+      if (saved && list.some((r) => r.id === saved)) return saved;
+      return pickDefaultRallyId(list);
+    });
+  }
+
   async function load() {
-    const res = await fetch("/api/admin/rally/live", { cache: "no-store" });
+    if (!rallyId) return;
+    const res = await fetch(`/api/admin/rally/live?rallyId=${encodeURIComponent(rallyId)}`, { cache: "no-store" });
     if (res.status === 401) {
       window.location.href = "/admin/login";
       return;
@@ -63,11 +84,17 @@ export default function RallyLivePage() {
   }
 
   useEffect(() => {
-    void load();
+    void loadRallies();
     void loadPersonCountModel().catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!rallyId) return;
+    sessionStorage.setItem("admin_rally_live", rallyId);
+    void load();
     const t = window.setInterval(() => void load(), 15000);
     return () => clearInterval(t);
-  }, []);
+  }, [rallyId]);
 
   useEffect(() => {
     let alive = true;
@@ -117,9 +144,17 @@ export default function RallyLivePage() {
     <main className="px-4 py-6 md:px-8">
       <p className="admin-page-kicker">Rally</p>
       <h1 className="admin-page-title">Live tracking</h1>
-      <p className="admin-page-sub">
-        {rally ? `Active venue: ${rally.name}` : "No active rally. Create one under Rally users."} · updates every 15s
-      </p>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+        <RallyPicker label="Select rally" value={rallyId} rallies={rallies} onChange={setRallyId} />
+        <p className="admin-page-sub mb-0">
+          {rally
+            ? `${rally.scheduledDate ? fmtRallyDate(rally.scheduledDate) + " · " : ""}${rally.name}`
+            : rallyId
+              ? "Loading…"
+              : "Select a rally"}{" "}
+          · updates every 15s
+        </p>
+      </div>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         <button type="button" className="admin-btn-teal-soft" onClick={() => recountFn.current(true)}>
           Recalc head count

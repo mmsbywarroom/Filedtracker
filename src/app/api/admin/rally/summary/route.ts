@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { remainingEtaSeconds, RALLY_REACHED_METERS, isRallyNoMove } from "@/lib/rallyGeo";
-import { findLiveRally } from "@/lib/rallies";
+import { resolveRally, rallyDateYmd } from "@/lib/rallies";
 
 type Bucket = "m30" | "h1" | "h2" | "h2_5" | "over";
 
@@ -28,10 +28,11 @@ function bump(map: Map<string, Agg>, key: string) {
   return map.get(k)!;
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   const s = await requireAdmin();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const rally = await findLiveRally();
+  const rallyId = new URL(req.url).searchParams.get("rallyId");
+  const rally = await resolveRally(rallyId);
   if (!rally) {
     return NextResponse.json({
       rally: null,
@@ -108,7 +109,7 @@ export async function GET() {
   }
 
   return NextResponse.json({
-    rally: { id: rally.id, name: rally.name },
+    rally: { id: rally.id, name: rally.name, scheduledDate: rallyDateYmd(rally.scheduledDate) },
     totals: { ...totals, totalVehicles: totals.users },
     byZone: serialize(groups.zone),
     byDistrict: serialize(groups.district),

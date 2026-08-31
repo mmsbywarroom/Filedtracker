@@ -54,9 +54,7 @@ export async function POST(req: Request) {
   const { dateOnly } = istDayBounds(ymd);
   const isToday = ymd === istDateString();
   const makeActive = body.data.isActive !== false && isToday;
-  if (makeActive) {
-    await prisma.rally.updateMany({ data: { isActive: false } });
-  }
+  // Same day can have multiple rallies at different venues — do not deactivate others.
   const rally = await prisma.rally.create({
     data: {
       name: body.data.name,

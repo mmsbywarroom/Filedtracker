@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { normalizePhone } from "@/lib/security";
 import { DESIGNATIONS, isSuperAdmin, userScopeWhere } from "@/lib/hierarchy";
 import { findHolidayToday, holidayAppliesTo } from "@/lib/holidays";
+import { normalizeUserAssemblies } from "@/lib/userAssemblies";
 
 const userSchema = z.object({
   name: z.string().min(2).max(80),

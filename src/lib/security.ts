@@ -1,7 +1,16 @@
 import { createHash, randomInt, timingSafeEqual } from "crypto";
 
 export function normalizePhone(raw: string) {
-  const digits = raw.replace(/\D/g, "");
+  let s = String(raw ?? "").trim();
+  if (!s) return null;
+  // Excel often exports mobiles as 6.20E+09 or 9876543210.0
+  if (/e/i.test(s)) {
+    const n = Number(s);
+    if (Number.isFinite(n) && n > 0) s = String(Math.round(n));
+  } else if (/^\d+\.0+$/.test(s)) {
+    s = s.replace(/\.0+$/, "");
+  }
+  const digits = s.replace(/\D/g, "");
   if (digits.length === 12 && digits.startsWith("91")) return digits.slice(2);
   if (digits.length === 10) return digits;
   return null;

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { FaceCapture } from "@/components/FaceCapture";
 import { BrandMark } from "@/components/BrandMark";
 import RouteMap from "@/components/RouteMapDynamic";
-import { formatDuration, formatKm, isPlausibleStep, sessionTravelMeters } from "@/lib/utils";
+import { formatDuration, formatKm, shouldCreditTrackStep, sessionTravelMeters } from "@/lib/utils";
 import {
   captureGpsFix,
   isIosBrowser,
@@ -350,10 +350,10 @@ export default function DashboardPage() {
       const acc = pos.coords.accuracy || 9999;
       const next = { lat: pos.coords.latitude, lng: pos.coords.longitude };
       setLivePos(next);
-      if (acc > 120) return;
+      if (acc > 65) return;
       const from = lastRecorded.current;
       const dt = from ? Date.now() - from.at : Date.now() - new Date(open.punchInAt).getTime();
-      if (from && !isPlausibleStep(from, next, acc, dt)) return;
+      if (from && !shouldCreditTrackStep(from, next, acc, dt)) return;
       lastRecorded.current = { ...next, at: Date.now() };
       const point = { ...next, recordedAt: new Date().toISOString(), accuracy: acc };
       buffer.current.push(point);
