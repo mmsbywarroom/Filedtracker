@@ -11,9 +11,11 @@ public class MainActivity extends AppCompatActivity {
         LocaleHelper.apply(this);
         super.onCreate(savedInstanceState);
         if (SessionStore.isLoggedIn(this)) {
-            startActivity(new Intent(this, DashboardActivity.class));
+            startActivity(new Intent(this, WebShellActivity.class)
+                    .putExtra(WebShellActivity.EXTRA_PATH, "/dashboard"));
         } else {
-            startActivity(new Intent(this, LoginActivity.class));
+            startActivity(new Intent(this, WebShellActivity.class)
+                    .putExtra(WebShellActivity.EXTRA_PATH, "/"));
         }
         finish();
     }

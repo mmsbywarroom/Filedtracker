@@ -4,6 +4,7 @@ import android.Manifest;
 import android.app.Activity;
 import android.content.pm.PackageManager;
 import android.location.Location;
+import android.os.Build;
 
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
@@ -60,6 +61,27 @@ public final class LocationHelper {
                     REQ_NOTIFICATIONS
             );
         }
+    }
+
+    public static boolean hasBackgroundLocation(Activity activity) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return hasFineLocation(activity);
+        return ContextCompat.checkSelfPermission(activity, Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                == PackageManager.PERMISSION_GRANTED;
+    }
+
+    public static String permissionStatusJson(Activity activity) {
+        boolean fg = hasFineLocation(activity);
+        boolean bg = hasBackgroundLocation(activity);
+        boolean needsSettings = fg && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !bg;
+        return "{\"foreground\":" + fg + ",\"background\":" + bg + ",\"needsSettings\":" + needsSettings + "}";
+    }
+
+    public static void openAppSettings(Activity activity) {
+        android.content.Intent intent = new android.content.Intent(
+                android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                android.net.Uri.fromParts("package", activity.getPackageName(), null)
+        );
+        activity.startActivity(intent);
     }
 
     public static void getCurrentLocation(Activity activity, Callback cb) {

@@ -1,10 +1,13 @@
-import { isNativeApp } from "@/lib/nativeBackgroundLocation";
+import { Capacitor } from "@capacitor/core";
+import { isPureNativeApp } from "@/lib/pureNativeApp";
 
 export type ClientSourceHeader = "web" | "capacitor" | "native";
 
 export function clientSource(): ClientSourceHeader {
   if (typeof window === "undefined") return "web";
-  return isNativeApp() ? "capacitor" : "web";
+  if (isPureNativeApp()) return "native";
+  if (Capacitor.isNativePlatform()) return "capacitor";
+  return "web";
 }
 
 export function withClientHeaders(init?: RequestInit): RequestInit {

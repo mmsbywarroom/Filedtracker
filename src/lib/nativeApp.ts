@@ -1,9 +1,11 @@
 "use client";
 
 import { FieldBackgroundLocation, isNativeApp } from "@/lib/nativeBackgroundLocation";
+import { isPureNativeApp, pureNativeBridge } from "@/lib/pureNativeApp";
 
 export async function ensureNativeCameraPermission(): Promise<boolean> {
   if (!isNativeApp()) return true;
+  if (isPureNativeApp()) return true;
   try {
     const { Camera } = await import("@capacitor/camera");
     const cur = await Camera.checkPermissions();
@@ -17,12 +19,23 @@ export async function ensureNativeCameraPermission(): Promise<boolean> {
 
 export async function logoutUser() {
   if (isNativeApp()) {
-    await FieldBackgroundLocation.stopTracking().catch(() => {});
+    const bridge = pureNativeBridge();
+    if (bridge) {
+      bridge.stopTracking();
+    } else {
+      await FieldBackgroundLocation.stopTracking().catch(() => {});
+    }
   }
 
   await fetch("/api/auth/logout", { method: "POST", credentials: "include" }).catch(() => {});
 
   if (isNativeApp()) {
+    const bridge = pureNativeBridge();
+    if (bridge) {
+      bridge.clearSessionAndCookies();
+      window.location.replace("/?relogin=1");
+      return;
+    }
     try {
       await FieldBackgroundLocation.clearAppCookies();
     } catch {

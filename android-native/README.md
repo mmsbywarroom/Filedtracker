@@ -11,11 +11,12 @@ Both apps can be installed on the same phone — different package names.
 
 ## Features
 
-- OTP login (same APIs as web)
-- Native dashboard UI
-- Face register / punch via camera (loads `/native-face` WebView bridge — same face-api models as web)
-- Background GPS foreground service (reused Java from `field-background-location` plugin)
-- 30-min interval snapshots + 2-min heartbeat to server
+- OTP login (same web login page in WebView, or legacy native OTP screen)
+- **Same dashboard UI as web** — full `/dashboard` loaded in WebView (React + Tailwind)
+- Inline map (`RouteMap`), face capture, footprints, leave — identical to browser
+- Background GPS foreground service (`FieldLocationService`)
+- 30-min interval snapshots + route tracking to server
+- VPN / fake GPS / spoof-app detection + admin logs
 
 ## Build APK
 
