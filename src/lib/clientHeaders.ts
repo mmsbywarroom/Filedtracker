@@ -1,4 +1,3 @@
-import { Capacitor } from "@capacitor/core";
 import { isPureNativeApp } from "@/lib/pureNativeApp";
 
 export type ClientSourceHeader = "web" | "capacitor" | "native";
@@ -6,7 +5,6 @@ export type ClientSourceHeader = "web" | "capacitor" | "native";
 export function clientSource(): ClientSourceHeader {
   if (typeof window === "undefined") return "web";
   if (isPureNativeApp()) return "native";
-  if (Capacitor.isNativePlatform()) return "capacitor";
   return "web";
 }
 

@@ -39,6 +39,10 @@ public final class SessionStore {
         return base != null && !base.isEmpty() ? base : AppConfig.API_BASE;
     }
 
+    public static String phone(Context ctx) {
+        return prefs(ctx).getString(KEY_PHONE, "");
+    }
+
     public static void clear(Context ctx) {
         prefs(ctx).edit().clear().apply();
     }

@@ -133,7 +133,7 @@ public class DashboardActivity extends AppCompatActivity {
         scanSecurityOnDashboard();
 
         registerFaceBtn.setVisibility(faceRegistered ? View.GONE : View.VISIBLE);
-        boolean punchInAllowed = PunchInWindow.isAllowed();
+        boolean punchInAllowed = PunchInWindow.isAllowedForPhone(SessionStore.phone(this));
         if (open != null) {
             sessionStatus.setText(R.string.punched_in);
             punchInBtn.setVisibility(View.GONE);
@@ -163,7 +163,7 @@ public class DashboardActivity extends AppCompatActivity {
     }
 
     private void ensureLocationThenFace(String mode) {
-        if (MODE_PUNCH_IN.equals(mode) && !PunchInWindow.isAllowed()) {
+        if (MODE_PUNCH_IN.equals(mode) && !PunchInWindow.isAllowedForPhone(SessionStore.phone(this))) {
             messageText.setText(R.string.punch_in_window_blocked);
             return;
         }

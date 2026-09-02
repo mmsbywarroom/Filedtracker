@@ -26,8 +26,7 @@ body {
   @apply bg-sand text-ink antialiased;
 }
 
-/* Capacitor + pure native WebView — keep content below status bar */
-body.capacitor-native .app-header-safe,
+/* Pure native WebView — keep content below status bar */
 body.pure-native-app .app-header-safe {
   padding-top: max(0.75rem, var(--status-bar-height, 28px));
 }

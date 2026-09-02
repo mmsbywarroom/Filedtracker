@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getUserSessionFromRequest, signSession } from "@/lib/auth";
 
-/** Returns JWT for native background GPS (Capacitor app). WebView calls this after OTP login. */
+/** Returns JWT for native Android background GPS. WebView calls this after OTP login. */
 export async function GET(req: Request) {
   const s = await getUserSessionFromRequest(req);
   if (!s || s.role !== "user" || s.kind === "rally") {

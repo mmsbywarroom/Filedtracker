@@ -1,21 +1,21 @@
 # AAP Attendance — Native Android App
 
-Pure **native Android** app (Java) for field workers. Uses the **same server and database** as the web app and Capacitor app.
+Pure **native Android** app (Java) for field workers. Uses the **same server and database** as the web app.
 
 | App | Package | Folder |
 |-----|---------|--------|
-| Capacitor (WebView) | `in.videh.filedtracker` | `mobile/` |
 | **Native Android** | `in.videh.filedtracker.native` | `android-native/` |
+| Web | browser | `src/` |
 
-Both apps can be installed on the same phone — different package names.
+> The old Capacitor (`mobile/`) app has been **removed**. Use only this native APK.
 
 ## Features
 
-- OTP login (same web login page in WebView, or legacy native OTP screen)
-- **Same dashboard UI as web** — full `/dashboard` loaded in WebView (React + Tailwind)
-- Inline map (`RouteMap`), face capture, footprints, leave — identical to browser
+- OTP login (same web login page in WebView)
+- **Same dashboard UI as web** — full `/dashboard` in WebView
+- Inline map, face capture, footprints, leave
 - Background GPS foreground service (`FieldLocationService`)
-- 30-min interval snapshots + route tracking to server
+- 30-min interval snapshots + route tracking
 - VPN / fake GPS / spoof-app detection + admin logs
 
 ## Build APK
@@ -29,14 +29,9 @@ APK: `android-native/app/build/outputs/apk/debug/app-debug.apk`
 
 Also copied to `public/aap-attendance-native.apk` for download from the server.
 
-> **Note:** The Capacitor app builds to `mobile/android/app/build/outputs/apk/debug/`.  
-> The **native** app is in `android-native/` — not the `mobile/` folder.
-
 ## Server requirements
 
-Deploy latest server code so native Bearer auth works on all user APIs and OTP verify returns `token` in JSON.
-
-Set in `.env`:
+Deploy latest server code so native Bearer auth works and OTP verify returns `token` in JSON.
 
 ```
 NEXT_PUBLIC_APP_URL=https://filed.videh.co.in
@@ -46,21 +41,16 @@ NEXT_PUBLIC_APP_URL=https://filed.videh.co.in
 
 1. Install **AAP Attendance** (native) APK
 2. Login with OTP
-3. Register face (first time)
-4. Allow **Location → All the time** + **Notifications**
-5. Punch in — background GPS starts automatically
+3. Allow **Location → All the time** + **Camera** + **Notifications**
+4. Punch in — background GPS starts automatically
 
 ## Architecture
 
 ```
 android-native/
   app/src/main/java/in/videh/filedtracker/
-    nativeapp/     Login, Dashboard, Face WebView, API client
-    bglocation/    FieldLocationService (copied from Capacitor plugin)
+    nativeapp/     Login, WebShell, NativeAppBridge, API client
+    bglocation/    FieldLocationService
 ```
 
-API base URL: `AppConfig.API_BASE` in `AppConfig.java` (default: `https://filed.videh.co.in`).
-
-## Capacitor app unchanged
-
-The Capacitor app in `mobile/` continues to work as before. Update both APKs when releasing new versions.
+API base URL: `AppConfig.API_BASE` (default: `https://filed.videh.co.in`).

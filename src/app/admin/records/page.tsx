@@ -70,6 +70,8 @@ export default function DailyRecordsPage() {
   const [designation, setDesignation] = useState("");
   const [reason, setReason] = useState("");
   const [sameCoords, setSameCoords] = useState("");
+  const [statusChip, setStatusChip] = useState("");
+  const [clientChip, setClientChip] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
 
@@ -114,24 +116,50 @@ export default function DailyRecordsPage() {
       if (district && r.district !== district) return false;
       if (designation && r.designation !== designation) return false;
       if (reason && rowReason(r) !== reason) return false;
+      if (statusChip === "live" && r.status !== "Live") return false;
+      if (statusChip === "completed" && r.status !== "Completed") return false;
+      const client = (r.punchInClient || "web").toLowerCase();
+      if (clientChip && client !== clientChip) return false;
       const same = isExactSamePunchInOut(r);
       if (sameCoords === "yes" && !same) return false;
       if (sameCoords === "no" && same) return false;
       return true;
     });
-  }, [rows, q, zone, district, designation, reason, sameCoords]);
+  }, [rows, q, zone, district, designation, reason, sameCoords, statusChip, clientChip]);
 
   useEffect(() => {
     setPage(1);
-  }, [q, zone, district, designation, reason, sameCoords, pageSize]);
+  }, [q, zone, district, designation, reason, sameCoords, statusChip, clientChip, pageSize]);
 
   const pageRows = useMemo(
     () => filtered.slice((page - 1) * pageSize, (page - 1) * pageSize + pageSize),
     [filtered, page, pageSize]
   );
 
-  const live = rows.filter((r) => r.status === "Live").length;
-  const done = rows.filter((r) => r.status === "Completed").length;
+  const summary = useMemo(() => {
+    const live = rows.filter((r) => r.status === "Live").length;
+    const completed = rows.filter((r) => r.status === "Completed").length;
+    let web = 0;
+    let native = 0;
+    let capacitor = 0;
+    for (const r of rows) {
+      const c = (r.punchInClient || "web").toLowerCase();
+      if (c === "native") native += 1;
+      else if (c === "capacitor") capacitor += 1;
+      else web += 1;
+    }
+    const sameLatLng = rows.filter((r) => isExactSamePunchInOut(r)).length;
+    return { total: rows.length, live, completed, web, native, capacitor, sameLatLng };
+  }, [rows]);
+
+  function toggleChip(current: string, next: string, set: (v: string) => void) {
+    set(current === next ? "" : next);
+  }
+
+  const chipBase =
+    "inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-semibold transition";
+  const chipIdle = "border-navy/15 bg-white text-navy/70 hover:bg-navy/5";
+  const chipActive = "border-teal/40 bg-teal/10 text-teal ring-1 ring-teal/20";
 
   const exportHeaders = [
     "Name",
@@ -180,9 +208,70 @@ export default function DailyRecordsPage() {
     <main className="px-4 py-6 md:px-8">
       <p className="text-xs uppercase tracking-[0.2em] text-teal">Attendance</p>
       <h1 className="text-2xl font-semibold">Daily records</h1>
-      <p className="mt-1 text-sm text-navy/60">
-        {loading ? "Loading…" : `${rows.length} punches · ${live} live · ${done} completed`}
-      </p>
+      {loading ? (
+        <p className="mt-1 text-sm text-navy/60">Loading…</p>
+      ) : (
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setStatusChip("");
+              setClientChip("");
+              setSameCoords("");
+            }}
+            className={`${chipBase} ${!statusChip && !clientChip && !sameCoords ? chipActive : chipIdle}`}
+          >
+            All punches <span className="tabular-nums">{summary.total}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => toggleChip(statusChip, "live", setStatusChip)}
+            className={`${chipBase} ${statusChip === "live" ? chipActive : chipIdle}`}
+          >
+            Live <span className="tabular-nums">{summary.live}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => toggleChip(statusChip, "completed", setStatusChip)}
+            className={`${chipBase} ${statusChip === "completed" ? chipActive : chipIdle}`}
+          >
+            Completed <span className="tabular-nums">{summary.completed}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => toggleChip(clientChip, "web", setClientChip)}
+            className={`${chipBase} ${clientChip === "web" ? chipActive : chipIdle}`}
+          >
+            Web <span className="tabular-nums">{summary.web}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => toggleChip(clientChip, "native", setClientChip)}
+            className={`${chipBase} ${clientChip === "native" ? chipActive : chipIdle}`}
+          >
+            Native app <span className="tabular-nums">{summary.native}</span>
+          </button>
+          {summary.capacitor > 0 && (
+            <button
+              type="button"
+              onClick={() => toggleChip(clientChip, "capacitor", setClientChip)}
+              className={`${chipBase} ${clientChip === "capacitor" ? chipActive : chipIdle}`}
+            >
+              Old mobile app <span className="tabular-nums">{summary.capacitor}</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => toggleChip(sameCoords, "yes", setSameCoords)}
+            className={`${chipBase} ${sameCoords === "yes" ? chipActive : chipIdle}`}
+          >
+            Same lat/lng <span className="tabular-nums">{summary.sameLatLng}</span>
+          </button>
+          <p className="w-full text-xs text-navy/45">
+            Showing {filtered.length} of {summary.total} · tap a chip to filter
+          </p>
+        </div>
+      )}
 
       <div className="mt-4 flex flex-wrap items-end gap-3">
         <label className="block text-sm">

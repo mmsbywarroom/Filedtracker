@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { parseClientSource } from "@/lib/clientSource";
-import { isWithinPunchInWindow, punchInWindowMessage } from "@/lib/punchInWindow";
+import { canPunchInNow, punchInWindowMessage } from "@/lib/punchInWindow";
 import { prisma } from "@/lib/prisma";
 import { downsample, sessionTravelMeters } from "@/lib/utils";
 import { sanitizeFaceImage } from "@/lib/faceImage";
@@ -129,7 +129,7 @@ export async function GET(req: Request) {
       : null,
     todayDistanceMeters,
     history: history.map((h) => ({ ...h, points: h.id === mapId ? mapPoints : [] })),
-    punchInAllowed: isWithinPunchInWindow(),
+    punchInAllowed: canPunchInNow(s.phone),
     punchInWindowMessage: punchInWindowMessage(),
   });
 }
@@ -194,7 +194,7 @@ export async function POST(req: Request) {
       { status: 403 }
     );
   }
-  if (!isWithinPunchInWindow()) {
+  if (!canPunchInNow(user.phone)) {
     return NextResponse.json({ error: punchInWindowMessage(), code: "PUNCH_IN_WINDOW" }, { status: 403 });
   }
   const holiday = await findHolidayToday();

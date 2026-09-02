@@ -18,10 +18,10 @@ import {
   withTimeout,
   type GpsFix,
 } from "@/lib/deviceGeo";
-import { isWithinPunchInWindow } from "@/lib/punchInWindow";
-import { LangToggle, useLang } from "@/lib/i18n";
 import { LATEST_NATIVE_APK } from "@/lib/apkDownload";
 import { useClientNativeApp } from "@/hooks/useClientNativeApp";
+import { apiFetch } from "@/lib/clientHeaders";
+import { LangToggle, useLang } from "@/lib/i18n";
 
 const AUTO_12H_MS = 12 * 60 * 60 * 1000;
 
@@ -103,7 +103,7 @@ export default function DashboardPage() {
   const [gpsError, setGpsError] = useState("");
   const [bootError, setBootError] = useState("");
   const [booting, setBooting] = useState(true);
-  const [punchInAllowed, setPunchInAllowed] = useState(() => isWithinPunchInWindow());
+  const [punchInAllowed, setPunchInAllowed] = useState(true);
 
   const applyPosition = useCallback((pos: GeolocationPosition, force = false) => {
     const acc = pos.coords.accuracy || 9999;
@@ -186,7 +186,7 @@ export default function DashboardPage() {
       if (attRes.ok) {
         setOpen(att.open ?? null);
         setTodayDistanceMeters(Number(att.todayDistanceMeters) || 0);
-        setPunchInAllowed(att.punchInAllowed !== false && isWithinPunchInWindow());
+        setPunchInAllowed(att.punchInAllowed !== false);
         const last = att.history?.[0];
         if (!att.open && last?.punchOutReason === "gps_off" && last.punchOutAt) {
           const age = Date.now() - new Date(last.punchOutAt).getTime();
@@ -661,7 +661,7 @@ export default function DashboardPage() {
   async function beginPunchIn() {
     setMsg("");
     setOkMsg(false);
-    if (!isWithinPunchInWindow()) {
+    if (!punchInAllowed) {
       setMsg(t("punchInWindow"));
       return;
     }
