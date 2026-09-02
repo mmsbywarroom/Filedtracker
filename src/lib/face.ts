@@ -53,12 +53,14 @@ export type FaceScan =
 export type ScanFaceOptions = {
   /** Stricter rules for first-time face registration */
   strict?: boolean;
+  /** Turban/pagri — match eyes, nose, mouth, beard; forehead covered OK */
+  turbanFriendly?: boolean;
 };
 
-function detector(strict: boolean) {
+function detector(strict: boolean, turbanFriendly: boolean) {
   return new faceapi.TinyFaceDetectorOptions({
-    inputSize: strict ? 320 : 224,
-    scoreThreshold: strict ? 0.5 : 0.45,
+    inputSize: strict && !turbanFriendly ? 320 : 224,
+    scoreThreshold: strict && !turbanFriendly ? 0.5 : 0.42,
   });
 }
 
@@ -153,6 +155,56 @@ function validateFaceGeometry(
   return null;
 }
 
+/** Turban/pagri: pagri covers forehead — validate eyes, nose, mouth, chin only. */
+function validateTurbanFaceGeometry(
+  detection: faceapi.WithFaceDescriptor<
+    faceapi.WithFaceLandmarks<{ detection: faceapi.FaceDetection }, faceapi.FaceLandmarks68>
+  >,
+  videoWidth: number,
+  videoHeight: number
+): FaceScanError | null {
+  const box = detection.detection.box;
+  const score = detection.detection.score;
+  const minSide = Math.min(videoWidth, videoHeight);
+  const faceSide = Math.min(box.width, box.height);
+
+  if (faceSide < minSide * 0.14) return "too_far";
+  if (faceSide > minSide * 0.9) return "too_far";
+
+  const aspect = box.width / Math.max(box.height, 1);
+  if (aspect < 0.35 || aspect > 1.75) return "partial";
+
+  const cx = box.x + box.width / 2;
+  if (cx < videoWidth * 0.12 || cx > videoWidth * (1 - 0.12)) return "off_center";
+
+  if (score < 0.4) return "low_quality";
+
+  const lm = detection.landmarks.positions;
+  if (lm.length < 68) return "partial";
+
+  const leftEye = avgPoint(lm.slice(36, 42));
+  const rightEye = avgPoint(lm.slice(42, 48));
+  const nose = lm[30];
+  const mouth = avgPoint(lm.slice(48, 68));
+  const chin = lm[8];
+
+  const eyeDist = Math.hypot(leftEye.x - rightEye.x, leftEye.y - rightEye.y);
+  if (eyeDist < box.width * 0.16) return "partial";
+
+  if (mouth.y <= nose.y + box.height * 0.04) return "partial";
+  if (chin.y < box.y + box.height * 0.45) return "partial";
+
+  const eyeMidX = (leftEye.x + rightEye.x) / 2;
+  if (Math.abs(nose.x - eyeMidX) > box.width * 0.28) return "partial";
+
+  // Lower face landmarks must span enough (eyes to chin)
+  const lowerYs = [...lm.slice(36, 48), nose, ...lm.slice(48, 68)].map((p) => p.y);
+  const lowerSpan = Math.max(...lowerYs) - Math.min(...lowerYs);
+  if (lowerSpan < box.height * 0.42) return "partial";
+
+  return null;
+}
+
 export function averageDescriptors(samples: number[][]): number[] {
   if (!samples.length) return [];
   const len = samples[0].length;
@@ -168,14 +220,15 @@ export function averageDescriptors(samples: number[][]): number[] {
 
 export async function scanFace(video: HTMLVideoElement, opts: ScanFaceOptions = {}): Promise<FaceScan> {
   const strict = Boolean(opts.strict);
+  const turbanFriendly = Boolean(opts.turbanFriendly);
   await loadFaceModels();
   if (!video.videoWidth) return { ok: false, error: "no_face" };
 
-  const frame = frameForScan(video, strict ? 320 : 224);
+  const frame = frameForScan(video, turbanFriendly ? 280 : strict ? 320 : 224);
   if (!frame) return { ok: false, error: "no_face" };
 
   const detections = await faceapi
-    .detectAllFaces(frame.canvas, detector(strict))
+    .detectAllFaces(frame.canvas, detector(strict, turbanFriendly))
     .withFaceLandmarks()
     .withFaceDescriptors();
 
@@ -198,7 +251,9 @@ export async function scanFace(video: HTMLVideoElement, opts: ScanFaceOptions = 
     }
   }
 
-  const geoError = validateFaceGeometry(best, frame.canvas.width, frame.canvas.height, strict);
+  const geoError = turbanFriendly
+    ? validateTurbanFaceGeometry(best, frame.canvas.width, frame.canvas.height)
+    : validateFaceGeometry(best, frame.canvas.width, frame.canvas.height, strict);
   if (geoError) return { ok: false, error: geoError };
 
   return {

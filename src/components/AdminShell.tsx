@@ -73,6 +73,12 @@ export default function AdminShell({ children }: { children: ReactNode }) {
     { href: "/admin/rally-summary", label: t("rallySummary"), match: (p: string) => p.startsWith("/admin/rally-summary"), group: "Rally" },
     { href: "/admin/gps-off", label: t("gpsOffLogs"), match: (p: string) => p.startsWith("/admin/gps-off"), group: "Logs" },
     {
+      href: "/admin/gps-spoof",
+      label: t("gpsSpoofLogs"),
+      match: (p: string) => p.startsWith("/admin/gps-spoof"),
+      group: "Logs",
+    },
+    {
       href: "/admin/auto-punch-out",
       label: t("autoPunchOutLogs"),
       match: (p: string) => p.startsWith("/admin/auto-punch-out"),

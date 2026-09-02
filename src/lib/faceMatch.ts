@@ -28,6 +28,12 @@ export function parseStoredDescriptors(raw: string): number[][] {
  * Same person usually ~0.3–0.45; different people often >0.55.
  */
 export const FACE_MATCH_THRESHOLD = 0.5;
+/** Turban/pagri changes daily — match on lower face (eyes, nose, mouth, beard). */
+export const FACE_MATCH_THRESHOLD_TURBAN = 0.58;
+
+export type FaceMatchOptions = {
+  turbanMode?: boolean;
+};
 
 export type FaceMatchResult =
   | { ok: true; distance: number }
@@ -35,8 +41,10 @@ export type FaceMatchResult =
 
 export function matchFaceDescriptor(
   storedList: number[][],
-  live: number[]
+  live: number[],
+  opts: FaceMatchOptions = {}
 ): FaceMatchResult {
+  const threshold = opts.turbanMode ? FACE_MATCH_THRESHOLD_TURBAN : FACE_MATCH_THRESHOLD;
   if (!Array.isArray(live) || live.length < 64) {
     return { ok: false, distance: 99, error: "Face not detected." };
   }
@@ -47,19 +55,20 @@ export function matchFaceDescriptor(
   const distances = storedList.map((stored) => euclidean(stored, live));
   const best = Math.min(...distances);
 
-  // Must beat strict threshold against at least one enrollment sample
-  if (best >= FACE_MATCH_THRESHOLD) {
+  // Must beat threshold against at least one enrollment sample
+  if (best >= threshold) {
     return {
       ok: false,
       distance: best,
-      error:
-        "Face did not match. Only your registered face can punch. Use bright light, look straight, or ask admin to reset face.",
+      error: opts.turbanMode
+        ? "Face did not match. Look at the camera — eyes, nose and chin visible. Ask admin to reset face if needed."
+        : "Face did not match. Only your registered face can punch. Use bright light, look straight, or ask admin to reset face.",
     };
   }
 
-  // If multiple samples stored, majority must be reasonably close (blocks lucky one-sample spoof)
-  if (distances.length >= 2) {
-    const closeEnough = distances.filter((d) => d < FACE_MATCH_THRESHOLD + 0.06).length;
+  // Standard mode: majority must agree. Turban: one good match is enough (pagri colour changes daily).
+  if (!opts.turbanMode && distances.length >= 2) {
+    const closeEnough = distances.filter((d) => d < threshold + 0.06).length;
     if (closeEnough < Math.ceil(distances.length / 2)) {
       return {
         ok: false,

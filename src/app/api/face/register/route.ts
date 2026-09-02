@@ -10,6 +10,7 @@ export async function POST(req: Request) {
   const descriptor = body?.descriptor;
   const samples = Array.isArray(body?.samples) ? (body.samples as number[][]) : null;
   const faceImage = sanitizeFaceImage(body?.image);
+  const usesTurban = body?.usesTurban === true;
 
   const list: number[][] = [];
   if (samples?.length) {
@@ -24,15 +25,19 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Face could not be captured. Try again in good light." }, { status: 400 });
   }
 
-  if (list.length < 3) {
+  const minSamples = usesTurban ? 3 : 3;
+  if (list.length < minSamples) {
     return NextResponse.json(
-      { error: "Hold still with your full face in the frame for a few seconds, then try again." },
+      {
+        error: usesTurban
+          ? "Hold still — eyes, nose and chin visible. Wait a few seconds, then try again."
+          : "Hold still with your full face in the frame for a few seconds, then try again.",
+      },
       { status: 400 }
     );
   }
 
-  // Store up to 3 samples so later punches work across light/angle/phone differences
-  const toStore = list.slice(0, 3);
+  const toStore = list.slice(0, usesTurban ? 6 : 3);
 
   await prisma.user.update({
     where: { id: s.sub },
@@ -40,7 +45,8 @@ export async function POST(req: Request) {
       faceDescriptorJson: JSON.stringify(toStore),
       faceImage,
       faceRegisteredAt: new Date(),
+      usesTurban,
     },
   });
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, usesTurban });
 }

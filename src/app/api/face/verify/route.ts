@@ -11,13 +11,13 @@ export async function POST(req: Request) {
 
   const user = await prisma.user.findUnique({
     where: { id: s.sub },
-    select: { faceDescriptorJson: true },
+    select: { faceDescriptorJson: true, usesTurban: true },
   });
   if (!user?.faceDescriptorJson) {
     return NextResponse.json({ error: "Register your face first." }, { status: 400 });
   }
   const storedList = parseStoredDescriptors(user.faceDescriptorJson);
-  const result = matchFaceDescriptor(storedList, descriptor || []);
+  const result = matchFaceDescriptor(storedList, descriptor || [], { turbanMode: user.usesTurban });
   if (!result.ok) {
     return NextResponse.json({
       matched: false,

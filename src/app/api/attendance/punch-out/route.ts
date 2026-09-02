@@ -7,6 +7,7 @@ import { assertInsideCallCenterSite, isCallCenterDesignation } from "@/lib/callC
 import { closeOpenAttendance } from "@/lib/punchOut";
 import { requireUserFaceMatch } from "@/lib/requireFaceMatch";
 import { assertPanIndiaPunchLocation, isPanIndiaPunchPhone } from "@/lib/panIndiaPunch";
+import { enforceGpsAntiSpoof, flagStationarySession } from "@/lib/gpsAntiSpoof";
 
 export async function POST(req: Request) {
   const s = await requireUser();
@@ -28,13 +29,38 @@ export async function POST(req: Request) {
   const user = await prisma.user.findUnique({
     where: { id: s.sub },
     select: {
+      name: true,
+      phone: true,
+      zone: true,
+      district: true,
       assemblyName: true,
       designation: true,
       assemblies: true,
       sectorAllotted: true,
-      phone: true,
     },
   });
+  if (!user) return NextResponse.json({ error: "Account not found." }, { status: 403 });
+
+  const gpsCheck = await enforceGpsAntiSpoof({
+    userId: s.sub,
+    user: {
+      name: user.name,
+      phone: user.phone,
+      designation: user.designation,
+      assemblyName: user.assemblyName,
+      zone: user.zone,
+      district: user.district,
+    },
+    action: "punch_out",
+    lat,
+    lng,
+    accuracy: Number.isFinite(Number(body?.accuracy)) ? Number(body.accuracy) : null,
+    gpsSamples: body?.gpsSamples,
+  });
+  if (!gpsCheck.ok) {
+    return NextResponse.json({ error: gpsCheck.error, code: gpsCheck.code }, { status: 403 });
+  }
+
   if (isPanIndiaPunchPhone(user?.phone)) {
     const india = assertPanIndiaPunchLocation(lat, lng);
     if (!india.ok) {
@@ -72,5 +98,24 @@ export async function POST(req: Request) {
     punchOutFace,
   });
   if (!attendance) return NextResponse.json({ error: "No active punch in." }, { status: 400 });
+
+  void flagStationarySession({
+    userId: s.sub,
+    user: {
+      name: user.name,
+      phone: user.phone,
+      designation: user.designation,
+      assemblyName: user.assemblyName,
+      zone: user.zone,
+      district: user.district,
+    },
+    attendanceId: attendance.id,
+    punchInAt: attendance.punchInAt,
+    punchOutAt: attendance.punchOutAt || new Date(),
+    distanceMeters: attendance.distanceMeters,
+    lat,
+    lng,
+  });
+
   return NextResponse.json({ attendance, ok: true });
 }

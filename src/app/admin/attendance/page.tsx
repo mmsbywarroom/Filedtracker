@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { PaginationBar } from "@/components/PaginationBar";
 import { SearchSelect } from "@/components/SearchSelect";
 import { hierarchyDesignations } from "@/lib/hierarchy";
+import { downloadAssemblyAttendanceZip } from "@/lib/assemblyAttendanceZip";
 
 type AttStatus = "present" | "half_day" | "absent" | "leave";
 type RowStatus = AttStatus | "pending";
@@ -79,6 +80,7 @@ export default function AttendanceModulePage() {
   } | null>(null);
   const [reason, setReason] = useState("");
   const [statusErr, setStatusErr] = useState("");
+  const [zipBusy, setZipBusy] = useState(false);
 
   async function load() {
     const params = new URLSearchParams({ date });
@@ -172,6 +174,16 @@ export default function AttendanceModulePage() {
   }
 
   const pageRows = useMemo(() => rows.slice((page - 1) * pageSize, (page - 1) * pageSize + pageSize), [rows, page, pageSize]);
+
+  async function downloadZip() {
+    if (!allRows.length) return;
+    setZipBusy(true);
+    try {
+      await downloadAssemblyAttendanceZip(date, allRows);
+    } finally {
+      setZipBusy(false);
+    }
+  }
 
   return (
     <main className="px-4 py-6 md:px-8">
@@ -295,6 +307,19 @@ export default function AttendanceModulePage() {
               placeholder="Search sector allotted"
             />
           </div>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center md:col-span-3 lg:col-span-4 xl:col-span-8">
+          <button
+            type="button"
+            onClick={downloadZip}
+            disabled={zipBusy || !allRows.length}
+            className="h-11 rounded-xl bg-teal px-4 text-sm font-semibold text-white disabled:opacity-40"
+          >
+            {zipBusy ? "Preparing ZIP…" : `Download ZIP (${allRows.length} users · ${date})`}
+          </button>
+          <p className="text-xs text-navy/50">
+            One CSV per assembly — file name = Halka code (e.g. DB_JU_Jalandhar Cantt.csv) for selected date only.
+          </p>
         </div>
       </div>
 

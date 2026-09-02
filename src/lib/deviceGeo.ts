@@ -78,6 +78,51 @@ export async function locateDevice(): Promise<GeolocationPosition> {
 
 export type GpsFix = { lat: number; lng: number; accuracy: number | null; at: number };
 
+export type GpsSample = GpsFix;
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getHighAccuracyPosition(): Promise<GeolocationPosition> {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error("Location is off. Turn on Location in phone Settings."));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(resolve, (e) => reject(geoFail(e)), {
+      enableHighAccuracy: true,
+      timeout: isIosBrowser() ? 14000 : 12000,
+      maximumAge: 0,
+    });
+  });
+}
+
+/** Collect multiple GPS fixes while user stands still — used before punch in/out. */
+export async function collectGpsSamplesForPunch(opts?: { count?: number; intervalMs?: number }) {
+  const count = opts?.count ?? 4;
+  const intervalMs = opts?.intervalMs ?? 2500;
+  const samples: GpsSample[] = [];
+
+  for (let i = 0; i < count; i++) {
+    const pos = await withTimeout(
+      getHighAccuracyPosition(),
+      isIosBrowser() ? 15000 : 13000,
+      "GPS timed out. Step outdoors, allow location, then try again."
+    );
+    samples.push({
+      lat: pos.coords.latitude,
+      lng: pos.coords.longitude,
+      accuracy: pos.coords.accuracy ?? null,
+      at: Date.now(),
+    });
+    if (i < count - 1) await sleep(intervalMs);
+  }
+
+  const last = samples[samples.length - 1];
+  return { samples, lat: last.lat, lng: last.lng, accuracy: last.accuracy };
+}
+
 export async function captureGpsFix(
   lastFix: { lat: number; lng: number } | null,
   liveAccuracy: number

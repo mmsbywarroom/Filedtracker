@@ -12,6 +12,8 @@ type Props = {
   busy?: boolean;
   /** Registration needs a few solid frames; verify can be quicker */
   mode?: "register" | "verify";
+  /** Turban/pagri mode — relaxed scan, more samples on register */
+  turbanMode?: boolean;
 };
 
 function snapshot(video: HTMLVideoElement, box?: { x: number; y: number; width: number; height: number }) {
@@ -55,7 +57,7 @@ function waitVideoReady(video: HTMLVideoElement) {
   });
 }
 
-export function FaceCapture({ actionLabel, onCapture, busy, mode = "verify" }: Props) {
+export function FaceCapture({ actionLabel, onCapture, busy, mode = "verify", turbanMode = false }: Props) {
   const { t } = useLang();
   const videoRef = useRef<HTMLVideoElement>(null);
   const lastGood = useRef<FaceScan | null>(null);
@@ -68,10 +70,11 @@ export function FaceCapture({ actionLabel, onCapture, busy, mode = "verify" }: P
   const [error, setError] = useState("");
   const [hint, setHint] = useState("");
   const [goodHits, setGoodHits] = useState(0);
-  // Verify: 2 quick frames (spoof harder). Register: more samples.
-  const needHits = mode === "register" ? 4 : 2;
+  // Verify: 2 quick frames. Register: more samples (turban: extra for daily pagri changes).
+  const needHits = mode === "register" ? (turbanMode ? 5 : 4) : 2;
 
   function hintForError(err: FaceScanError) {
+    if (turbanMode && err === "partial") return t("turbanPartialFace");
     if (err === "too_far") return t("tooFar");
     if (err === "multiple") return t("multiple");
     if (err === "partial") return t("partialFace");
@@ -174,13 +177,16 @@ export function FaceCapture({ actionLabel, onCapture, busy, mode = "verify" }: P
       running = true;
       void (async () => {
         try {
-          const result = await scanFace(videoRef.current!, { strict: mode === "register" });
+          const result = await scanFace(videoRef.current!, {
+            strict: mode === "register" && !turbanMode,
+            turbanFriendly: turbanMode,
+          });
           if (cancelled) return;
           if (result.ok) {
             lastGood.current = result;
             hits.current += 1;
             setGoodHits(hits.current);
-            if (samples.current.length < 6) samples.current.push(result.descriptor);
+            if (samples.current.length < (turbanMode ? 8 : 6)) samples.current.push(result.descriptor);
             if (mode === "register") {
               setHint(`${t("faceFound")} (${Math.min(hits.current, needHits)}/${needHits})`);
             } else {
@@ -206,7 +212,7 @@ export function FaceCapture({ actionLabel, onCapture, busy, mode = "verify" }: P
       cancelled = true;
       cancelAnimationFrame(raf);
     };
-  }, [camReady, modelsReady, busy, mode, needHits, t]);
+  }, [camReady, modelsReady, busy, mode, needHits, turbanMode, t]);
 
   return (
     <div className="flex flex-col items-center gap-4">
@@ -224,8 +230,9 @@ export function FaceCapture({ actionLabel, onCapture, busy, mode = "verify" }: P
       {!modelsReady && camReady && <p className="text-xs text-navy/50">{t("firstLoad")}</p>}
       {mode === "register" && (
         <p className="max-w-xs text-center text-xs text-navy/50">
-          Center your full face in the square frame — forehead, both eyes, nose and chin clearly visible. Use bright
-          light.
+          {turbanMode
+            ? t("turbanRegisterHint")
+            : "Center your full face in the square frame — forehead, both eyes, nose and chin clearly visible. Use bright light."}
         </p>
       )}
       <button

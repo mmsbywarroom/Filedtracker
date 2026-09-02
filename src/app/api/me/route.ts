@@ -26,6 +26,7 @@ export async function GET() {
         zone: true,
         district: true,
         faceRegisteredAt: true,
+        usesTurban: true,
       },
     });
     return NextResponse.json({ user: user ? { ...user, role: "user", kind: "field" } : null });

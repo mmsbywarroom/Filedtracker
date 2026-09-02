@@ -8,6 +8,7 @@ import RouteMap from "@/components/RouteMapDynamic";
 import { formatDuration, formatKm, shouldCreditTrackStep, sessionTravelMeters } from "@/lib/utils";
 import {
   captureGpsFix,
+  collectGpsSamplesForPunch,
   isIosBrowser,
   locateDevice,
   withTimeout,
@@ -42,6 +43,7 @@ type User = {
   zone: string;
   district: string;
   faceRegisteredAt: string | null;
+  usesTurban?: boolean;
 };
 
 type Point = { lat: number; lng: number; recordedAt: string; accuracy?: number };
@@ -59,26 +61,6 @@ type Attendance = {
   points: Point[];
 };
 
-/** Fast read for punch — never block on fresh GPS after face scan (iOS breaks without user tap). */
-function instantPunchLocation(
-  lastFix: { lat: number; lng: number } | null,
-  liveAccuracy: number,
-  prefetched: PunchGps | null
-): { lat: number; lng: number; accuracy: number | null } {
-  const maxAge = 300_000;
-  if (prefetched && Date.now() - prefetched.at < maxAge) {
-    return { lat: prefetched.lat, lng: prefetched.lng, accuracy: prefetched.accuracy };
-  }
-  if (lastFix) {
-    return {
-      lat: lastFix.lat,
-      lng: lastFix.lng,
-      accuracy: Number.isFinite(liveAccuracy) && liveAccuracy < 9000 ? liveAccuracy : null,
-    };
-  }
-  throw new Error("Location not ready. Tap “Show your location” on the map, then Punch In again.");
-}
-
 export default function DashboardPage() {
   const { t } = useLang();
   const [user, setUser] = useState<User | null>(null);
@@ -92,6 +74,7 @@ export default function DashboardPage() {
   const lastRecorded = useRef<{ lat: number; lng: number; at: number } | null>(null);
   const liveAcc = useRef<number>(Infinity);
   const punchGpsRef = useRef<PunchGps | null>(null);
+  const [registerTurban, setRegisterTurban] = useState(false);
   const geoWatchId = useRef<number | null>(null);
   const geoStarted = useRef(false);
   const gpsOffLock = useRef(false);
@@ -447,7 +430,7 @@ export default function DashboardPage() {
       const res = await fetch("/api/face/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ descriptor, image, samples }),
+        body: JSON.stringify({ descriptor, image, samples, usesTurban: registerTurban }),
       });
       const data = await readApiJson<{ error?: string }>(res);
       if (!res.ok) throw new Error(data.error || "Could not save face.");
@@ -471,6 +454,12 @@ export default function DashboardPage() {
       let lat: number;
       let lng: number;
       let accuracy: number | null = null;
+      let gpsSamples: { lat: number; lng: number; accuracy: number | null; at: number }[] = [];
+
+      setMsg(t("gpsVerifying"));
+
+      await verifyFace(descriptor);
+
       if (kind === "out") {
         if (buffer.current.length) {
           const batch = buffer.current.splice(0, buffer.current.length);
@@ -481,23 +470,20 @@ export default function DashboardPage() {
             body: JSON.stringify({ points: batch }),
           }).catch(() => {});
         }
-        const last =
-          lastFix.current ||
-          open?.points?.[open.points.length - 1] ||
-          (open ? { lat: open.punchInLat, lng: open.punchInLng } : null);
-        if (!last) throw new Error("Location not found. Turn on GPS and tap Confirm again.");
-        lat = last.lat;
-        lng = last.lng;
+        const collected = await collectGpsSamplesForPunch({ count: 3, intervalMs: 2000 });
+        lat = collected.lat;
+        lng = collected.lng;
+        accuracy = collected.accuracy;
+        gpsSamples = collected.samples;
       } else {
-        const fix = instantPunchLocation(lastFix.current, liveAcc.current, punchGpsRef.current);
-        lat = fix.lat;
-        lng = fix.lng;
-        accuracy = fix.accuracy;
+        const collected = await collectGpsSamplesForPunch({ count: 3, intervalMs: 2000 });
+        lat = collected.lat;
+        lng = collected.lng;
+        accuracy = collected.accuracy;
+        gpsSamples = collected.samples;
       }
 
-      await verifyFace(descriptor);
-
-      const payload = { lat, lng, accuracy, image, descriptor };
+      const payload = { lat, lng, accuracy, image, descriptor, gpsSamples };
       const url = kind === "in" ? "/api/attendance" : "/api/attendance/punch-out";
       const res = await withTimeout(
         fetch(url, {
@@ -505,7 +491,7 @@ export default function DashboardPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         }),
-        20000,
+        45000,
         "Punch timed out. Check network and try again."
       );
       const data = await readApiJson<{ error?: string }>(res);
@@ -677,6 +663,7 @@ export default function DashboardPage() {
             <FaceCapture
               busy={busy}
               mode={mode === "register" ? "register" : "verify"}
+              turbanMode={mode === "register" ? registerTurban : Boolean(user?.usesTurban)}
               actionLabel={mode === "register" ? t("saveFace") : mode === "in" ? t("confirmIn") : t("confirmOut")}
               onCapture={(d, image, samples) =>
                 mode === "register" ? onRegister(d, image, samples) : punch(mode, d, image)
@@ -692,16 +679,30 @@ export default function DashboardPage() {
         {mode === "idle" && (
           <div className="mb-3 rounded-[1.75rem] bg-white p-4 shadow-card">
             {!user.faceRegisteredAt ? (
-              <button
-                type="button"
-                onClick={() => {
-                  startGeoTracking();
-                  setMode("register");
-                }}
-                className="w-full rounded-2xl bg-navy px-5 py-4 text-base font-semibold text-white"
-              >
-                {t("registerFace")}
-              </button>
+              <div className="flex flex-col gap-3">
+                <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-navy/10 bg-sand/40 px-4 py-3 text-left">
+                  <input
+                    type="checkbox"
+                    checked={registerTurban}
+                    onChange={(e) => setRegisterTurban(e.target.checked)}
+                    className="mt-1 h-4 w-4 rounded border-navy/20"
+                  />
+                  <span>
+                    <span className="block text-sm font-semibold text-navy">{t("turbanModeLabel")}</span>
+                    <span className="mt-0.5 block text-xs text-navy/55">{t("turbanModeHint")}</span>
+                  </span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => {
+                    startGeoTracking();
+                    setMode("register");
+                  }}
+                  className="w-full rounded-2xl bg-navy px-5 py-4 text-base font-semibold text-white"
+                >
+                  {t("registerFace")}
+                </button>
+              </div>
             ) : open ? (
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                 <button

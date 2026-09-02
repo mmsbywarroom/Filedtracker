@@ -39,6 +39,8 @@ model User {
   faceDescriptorJson  String?
   faceImage           String?
   faceRegisteredAt    DateTime?
+  /// Relaxed face match for turban/pagri — eyes, nose, mouth, beard; not forehead
+  usesTurban          Boolean  @default(false)
   isActive            Boolean  @default(true)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
@@ -210,6 +212,33 @@ model FaceResetLog {
   @@index([createdAt])
   @@index([userId])
   @@index([adminId])
+}
+
+/// Suspicious / blocked GPS activity (fake location apps, bad accuracy, etc.)
+model GpsSpoofLog {
+  id              String   @id @default(cuid())
+  userId          String
+  userName        String
+  userPhone       String
+  userDesignation String   @default("")
+  assemblyName    String   @default("")
+  zone            String   @default("")
+  district        String   @default("")
+  action          String
+  outcome         String
+  flags           String[] @default([])
+  lat             Float?
+  lng             Float?
+  accuracy        Float?
+  sampleCount     Int      @default(0)
+  maxSpreadM      Float?
+  detail          String
+  attendanceId    String?
+  createdAt       DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([userId])
+  @@index([outcome])
 }
 
 model Holiday {

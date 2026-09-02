@@ -51,6 +51,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         faceDescriptorJson: null,
         faceImage: null,
         faceRegisteredAt: null,
+        usesTurban: false,
       },
     }),
     prisma.faceResetLog.create({
