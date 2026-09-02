@@ -1,0 +1,2 @@
+ALTER TABLE "Attendance" ADD COLUMN IF NOT EXISTS "punchInClient" TEXT;
+ALTER TABLE "Attendance" ADD COLUMN IF NOT EXISTS "punchOutClient" TEXT;

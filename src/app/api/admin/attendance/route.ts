@@ -34,6 +34,8 @@ export async function GET(req: Request) {
       punchOutAddress: true,
       distanceMeters: true,
       punchOutReason: true,
+      punchInClient: true,
+      punchOutClient: true,
       user: {
         select: {
           id: true,
@@ -118,6 +120,8 @@ export async function GET(req: Request) {
         marks: marksById.get(r.id) || 0,
         status: r.punchOutAt ? "Completed" : "Live",
         punchOutReason: r.punchOutReason,
+        punchInClient: r.punchInClient,
+        punchOutClient: r.punchOutClient,
       };
     }),
   });

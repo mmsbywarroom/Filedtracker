@@ -7,6 +7,7 @@ import { AdminReportToolbar } from "@/components/AdminReportToolbar";
 import { PaginationBar } from "@/components/PaginationBar";
 import { downloadCsv, downloadPdf, reasonLabel, uniqueSorted } from "@/lib/reportExport";
 import { formatKm } from "@/lib/utils";
+import { clientSourceLabel } from "@/lib/clientSource";
 
 type Row = {
   id: string;
@@ -33,6 +34,8 @@ type Row = {
   marks: number;
   status: string;
   punchOutReason?: string | null;
+  punchInClient?: string | null;
+  punchOutClient?: string | null;
 };
 
 function todayIst() {
@@ -134,9 +137,11 @@ export default function DailyRecordsPage() {
     "Assembly",
     "Sector",
     "Punch in",
+    "Punch in via",
     "Punch in lat",
     "Punch in lng",
     "Punch out",
+    "Punch out via",
     "Punch out lat",
     "Punch out lng",
     "Distance",
@@ -153,9 +158,11 @@ export default function DailyRecordsPage() {
     r.assemblyName,
     r.sectorAllotted,
     whenIst(r.punchInAt),
+    clientSourceLabel(r.punchInClient),
     fmtCoord(r.punchInLat),
     fmtCoord(r.punchInLng),
     whenIst(r.punchOutAt),
+    clientSourceLabel(r.punchOutClient),
     fmtCoord(r.punchOutLat),
     fmtCoord(r.punchOutLng),
     formatKm(r.distanceMeters || 0),
@@ -217,10 +224,12 @@ export default function DailyRecordsPage() {
                 <th className="px-3 py-3">Sector</th>
                 <th className="px-3 py-3">Registered</th>
                 <th className="px-3 py-3">Punch in</th>
+                <th className="px-3 py-3">In via</th>
                 <th className="px-3 py-3">In lat</th>
                 <th className="px-3 py-3">In lng</th>
                 <th className="px-3 py-3">In face</th>
                 <th className="px-3 py-3">Punch out</th>
+                <th className="px-3 py-3">Out via</th>
                 <th className="px-3 py-3">Out lat</th>
                 <th className="px-3 py-3">Out lng</th>
                 <th className="px-3 py-3">Out face</th>
@@ -252,6 +261,7 @@ export default function DailyRecordsPage() {
                     {new Date(r.punchInAt).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" })}
                     {r.punchInAddress ? <p className="max-w-[160px] text-xs text-navy/50">{r.punchInAddress}</p> : null}
                   </td>
+                  <td className="px-3 py-3 text-xs">{clientSourceLabel(r.punchInClient)}</td>
                   <td className="px-3 py-3 font-mono text-xs">{fmtCoord(r.punchInLat)}</td>
                   <td className="px-3 py-3 font-mono text-xs">{fmtCoord(r.punchInLng)}</td>
                   <td className="px-3 py-3">
@@ -268,6 +278,7 @@ export default function DailyRecordsPage() {
                       : "—"}
                     {r.punchOutAddress ? <p className="max-w-[160px] text-xs text-navy/50">{r.punchOutAddress}</p> : null}
                   </td>
+                  <td className="px-3 py-3 text-xs">{clientSourceLabel(r.punchOutClient)}</td>
                   <td className="px-3 py-3 font-mono text-xs">{fmtCoord(r.punchOutLat)}</td>
                   <td className="px-3 py-3 font-mono text-xs">{fmtCoord(r.punchOutLng)}</td>
                   <td className="px-3 py-3">

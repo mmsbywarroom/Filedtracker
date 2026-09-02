@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">AAP Attendance</string>
+    <string name="login_title">ਆਮ ਆਦਮੀ ਪਾਰਟੀ</string>
+    <string name="login_hint">ਐਡਮਿਨ ਵੱਲੋਂ ਰਜਿਸਟਰ ਮੋਬਾਈਲ ਨੰਬਰ ਦਿਓ</string>
+    <string name="send_otp">OTP ਭੇਜੋ</string>
+    <string name="verify_otp">ਤਸਦੀਕ ਕਰੋ</string>
+    <string name="punch_in">ਪੰਚ ਇਨ</string>
+    <string name="punch_out">ਪੰਚ ਆਉਟ</string>
+    <string name="register_face">ਚਿਹਰਾ ਰਜਿਸਟਰ ਕਰੋ</string>
+    <string name="logout">ਲਾਗਆਉਟ</string>
+    <string name="loading">ਲੋਡ ਹੋ ਰਿਹਾ…</string>
+    <string name="not_punched_in">ਪੰਚ ਇਨ ਨਹੀਂ</string>
+    <string name="punched_in">ਪੰਚ ਇਨ — ਰਸਤਾ ਟਰੈਕ ਹੋ ਰਿਹਾ</string>
+    <string name="leave_request">ਛੁੱਟੀ ਦੀ ਬੇਨਤੀ</string>
+    <string name="footprints">ਪਿਛਲੇ ਰਸਤੇ</string>
+    <string name="live_map">ਲਾਈਵ ਨਕਸ਼ਾ</string>
+    <string name="vpn_blocked">ਪੰਚ ਕਰਨ ਤੋਂ ਪਹਿਲਾਂ VPN ਬੰਦ ਕਰੋ।</string>
+    <string name="mock_gps_blocked">ਫੇਕ GPS ਮਿਲਿਆ। Location spoofing ਐਪ ਹਟਾਓ।</string>
+</resources>

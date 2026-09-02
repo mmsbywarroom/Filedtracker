@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
+import { parseClientSource } from "@/lib/clientSource";
 import { prisma } from "@/lib/prisma";
 import { downsample, sessionTravelMeters } from "@/lib/utils";
 import { sanitizeFaceImage } from "@/lib/faceImage";
@@ -235,6 +236,7 @@ export async function POST(req: Request) {
       punchInLng: lng,
       punchInAddress: address,
       punchInFace,
+      punchInClient: parseClientSource(req),
       lastKnownLat: lat,
       lastKnownLng: lng,
       lastKnownAt: new Date(),

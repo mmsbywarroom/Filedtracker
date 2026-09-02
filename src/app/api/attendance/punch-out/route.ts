@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { parseClientSource } from "@/lib/clientSource";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { sanitizeFaceImage } from "@/lib/faceImage";
@@ -75,6 +76,7 @@ export async function POST(req: Request) {
     accuracy: Number.isFinite(Number(body?.accuracy)) ? Number(body.accuracy) : null,
     reason: "manual",
     punchOutFace,
+    punchOutClient: parseClientSource(req),
   });
   if (!attendance) return NextResponse.json({ error: "No active punch in." }, { status: 400 });
 

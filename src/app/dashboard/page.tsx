@@ -18,6 +18,7 @@ import {
   withTimeout,
   type GpsFix,
 } from "@/lib/deviceGeo";
+import { apiFetch } from "@/lib/clientHeaders";
 import { LangToggle, useLang } from "@/lib/i18n";
 
 const AUTO_12H_MS = 12 * 60 * 60 * 1000;
@@ -271,7 +272,7 @@ export default function DashboardPage() {
       (open ? { lat: open.punchInLat, lng: open.punchInLng } : null);
     if (buffer.current.length) {
       const batch = buffer.current.splice(0, buffer.current.length);
-      fetch("/api/attendance/track", {
+      apiFetch("/api/attendance/track", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         keepalive: true,
@@ -279,7 +280,7 @@ export default function DashboardPage() {
       }).catch(() => {});
     }
     try {
-      await fetch("/api/attendance/gps-off", {
+      await apiFetch("/api/attendance/gps-off", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         keepalive: true,
@@ -305,7 +306,7 @@ export default function DashboardPage() {
     intervalSnapshotBusy.current = true;
     try {
       const pos = await locateDevice();
-      const res = await fetch("/api/attendance/interval-snapshot", {
+      const res = await apiFetch("/api/attendance/interval-snapshot", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -573,7 +574,7 @@ export default function DashboardPage() {
 
       if (kind === "out" && buffer.current.length) {
         const batch = buffer.current.splice(0, buffer.current.length);
-        fetch("/api/attendance/track", {
+        apiFetch("/api/attendance/track", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           keepalive: true,
@@ -603,9 +604,8 @@ export default function DashboardPage() {
       };
       const url = kind === "in" ? "/api/attendance" : "/api/attendance/punch-out";
       const res = await withTimeout(
-        fetch(url, {
+        apiFetch(url, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         }),
         20000,

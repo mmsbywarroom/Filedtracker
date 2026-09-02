@@ -45,6 +45,7 @@ public final class ApiClient {
         return new Request.Builder()
                 .url(apiBase + path)
                 .addHeader("Authorization", "Bearer " + token)
+                .addHeader("X-Client-Source", "native")
                 .addHeader("Content-Type", "application/json");
     }
 

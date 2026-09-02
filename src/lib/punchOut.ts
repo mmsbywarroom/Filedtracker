@@ -15,6 +15,7 @@ export async function closeOpenAttendance(opts: {
   accuracy?: number | null;
   reason: PunchOutReason;
   punchOutFace?: string | null;
+  punchOutClient?: string | null;
   /** When set (e.g. auto 12h / stale close), use this instead of now */
   punchOutAt?: Date;
 }) {
@@ -78,6 +79,7 @@ export async function closeOpenAttendance(opts: {
       punchOutAddress: address,
       punchOutReason: opts.reason,
       punchOutFace: opts.punchOutFace || undefined,
+      punchOutClient: opts.punchOutClient || undefined,
       distanceMeters: distance,
       points: {
         create: { lat, lng, recordedAt: punchOutAt, accuracy: opts.accuracy ?? null },

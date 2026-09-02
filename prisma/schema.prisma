@@ -93,6 +93,8 @@ model Attendance {
   punchInFace     String?
   punchOutFace    String?
   punchOutReason  String?
+  punchInClient   String?
+  punchOutClient  String?
   distanceMeters Float   @default(0)
   /// Max spread (m) of raw map GPS probes — real phones jitter 2–20 m; spoof apps stay pinned.
   gpsMapSpreadM  Float?

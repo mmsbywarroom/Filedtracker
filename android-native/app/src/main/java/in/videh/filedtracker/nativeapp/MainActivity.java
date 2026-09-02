@@ -8,6 +8,7 @@ import androidx.appcompat.app.AppCompatActivity;
 public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        LocaleHelper.apply(this);
         super.onCreate(savedInstanceState);
         if (SessionStore.isLoggedIn(this)) {
             startActivity(new Intent(this, DashboardActivity.class));

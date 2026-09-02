@@ -65,6 +65,7 @@ public class DashboardActivity extends AppCompatActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        LocaleHelper.apply(this);
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_dashboard);
 
@@ -78,6 +79,10 @@ public class DashboardActivity extends AppCompatActivity {
         punchOutBtn = findViewById(R.id.punchOutBtn);
 
         findViewById(R.id.logoutBtn).setOnClickListener(v -> logout());
+        findViewById(R.id.langBtn).setOnClickListener(v -> toggleLang());
+        findViewById(R.id.mapBtn).setOnClickListener(v -> openWeb("/native-map", getString(R.string.live_map)));
+        findViewById(R.id.footprintsBtn).setOnClickListener(v -> openWeb("/dashboard/footprints", getString(R.string.footprints)));
+        findViewById(R.id.leaveBtn).setOnClickListener(v -> openWeb("/dashboard/leave", getString(R.string.leave_request)));
 
         registerFaceBtn.setOnClickListener(v -> openFace(MODE_REGISTER));
         punchInBtn.setOnClickListener(v -> {
@@ -140,6 +145,14 @@ public class DashboardActivity extends AppCompatActivity {
     }
 
     private void ensureLocationThenFace(String mode) {
+        if (SecurityHelper.isVpnActive(this)) {
+            messageText.setText(R.string.vpn_blocked);
+            return;
+        }
+        if (SecurityHelper.hasKnownMockGpsApp(this)) {
+            messageText.setText(R.string.mock_gps_blocked);
+            return;
+        }
         if (!LocationHelper.hasFineLocation(this)) {
             LocationHelper.requestLocationPermissions(this);
             pendingMode = mode;
@@ -150,6 +163,12 @@ public class DashboardActivity extends AppCompatActivity {
         LocationHelper.getCurrentLocation(this, new LocationHelper.Callback() {
             @Override
             public void onResult(Location loc) {
+                try {
+                    SecurityHelper.assertSecureForPunch(DashboardActivity.this, loc);
+                } catch (SecurityException e) {
+                    messageText.setText(e.getMessage());
+                    return;
+                }
                 gpsText.setText(String.format("GPS: %.6f, %.6f (±%.0fm)", loc.getLatitude(), loc.getLongitude(), loc.getAccuracy()));
                 openFace(mode);
             }
@@ -201,6 +220,7 @@ public class DashboardActivity extends AppCompatActivity {
                     public void onResult(Location loc) {
                         io.execute(() -> {
                             try {
+                                SecurityHelper.assertSecureForPunch(DashboardActivity.this, loc);
                                 JSONArray descriptor = new JSONArray(descriptorJson);
                                 ApiClient api = new ApiClient(DashboardActivity.this);
                                 JSONObject res;
@@ -240,6 +260,19 @@ public class DashboardActivity extends AppCompatActivity {
                 runOnUiThread(() -> messageText.setText(e.getMessage() != null ? e.getMessage() : "Punch failed"));
             }
         });
+    }
+
+    private void openWeb(String path, String title) {
+        Intent i = new Intent(this, WebShellActivity.class);
+        i.putExtra(WebShellActivity.EXTRA_PATH, path);
+        i.putExtra(WebShellActivity.EXTRA_TITLE, title);
+        startActivity(i);
+    }
+
+    private void toggleLang() {
+        String next = "pa".equals(LocaleHelper.currentLang(this)) ? "en" : "pa";
+        LocaleHelper.setLanguage(this, next);
+        recreate();
     }
 
     private void logout() {

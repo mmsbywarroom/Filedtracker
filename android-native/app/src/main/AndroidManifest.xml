@@ -10,6 +10,8 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.CAMERA" />
 
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
@@ -35,6 +37,8 @@
             android:name=".FaceCaptureActivity"
             android:exported="false"
             android:configChanges="orientation|screenSize" />
+
+        <activity android:name=".WebShellActivity" android:exported="false" />
 
         <service
             android:name="in.videh.filedtracker.bglocation.FieldLocationService"
