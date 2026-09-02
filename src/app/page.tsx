@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import { BrandMark } from "@/components/BrandMark";
 import { LangToggle, useLang } from "@/lib/i18n";
+import { isPureNativeApp, saveNativeSession } from "@/lib/pureNativeApp";
 
 export default function HomePage() {
   const { t } = useLang();
@@ -44,6 +45,13 @@ export default function HomePage() {
     if (!res.ok) {
       setError(data.error || "OTP failed");
       return;
+    }
+    if (isPureNativeApp() && data.token) {
+      saveNativeSession(
+        String(data.token),
+        String(data.apiBaseUrl || window.location.origin),
+        phone
+      );
     }
     window.location.href = data.kind === "rally" ? "/rally" : "/dashboard";
   }

@@ -3,17 +3,21 @@ package in.videh.filedtracker.nativeapp;
 import android.Manifest;
 import android.app.Activity;
 import android.content.pm.PackageManager;
-import android.os.Build;
+import android.util.Log;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
 
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
+import org.json.JSONObject;
+
 import in.videh.filedtracker.bglocation.FieldLocationService;
+import in.videh.filedtracker.bglocation.TrackingPrefs;
 
 /** JS bridge for the pure-native WebView shell (same dashboard UI as web). */
 public class NativeAppBridge {
+    private static final String TAG = "FTNativeBridge";
     private final Activity activity;
 
     public NativeAppBridge(Activity activity) {
@@ -21,17 +25,72 @@ public class NativeAppBridge {
     }
 
     @JavascriptInterface
+    public void saveSession(String token, String apiBase, String phone) {
+        if (token == null || token.isEmpty()) return;
+        String base = apiBase != null && !apiBase.isEmpty() ? apiBase : AppConfig.API_BASE;
+        SessionStore.save(activity, token, base, phone != null ? phone : SessionStore.phone(activity), "");
+        CookieManager cm = CookieManager.getInstance();
+        cm.setAcceptCookie(true);
+        cm.setCookie(base, "ft_user_session=" + token + "; Path=/; Secure; SameSite=Lax");
+        cm.flush();
+    }
+
+    @JavascriptInterface
     public void startTracking(String apiBase, String token, String punchInAt) {
         activity.runOnUiThread(() -> {
-            if (token == null || token.isEmpty() || punchInAt == null || punchInAt.isEmpty()) return;
-            String base = apiBase != null && !apiBase.isEmpty() ? apiBase : SessionStore.apiBase(activity);
-            FieldLocationService.start(activity, base, token, punchInAt);
+            try {
+                if (token == null || token.isEmpty() || punchInAt == null || punchInAt.isEmpty()) return;
+                String base = apiBase != null && !apiBase.isEmpty() ? apiBase : SessionStore.apiBase(activity);
+                // Keep SessionStore in sync so SecurityReporter works
+                SessionStore.save(
+                        activity,
+                        token,
+                        base,
+                        SessionStore.phone(activity),
+                        ""
+                );
+                if (!LocationHelper.hasFineLocation(activity)) {
+                    Log.w(TAG, "startTracking skipped — no location permission");
+                    LocationHelper.requestLocationPermissions(activity);
+                    return;
+                }
+                FieldLocationService.start(activity, base, token, punchInAt);
+            } catch (Exception e) {
+                Log.e(TAG, "startTracking failed", e);
+            }
         });
     }
 
     @JavascriptInterface
     public void stopTracking() {
-        activity.runOnUiThread(() -> FieldLocationService.stop(activity));
+        activity.runOnUiThread(() -> {
+            try {
+                FieldLocationService.stop(activity);
+            } catch (Exception e) {
+                Log.e(TAG, "stopTracking failed", e);
+            }
+        });
+    }
+
+    /** JSON: { vpn, spoofApp, spoofPackage, mockLikely } */
+    @JavascriptInterface
+    public String getSecurityStatus() {
+        try {
+            JSONObject o = new JSONObject();
+            o.put("vpn", SecurityHelper.isVpnActive(activity));
+            String pkg = SecurityHelper.findMockGpsAppPackage(activity);
+            o.put("spoofApp", pkg != null);
+            o.put("spoofPackage", pkg != null ? pkg : "");
+            o.put("mockLikely", pkg != null);
+            return o.toString();
+        } catch (Exception e) {
+            return "{\"vpn\":false,\"spoofApp\":false,\"spoofPackage\":\"\",\"mockLikely\":false}";
+        }
+    }
+
+    @JavascriptInterface
+    public void reportSecurityEvent(String type, String action, String detail) {
+        SecurityReporter.report(activity, type, action, detail, null, null);
     }
 
     @JavascriptInterface
@@ -90,19 +149,26 @@ public class NativeAppBridge {
     @JavascriptInterface
     public void clearSessionAndCookies() {
         activity.runOnUiThread(() -> {
-            FieldLocationService.stop(activity);
-            SessionStore.clear(activity);
-            CookieManager cm = CookieManager.getInstance();
-            cm.removeAllCookies(null);
-            cm.flush();
+            try {
+                FieldLocationService.stop(activity);
+                TrackingPrefs.clear(activity);
+                SessionStore.clear(activity);
+                CookieManager cm = CookieManager.getInstance();
+                cm.removeAllCookies(null);
+                cm.flush();
+            } catch (Exception e) {
+                Log.e(TAG, "clearSession failed", e);
+            }
         });
     }
 
     @JavascriptInterface
     public void exitApp() {
         activity.runOnUiThread(() -> {
-            activity.finishAffinity();
-            System.exit(0);
+            try {
+                activity.finishAffinity();
+            } catch (Exception ignored) {
+            }
         });
     }
 

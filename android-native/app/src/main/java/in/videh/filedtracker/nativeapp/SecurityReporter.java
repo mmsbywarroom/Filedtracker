@@ -8,7 +8,9 @@ import org.json.JSONObject;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
+import in.videh.filedtracker.bglocation.TrackingPrefs;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -27,10 +29,24 @@ public final class SecurityReporter {
     public static void report(Context ctx, String type, String action, String detail, Double lat, Double lng) {
         String token = SessionStore.token(ctx);
         String apiBase = SessionStore.apiBase(ctx);
-        if (token == null || token.isEmpty() || apiBase == null || apiBase.isEmpty()) return;
+        if (token == null || token.isEmpty()) {
+            token = TrackingPrefs.token(ctx);
+        }
+        if (apiBase == null || apiBase.isEmpty()) {
+            apiBase = TrackingPrefs.apiBase(ctx);
+        }
+        if (apiBase == null || apiBase.isEmpty()) {
+            apiBase = AppConfig.API_BASE;
+        }
+        if (token == null || token.isEmpty()) {
+            Log.w(TAG, "skip report — no auth token");
+            return;
+        }
         if (isThrottled(ctx, type)) return;
         markThrottled(ctx, type);
 
+        final String t = token;
+        final String base = apiBase;
         IO.execute(() -> {
             try {
                 JSONObject body = new JSONObject();
@@ -40,15 +56,19 @@ public final class SecurityReporter {
                 if (lat != null) body.put("lat", lat);
                 if (lng != null) body.put("lng", lng);
                 Request req = new Request.Builder()
-                        .url(apiBase + "/api/attendance/security-event")
-                        .addHeader("Authorization", "Bearer " + token)
+                        .url(base + "/api/attendance/security-event")
+                        .addHeader("Authorization", "Bearer " + t)
                         .addHeader("X-Client-Source", "native")
                         .addHeader("Content-Type", "application/json")
                         .post(RequestBody.create(body.toString(), JSON))
                         .build();
-                OkHttpClient c = new OkHttpClient();
+                OkHttpClient c = new OkHttpClient.Builder()
+                        .connectTimeout(20, TimeUnit.SECONDS)
+                        .readTimeout(20, TimeUnit.SECONDS)
+                        .build();
                 try (Response res = c.newCall(req).execute()) {
                     if (!res.isSuccessful()) Log.w(TAG, "security-event " + res.code());
+                    else Log.i(TAG, "security-event ok type=" + type);
                 }
             } catch (Exception e) {
                 Log.w(TAG, "report failed", e);

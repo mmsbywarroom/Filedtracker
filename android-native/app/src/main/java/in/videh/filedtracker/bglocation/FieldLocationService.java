@@ -18,6 +18,9 @@ import android.util.Log;
 import androidx.core.app.NotificationCompat;
 
 import com.google.android.gms.location.FusedLocationProviderClient;
+import com.google.android.gms.location.LocationCallback;
+import com.google.android.gms.location.LocationRequest;
+import com.google.android.gms.location.LocationResult;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.location.Priority;
 import com.google.android.gms.tasks.CancellationTokenSource;
@@ -33,24 +36,32 @@ public class FieldLocationService extends Service {
     private static final String CHANNEL_ID = "ft_field_tracking";
     private static final int NOTIFICATION_ID = 41001;
     private static final long TICK_MS = 60_000L;
-    private static final long TRACK_MS = 8_000L;
+    private static final long TRACK_MS = 15_000L;
     private static final long HEARTBEAT_MS = 120_000L;
+    private static final long LOC_INTERVAL_MS = 20_000L;
 
     private Handler handler;
     private FusedLocationProviderClient fused;
+    private LocationCallback locationCallback;
+    private volatile Location lastLoc;
     private long lastHeartbeatAt = 0L;
     private int gpsFailStreak = 0;
     private PowerManager.WakeLock wakeLock;
     private final JSONArray mapProbes = new JSONArray();
+    private boolean startedFg = false;
 
     private final Runnable trackRunnable = new Runnable() {
         @Override
         public void run() {
-            if (!TrackingPrefs.isActive(FieldLocationService.this)) {
-                stopSelf();
-                return;
+            try {
+                if (!TrackingPrefs.isActive(FieldLocationService.this)) {
+                    stopSelf();
+                    return;
+                }
+                runTrackTick();
+            } catch (Exception e) {
+                Log.e(TAG, "trackRunnable", e);
             }
-            runTrackTick();
             handler.postDelayed(this, TRACK_MS);
         }
     };
@@ -58,28 +69,40 @@ public class FieldLocationService extends Service {
     private final Runnable tickRunnable = new Runnable() {
         @Override
         public void run() {
-            if (!TrackingPrefs.isActive(FieldLocationService.this)) {
-                stopSelf();
-                return;
+            try {
+                if (!TrackingPrefs.isActive(FieldLocationService.this)) {
+                    stopSelf();
+                    return;
+                }
+                runIntervalTick();
+            } catch (Exception e) {
+                Log.e(TAG, "tickRunnable", e);
             }
-            runIntervalTick();
             handler.postDelayed(this, TICK_MS);
         }
     };
 
     public static void start(Context ctx, String apiBase, String token, String punchInAt) {
-        TrackingPrefs.saveSession(ctx, apiBase, token, punchInAt);
-        Intent intent = new Intent(ctx, FieldLocationService.class);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            ctx.startForegroundService(intent);
-        } else {
-            ctx.startService(intent);
+        try {
+            TrackingPrefs.saveSession(ctx, apiBase, token, punchInAt);
+            Intent intent = new Intent(ctx, FieldLocationService.class);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                ctx.startForegroundService(intent);
+            } else {
+                ctx.startService(intent);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "FieldLocationService.start failed", e);
         }
     }
 
     public static void stop(Context ctx) {
-        TrackingPrefs.clear(ctx);
-        ctx.stopService(new Intent(ctx, FieldLocationService.class));
+        try {
+            TrackingPrefs.clear(ctx);
+            ctx.stopService(new Intent(ctx, FieldLocationService.class));
+        } catch (Exception e) {
+            Log.e(TAG, "FieldLocationService.stop failed", e);
+        }
     }
 
     @Override
@@ -88,28 +111,56 @@ public class FieldLocationService extends Service {
         handler = new Handler(Looper.getMainLooper());
         fused = LocationServices.getFusedLocationProviderClient(this);
         createNotificationChannel();
+        // Must promote to foreground ASAP to avoid crash on Android 8+
+        try {
+            startForeground(NOTIFICATION_ID, buildNotification());
+            startedFg = true;
+        } catch (Exception e) {
+            Log.e(TAG, "startForeground in onCreate failed", e);
+        }
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        try {
+            if (!startedFg) {
+                startForeground(NOTIFICATION_ID, buildNotification());
+                startedFg = true;
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "startForeground failed", e);
+            stopSelf();
+            return START_NOT_STICKY;
+        }
+
         if (!TrackingPrefs.isActive(this)) {
             stopSelf();
             return START_NOT_STICKY;
         }
-        acquireWakeLock();
-        startForeground(NOTIFICATION_ID, buildNotification());
-        handler.removeCallbacks(tickRunnable);
-        handler.removeCallbacks(trackRunnable);
-        handler.post(trackRunnable);
-        handler.post(tickRunnable);
+
+        try {
+            acquireWakeLock();
+            startLocationUpdates();
+            handler.removeCallbacks(tickRunnable);
+            handler.removeCallbacks(trackRunnable);
+            handler.post(trackRunnable);
+            handler.post(tickRunnable);
+        } catch (Exception e) {
+            Log.e(TAG, "onStartCommand setup failed", e);
+        }
         return START_STICKY;
     }
 
     @Override
     public void onDestroy() {
-        handler.removeCallbacks(tickRunnable);
-        handler.removeCallbacks(trackRunnable);
-        releaseWakeLock();
+        try {
+            handler.removeCallbacks(tickRunnable);
+            handler.removeCallbacks(trackRunnable);
+            stopLocationUpdates();
+            releaseWakeLock();
+        } catch (Exception e) {
+            Log.w(TAG, "onDestroy cleanup", e);
+        }
         super.onDestroy();
     }
 
@@ -118,26 +169,58 @@ public class FieldLocationService extends Service {
         return null;
     }
 
+    private void startLocationUpdates() {
+        if (locationCallback != null) return;
+        try {
+            LocationRequest req = new LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, LOC_INTERVAL_MS)
+                    .setMinUpdateIntervalMillis(10_000L)
+                    .setMaxUpdateDelayMillis(60_000L)
+                    .setWaitForAccurateLocation(false)
+                    .build();
+            locationCallback = new LocationCallback() {
+                @Override
+                public void onLocationResult(LocationResult result) {
+                    if (result == null) return;
+                    Location loc = result.getLastLocation();
+                    if (loc != null) lastLoc = loc;
+                }
+            };
+            fused.requestLocationUpdates(req, locationCallback, Looper.getMainLooper());
+        } catch (SecurityException e) {
+            Log.e(TAG, "location updates permission missing", e);
+        } catch (Exception e) {
+            Log.e(TAG, "startLocationUpdates failed", e);
+        }
+    }
+
+    private void stopLocationUpdates() {
+        if (locationCallback == null) return;
+        try {
+            fused.removeLocationUpdates(locationCallback);
+        } catch (Exception ignored) {
+        }
+        locationCallback = null;
+    }
+
     private void runTrackTick() {
         String apiBase = TrackingPrefs.apiBase(this);
         String token = TrackingPrefs.token(this);
         if (apiBase == null || token == null || token.isEmpty()) return;
 
         if (SecurityHelper.isVpnActive(this)) {
-            Log.w(TAG, "VPN active — skipping track upload");
             SecurityReporter.report(this, "vpn", "detected", "VPN active during background GPS", null, null);
-            return;
+            // Still record GPS — do not stop tracking
         }
         if (SecurityHelper.isGpsDisabled(this)) {
             gpsFailStreak++;
-            if (gpsFailStreak >= 3) {
+            if (gpsFailStreak >= 5) {
                 TrackingApi.postGpsOff(apiBase, token, 0, 0);
                 stop(this);
             }
             return;
         }
 
-        fetchLocation(loc -> {
+        withLocation(loc -> {
             if (loc == null) {
                 gpsFailStreak++;
                 return;
@@ -169,7 +252,11 @@ public class FieldLocationService extends Service {
                 JSONObject point = new JSONObject();
                 point.put("lat", loc.getLatitude());
                 point.put("lng", loc.getLongitude());
-                point.put("recordedAt", new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US).format(new java.util.Date(loc.getTime())));
+                point.put(
+                        "recordedAt",
+                        new java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US)
+                                .format(new java.util.Date(loc.getTime()))
+                );
                 point.put("accuracy", loc.getAccuracy());
                 JSONArray points = new JSONArray();
                 points.put(point);
@@ -200,6 +287,10 @@ public class FieldLocationService extends Service {
             return;
         }
 
+        if (SecurityHelper.isVpnActive(this)) {
+            SecurityReporter.report(this, "vpn", "detected", "VPN during 30-min snapshot window", null, null);
+        }
+
         long now = System.currentTimeMillis();
         int dueSlot = IntervalScheduler.findDueSlot(
                 punchInMs,
@@ -207,14 +298,14 @@ public class FieldLocationService extends Service {
                 now
         );
 
-        fetchLocation(loc -> {
+        withLocation(loc -> {
             if (loc == null) return;
             if (SecurityHelper.isMockLocation(loc)) {
                 SecurityReporter.report(
                         this,
                         "mock_gps",
                         "blocked",
-                        "Mock location during background GPS",
+                        "Mock location during 30-min snapshot",
                         loc.getLatitude(),
                         loc.getLongitude()
                 );
@@ -229,27 +320,41 @@ public class FieldLocationService extends Service {
             }
             if (dueSlot > 0) {
                 boolean ok = TrackingApi.postIntervalSnapshot(apiBase, token, dueSlot, loc.getLatitude(), loc.getLongitude());
-                if (ok) TrackingPrefs.markSlotSent(this, dueSlot);
+                if (ok) {
+                    TrackingPrefs.markSlotSent(this, dueSlot);
+                    Log.i(TAG, "interval snapshot slot=" + dueSlot);
+                }
             }
         });
     }
 
-    private interface LocationCallback {
+    private interface LocationCallbackFn {
         void onResult(Location loc);
     }
 
-    private void fetchLocation(LocationCallback cb) {
+    private void withLocation(LocationCallbackFn cb) {
+        Location cached = lastLoc;
+        if (cached != null && System.currentTimeMillis() - cached.getTime() < 90_000L) {
+            cb.onResult(cached);
+            return;
+        }
         try {
             CancellationTokenSource cts = new CancellationTokenSource();
             fused.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cts.getToken())
-                    .addOnSuccessListener(cb::onResult)
+                    .addOnSuccessListener(loc -> {
+                        if (loc != null) lastLoc = loc;
+                        cb.onResult(loc != null ? loc : lastLoc);
+                    })
                     .addOnFailureListener(e -> {
                         Log.w(TAG, "getCurrentLocation failed", e);
-                        cb.onResult(null);
+                        cb.onResult(lastLoc);
                     });
         } catch (SecurityException e) {
             Log.e(TAG, "location permission missing", e);
-            cb.onResult(null);
+            cb.onResult(lastLoc);
+        } catch (Exception e) {
+            Log.e(TAG, "withLocation failed", e);
+            cb.onResult(lastLoc);
         }
     }
 
@@ -284,7 +389,8 @@ public class FieldLocationService extends Service {
             PowerManager pm = (PowerManager) getSystemService(POWER_SERVICE);
             if (pm != null) {
                 wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "AAPAttendance:GPS");
-                wakeLock.acquire(12 * 60 * 60 * 1000L);
+                wakeLock.setReferenceCounted(false);
+                if (!wakeLock.isHeld()) wakeLock.acquire(12 * 60 * 60 * 1000L);
             }
         } catch (Exception e) {
             Log.w(TAG, "wake lock failed", e);
@@ -292,7 +398,10 @@ public class FieldLocationService extends Service {
     }
 
     private void releaseWakeLock() {
-        if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
+        try {
+            if (wakeLock != null && wakeLock.isHeld()) wakeLock.release();
+        } catch (Exception ignored) {
+        }
         wakeLock = null;
     }
 
@@ -310,19 +419,23 @@ public class FieldLocationService extends Service {
 
     private Notification buildNotification() {
         Intent launch = getPackageManager().getLaunchIntentForPackage(getPackageName());
-        PendingIntent pi = PendingIntent.getActivity(
-                this,
-                0,
-                launch,
-                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
-        );
-        return new NotificationCompat.Builder(this, CHANNEL_ID)
+        PendingIntent pi = null;
+        if (launch != null) {
+            pi = PendingIntent.getActivity(
+                    this,
+                    0,
+                    launch,
+                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+            );
+        }
+        NotificationCompat.Builder b = new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle("AAP Attendance active")
                 .setContentText("Recording route and 30-min GPS checks")
                 .setSmallIcon(android.R.drawable.ic_menu_mylocation)
-                .setContentIntent(pi)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
-                .build();
+                .setPriority(NotificationCompat.PRIORITY_LOW);
+        if (pi != null) b.setContentIntent(pi);
+        return b.build();
     }
 }

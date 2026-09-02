@@ -1,6 +1,6 @@
 "use client";
 
-import { isPureNativeApp, pureNativeBridge } from "@/lib/pureNativeApp";
+import { isPureNativeApp, pureNativeBridge, saveNativeSession } from "@/lib/pureNativeApp";
 
 export type StartTrackingOptions = {
   apiBaseUrl: string;
@@ -56,17 +56,23 @@ export async function syncNativeBackgroundTracking(punchInAt: string | null) {
   const bridge = pureNativeBridge();
   if (!bridge) return;
 
-  if (!punchInAt) {
-    bridge.stopTracking();
-    return;
-  }
+  try {
+    if (!punchInAt) {
+      bridge.stopTracking();
+      return;
+    }
 
-  const tokenRes = await fetch("/api/auth/mobile-token", { cache: "no-store", credentials: "include" });
-  if (!tokenRes.ok) return;
-  const data = (await tokenRes.json()) as { token?: string; apiBaseUrl?: string };
-  if (!data.token) return;
-  const apiBaseUrl =
-    data.apiBaseUrl?.replace(/\/$/, "") ||
-    (typeof window !== "undefined" ? window.location.origin : "");
-  bridge.startTracking(apiBaseUrl, data.token, punchInAt);
+    const tokenRes = await fetch("/api/auth/mobile-token", { cache: "no-store", credentials: "include" });
+    if (!tokenRes.ok) return;
+    const data = (await tokenRes.json()) as { token?: string; apiBaseUrl?: string };
+    if (!data.token) return;
+    const apiBaseUrl =
+      data.apiBaseUrl?.replace(/\/$/, "") ||
+      (typeof window !== "undefined" ? window.location.origin : "");
+
+    saveNativeSession(data.token, apiBaseUrl, "");
+    bridge.startTracking(apiBaseUrl, data.token, punchInAt);
+  } catch (e) {
+    console.warn("syncNativeBackgroundTracking failed", e);
+  }
 }

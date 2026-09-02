@@ -21,6 +21,7 @@ import {
 import { LATEST_NATIVE_APK } from "@/lib/apkDownload";
 import { useClientNativeApp } from "@/hooks/useClientNativeApp";
 import { apiFetch } from "@/lib/clientHeaders";
+import { assertNativeSecureForPunch, saveNativeSession } from "@/lib/pureNativeApp";
 import { LangToggle, useLang } from "@/lib/i18n";
 
 const AUTO_12H_MS = 12 * 60 * 60 * 1000;
@@ -575,6 +576,14 @@ export default function DashboardPage() {
     setMsg("");
     setOkMsg(false);
     try {
+      try {
+        assertNativeSecureForPunch();
+      } catch (sec) {
+        setMsg(sec instanceof Error ? sec.message : "Security check failed.");
+        setBusy(false);
+        throw sec;
+      }
+
       await verifyFace(descriptor);
 
       if (kind === "out" && buffer.current.length) {
@@ -661,6 +670,12 @@ export default function DashboardPage() {
   async function beginPunchIn() {
     setMsg("");
     setOkMsg(false);
+    try {
+      assertNativeSecureForPunch();
+    } catch (sec) {
+      setMsg(sec instanceof Error ? sec.message : "Security check failed.");
+      return;
+    }
     if (!punchInAllowed) {
       setMsg(t("punchInWindow"));
       return;
@@ -704,6 +719,12 @@ export default function DashboardPage() {
   function beginPunchOut() {
     setMsg("");
     setOkMsg(false);
+    try {
+      assertNativeSecureForPunch();
+    } catch (sec) {
+      setMsg(sec instanceof Error ? sec.message : "Security check failed.");
+      return;
+    }
     startGeoTracking();
     setMode("out");
   }
