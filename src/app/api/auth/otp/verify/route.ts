@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { setUserSessionCookie } from "@/lib/auth";
-import { hashOtp, normalizePhone, rateLimit, safeEqual } from "@/lib/security";
+import { hashOtp, normalizePhone, OTP_LENGTH, rateLimit, safeEqual } from "@/lib/security";
 
 export async function POST(req: Request) {
   const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "local";
@@ -13,7 +13,7 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   const phone = normalizePhone(String(body?.phone || ""));
   const code = String(body?.otp || "").trim();
-  if (!phone || !/^\d{4}$/.test(code)) {
+  if (!phone || !new RegExp(`^\\d{${OTP_LENGTH}}$`).test(code)) {
     return NextResponse.json({ error: "Invalid OTP." }, { status: 400 });
   }
 

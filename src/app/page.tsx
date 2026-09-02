@@ -92,14 +92,14 @@ export default function HomePage() {
               <p className="text-sm text-navy/60">{t("otpSent")} {phone}</p>
               <input
                 inputMode="numeric"
-                maxLength={4}
+                maxLength={6}
                 value={otp}
-                onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                placeholder="••••"
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                placeholder="••••••"
                 className="w-full rounded-2xl border border-navy/10 bg-sand/50 px-4 py-3 text-center text-2xl tracking-[0.6em] outline-none focus:border-teal"
               />
               {error && <p className="text-sm text-red-600">{error}</p>}
-              <button disabled={busy || otp.length !== 4} className="w-full rounded-2xl bg-teal py-3 font-semibold text-white disabled:opacity-40">
+              <button disabled={busy || otp.length !== 6} className="w-full rounded-2xl bg-teal py-3 font-semibold text-white disabled:opacity-40">
                 {busy ? t("verifying") : t("verify")}
               </button>
               <button type="button" onClick={() => setStep("phone")} className="w-full text-sm text-navy/60">

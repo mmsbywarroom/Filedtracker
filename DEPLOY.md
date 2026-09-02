@@ -3,10 +3,11 @@
 Target:
 
 - GitHub: `https://github.com/mmsbywarroom/Filedtracker.git`
-- EC2 Mumbai: `13.200.220.168` (`rural-connect-hub`, `t3.micro`)
-- Database: PostgreSQL **on the same EC2** (Docker). Do not use the RDS instances in `us-east-1` (`neondb` / `sakhi-db`) — they are in Virginia and will be slow from Mumbai.
+- EC2 Mumbai (`ap-south-1`, `t3.micro`) — host stored in GitHub secret `EC2_HOST`
+- Domain: `https://filed.videh.co.in`
+- Database: PostgreSQL **on the same EC2** (Docker). Do not use RDS in `us-east-1` — too slow from Mumbai.
 
-If you already run another app on this instance (`rural-connect-hub`), stop/conflict-check port 80 and 3000 first.
+If you already run another app on this instance, stop/conflict-check port 80, 443, and 3000 first.
 
 ## 1. EC2 security group (Mumbai)
 
@@ -14,9 +15,11 @@ Inbound:
 
 | Type | Port | Source |
 | --- | --- | --- |
-| SSH | 22 | your IP |
+| SSH | 22 | your IP only |
 | HTTP | 80 | 0.0.0.0/0 |
-| HTTPS | 443 | 0.0.0.0/0 (optional later) |
+| HTTPS | 443 | 0.0.0.0/0 |
+
+**Never** open PostgreSQL port 5432 to the internet.
 
 ## Disk / logs (important on t3.micro)
 
@@ -35,14 +38,12 @@ df -h /
 sudo docker compose -f /opt/filedtracker/docker-compose.prod.yml restart
 ```
 
-
 ## 2. One-time server setup
 
-SSH:
+SSH (use the host from your `EC2_HOST` secret):
 
 ```bash
-ssh -i your-key.pem ubuntu@13.200.220.168
-# or: ssh -i your-key.pem ec2-user@13.200.220.168
+ssh -i your-key.pem ubuntu@<EC2_HOST>
 ```
 
 Then:
@@ -56,7 +57,31 @@ sudo bash deploy/ec2-setup.sh
 nano /opt/filedtracker/.env
 ```
 
-Set strong `POSTGRES_PASSWORD`, `JWT_SECRET`, `ADMIN_PASSWORD`, and Fast2SMS keys.
+Set strong values for:
+
+- `POSTGRES_PASSWORD`
+- `JWT_SECRET` (32+ random characters)
+- `ADMIN_PASSWORD`
+- `CRON_SECRET` (32+ random characters — **required in production**)
+- `FAST2SMS_*` keys
+- `GOOGLE_MAPS_API_KEY`
+
+### HTTPS (Let's Encrypt)
+
+```bash
+sudo apt install -y certbot python3-certbot-nginx
+sudo certbot --nginx -d filed.videh.co.in
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+### Google Maps API key (rotate if ever exposed)
+
+1. Google Cloud Console → APIs & Services → Credentials
+2. **Disable** the old key
+3. Create a new key with:
+   - **Application restrictions:** HTTP referrers → `https://filed.videh.co.in/*`
+   - **API restrictions:** Maps JavaScript API, Roads API only
+4. Update `GOOGLE_MAPS_API_KEY` in `/opt/filedtracker/.env` and redeploy
 
 First start:
 
@@ -65,9 +90,9 @@ cd /opt/filedtracker
 docker compose up -d --build
 ```
 
-App: `http://13.200.220.168`
+App: `https://filed.videh.co.in`
 
-Admin: `http://13.200.220.168/admin/login`
+Admin: `https://filed.videh.co.in/admin/login`
 
 ## 3. GitHub Secrets (auto deploy)
 
@@ -75,7 +100,7 @@ Repo → Settings → Secrets and variables → Actions:
 
 | Secret | Value |
 | --- | --- |
-| `EC2_HOST` | `13.200.220.168` |
+| `EC2_HOST` | EC2 public hostname or IP (not committed to git) |
 | `EC2_USER` | `ubuntu` or `ec2-user` |
 | `EC2_SSH_KEY` | full private key (`.pem` contents), including `BEGIN/END` lines |
 
@@ -95,4 +120,16 @@ And remove the `db` service from compose, or keep app-only:
 
 ```bash
 docker compose up -d --build app
+```
+
+## 5. Post-deploy security checks
+
+```bash
+# Maps key must NOT be public
+curl -s https://filed.videh.co.in/api/maps/config
+# Expected: {"error":"Unauthorized"}
+
+# Cron must require secret
+curl -s -H "x-filedtracker-cron: 1" https://filed.videh.co.in/api/cron/auto-punch-out
+# Expected: {"error":"Unauthorized"}
 ```

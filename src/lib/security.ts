@@ -16,8 +16,12 @@ export function normalizePhone(raw: string) {
   return null;
 }
 
+export const OTP_LENGTH = 6;
+
 export function generateOtp() {
-  return String(randomInt(1000, 10000));
+  const min = 10 ** (OTP_LENGTH - 1);
+  const max = 10 ** OTP_LENGTH;
+  return String(randomInt(min, max));
 }
 
 export function hashOtp(phone: string, code: string) {

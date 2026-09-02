@@ -5,6 +5,10 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
 
+  if (process.env.NODE_ENV === "production" && !process.env.CRON_SECRET) {
+    console.error("[security] CRON_SECRET is not set — /api/cron/auto-punch-out will reject all requests");
+  }
+
   const INTERVAL_MS = 15 * 60 * 1000;
   const BOOT_DELAY_MS = 45_000;
 
