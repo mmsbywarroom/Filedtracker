@@ -52,3 +52,32 @@ export function userPinnedFlagFromSessions(
     reason: flagged ? pinnedFlagReason(best) : "",
   };
 }
+
+export function dominantCoordGroup<T extends { lat: number; lng: number }>(
+  snapshots: T[]
+): { key: string; count: number; items: T[] } | null {
+  if (!snapshots.length) return null;
+  const groups = new Map<string, T[]>();
+  for (const s of snapshots) {
+    const k = coordKey(s.lat, s.lng);
+    const list = groups.get(k) || [];
+    list.push(s);
+    groups.set(k, list);
+  }
+  let best: { key: string; count: number; items: T[] } | null = null;
+  for (const [key, items] of Array.from(groups.entries())) {
+    if (!best || items.length > best.count) {
+      best = { key, count: items.length, items };
+    }
+  }
+  return best;
+}
+
+export function slotLabel(slot: number): string {
+  const mins = slot * 30;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h && m) return `${h}h ${m}m after punch-in`;
+  if (h) return `${h}h after punch-in`;
+  return `${m}m after punch-in`;
+}

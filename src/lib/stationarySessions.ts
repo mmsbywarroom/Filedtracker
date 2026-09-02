@@ -1,4 +1,5 @@
 import { haversineMeters, mapGpsSpreadFromFixes } from "@/lib/utils";
+import { coordKey } from "@/lib/attendanceIntervalFlag";
 
 export type StationarySessionRow = {
   userId: string;
@@ -154,4 +155,15 @@ export function punchInOutGapM(att: {
     { lat: att.punchInLat, lng: att.punchInLng },
     { lat: att.punchOutLat, lng: att.punchOutLng }
   );
+}
+
+/** Punch-in and punch-out at the same lat/lng (5 decimal places ≈ 1 m). */
+export function isExactSamePunchInOut(att: {
+  punchInLat: number;
+  punchInLng: number;
+  punchOutLat: number | null;
+  punchOutLng: number | null;
+}) {
+  if (att.punchOutLat == null || att.punchOutLng == null) return false;
+  return coordKey(att.punchInLat, att.punchInLng) === coordKey(att.punchOutLat, att.punchOutLng);
 }

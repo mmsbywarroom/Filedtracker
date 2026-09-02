@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { PaginationBar } from "@/components/PaginationBar";
 import { SearchSelect } from "@/components/SearchSelect";
+import AdminUsersMap, { type LiveMapUser } from "@/components/AdminUsersMapDynamic";
 import { hierarchyDesignations } from "@/lib/hierarchy";
 import { downloadAssemblyAttendancePdfZip } from "@/lib/assemblyAttendancePdf";
+import { downloadCsv } from "@/lib/reportExport";
 
 type AttStatus = "present" | "half_day" | "absent" | "leave";
 type RowStatus = AttStatus | "pending";
@@ -40,6 +42,34 @@ type Summary = {
   flagged: number;
   total: number;
 };
+
+type SnapshotRow = {
+  slot: number;
+  slotLabel: string;
+  lat: number;
+  lng: number;
+  recordedAt: string;
+  sameGroup: boolean;
+};
+
+type FlagDetail = {
+  name: string;
+  phone: string;
+  sameCount: number;
+  sameSnapshots: SnapshotRow[];
+  sessions: {
+    punchInAt: string;
+    punchOutAt: string | null;
+    snapshots: SnapshotRow[];
+    sameSnapshots: SnapshotRow[];
+    dominantCount: number;
+  }[];
+};
+
+function fmtDateTime(iso: string | null) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
+}
 
 function todayIst() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
@@ -93,6 +123,12 @@ export default function AttendanceModulePage() {
   const [reason, setReason] = useState("");
   const [statusErr, setStatusErr] = useState("");
   const [zipBusy, setZipBusy] = useState(false);
+  const [mapUsers, setMapUsers] = useState<LiveMapUser[]>([]);
+  const [mapLiveOnly, setMapLiveOnly] = useState(false);
+  const [mapSelectedUserId, setMapSelectedUserId] = useState<string | null>(null);
+  const [flagDetail, setFlagDetail] = useState<FlagDetail | null>(null);
+  const [flagBusy, setFlagBusy] = useState<string | null>(null);
+  const [flagShowAll, setFlagShowAll] = useState(false);
 
   async function load() {
     const params = new URLSearchParams({ date });
@@ -117,6 +153,21 @@ export default function AttendanceModulePage() {
       })
       .catch(() => {});
   }, [date]);
+
+  const loadMapUsers = useCallback(async () => {
+    const params = new URLSearchParams({ date });
+    if (mapLiveOnly) params.set("liveOnly", "1");
+    const res = await fetch(`/api/admin/live-locations?${params}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    setMapUsers(data.users || []);
+  }, [date, mapLiveOnly]);
+
+  useEffect(() => {
+    void loadMapUsers();
+    const id = window.setInterval(() => void loadMapUsers(), 60_000);
+    return () => window.clearInterval(id);
+  }, [loadMapUsers]);
 
   const rows = useMemo(() => {
     const sectorQ = sector.trim().toLowerCase();
@@ -190,6 +241,56 @@ export default function AttendanceModulePage() {
 
   const pageRows = useMemo(() => rows.slice((page - 1) * pageSize, (page - 1) * pageSize + pageSize), [rows, page, pageSize]);
 
+  const rowUserIds = useMemo(() => new Set(rows.map((r) => r.userId)), [rows]);
+  const filteredMapUsers = useMemo(
+    () => mapUsers.filter((u) => rowUserIds.has(u.userId)),
+    [mapUsers, rowUserIds]
+  );
+
+  const exportHeaders = [
+    "Date",
+    "Name",
+    "Phone",
+    "Designation",
+    "Assembly",
+    "Sector",
+    "Zone",
+    "District",
+    "Punch In",
+    "Punch Out",
+    "Hours",
+    "Status",
+    "Source",
+    "Flagged",
+    "Same Checks",
+    "Flag Reason",
+    "Why",
+  ];
+
+  const exportRows = useMemo(
+    () =>
+      rows.map((r) => [
+        date,
+        r.name,
+        r.phone,
+        r.designation,
+        r.assemblyName,
+        r.sectorAllotted,
+        r.zone,
+        r.district,
+        fmtDateTime(r.punchInAt),
+        fmtDateTime(r.punchOutAt),
+        r.hoursWorked > 0 ? r.hoursWorked : "",
+        r.statusLabel,
+        r.source,
+        r.flagged ? "Yes" : "No",
+        r.flagSameCount || "",
+        r.flagReason || "",
+        r.reason,
+      ]),
+    [rows, date]
+  );
+
   async function downloadZip() {
     if (!allRows.length) return;
     setZipBusy(true);
@@ -197,6 +298,35 @@ export default function AttendanceModulePage() {
       await downloadAssemblyAttendancePdfZip(date, allRows);
     } finally {
       setZipBusy(false);
+    }
+  }
+
+  function downloadCsvExport() {
+    if (!rows.length) return;
+    downloadCsv(`attendance-${date}`, exportHeaders, exportRows);
+  }
+
+  async function openFlagDetail(userId: string, name: string) {
+    setFlagBusy(userId);
+    setFlagShowAll(false);
+    try {
+      const params = new URLSearchParams({ userId, date });
+      const res = await fetch(`/api/admin/daily-attendance/interval-snapshots?${params}`);
+      if (res.status === 401) {
+        window.location.href = "/admin/login";
+        return;
+      }
+      const data = await res.json();
+      if (!res.ok) return;
+      setFlagDetail({
+        name: data.user?.name || name,
+        phone: data.user?.phone || "",
+        sameCount: data.sameCount || 0,
+        sameSnapshots: data.sameSnapshots || [],
+        sessions: data.sessions || [],
+      });
+    } finally {
+      setFlagBusy(null);
     }
   }
 
@@ -337,7 +467,7 @@ export default function AttendanceModulePage() {
             />
           </div>
         </div>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center md:col-span-3 lg:col-span-4 xl:col-span-8">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center md:col-span-3 lg:col-span-4 xl:col-span-8">
           <button
             type="button"
             onClick={downloadZip}
@@ -346,12 +476,76 @@ export default function AttendanceModulePage() {
           >
             {zipBusy ? "Preparing PDF ZIP…" : `Download PDF ZIP (${allRows.length} users · ${date})`}
           </button>
+          <button
+            type="button"
+            onClick={downloadCsvExport}
+            disabled={!rows.length}
+            className="h-11 rounded-xl border border-navy/15 bg-white px-4 text-sm font-semibold text-navy disabled:opacity-40"
+          >
+            Download CSV ({rows.length} rows · filters applied)
+          </button>
+          <a
+            href="/api/admin/stationary-sessions?days=7&exact=1&sessions=1"
+            className="inline-flex h-11 items-center rounded-xl border border-violet-200 bg-violet-50 px-4 text-sm font-semibold text-violet-900"
+          >
+            Same in/out lat-lng CSV (7 days)
+          </a>
           <p className="text-xs text-navy/50">
-            One PDF per Halka — file name = Halka code (e.g. DB_JU_Jalandhar Cantt.pdf). Each PDF has that Halka
-            summary + full attendance table for the selected date.
+            PDF ZIP = one file per Halka. CSV = current filtered table. Violet = last 7 days where punch-in & punch-out
+            lat/lng match (with coordinates).
           </p>
         </div>
       </div>
+
+      <section className="admin-panel mb-4 p-4">
+        <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-semibold">Live map — user locations</h2>
+            <p className="text-xs text-navy/50">
+              Green = punched in now · Grey = last known today · Map follows your table filters · refreshes every 60s
+            </p>
+          </div>
+          <label className="flex items-center gap-2 text-xs font-medium text-navy/60">
+            <input
+              type="checkbox"
+              checked={mapLiveOnly}
+              onChange={(e) => setMapLiveOnly(e.target.checked)}
+              className="rounded border-navy/20"
+            />
+            Live users only
+          </label>
+        </div>
+        <AdminUsersMap
+          users={filteredMapUsers}
+          selectedUserId={mapSelectedUserId}
+          onSelectUser={setMapSelectedUserId}
+          height={420}
+        />
+        {!!filteredMapUsers.length && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {filteredMapUsers.slice(0, 12).map((u) => (
+              <button
+                key={u.userId}
+                type="button"
+                onClick={() => setMapSelectedUserId(u.userId)}
+                className={`rounded-lg px-2 py-1 text-xs font-medium ${
+                  mapSelectedUserId === u.userId
+                    ? "bg-emerald-600 text-white"
+                    : u.isLive
+                      ? "bg-emerald-50 text-emerald-800"
+                      : "bg-navy/5 text-navy/70"
+                }`}
+              >
+                {u.name}
+                {u.isLive ? " · live" : ""}
+              </button>
+            ))}
+            {filteredMapUsers.length > 12 ? (
+              <span className="self-center text-xs text-navy/45">+{filteredMapUsers.length - 12} more on map</span>
+            ) : null}
+          </div>
+        )}
+      </section>
 
       <section className="admin-panel overflow-hidden">
         <div className="overflow-auto">
@@ -419,7 +613,14 @@ export default function AttendanceModulePage() {
                       <span className="text-xs text-navy/35">—</span>
                     )}
                     {r.flagged && r.flagSameCount ? (
-                      <p className="mt-1 text-[10px] text-violet-700/80">{r.flagSameCount} same checks</p>
+                      <button
+                        type="button"
+                        disabled={flagBusy === r.userId}
+                        onClick={() => void openFlagDetail(r.userId, r.name)}
+                        className="mt-1 text-[10px] font-semibold text-violet-700 underline decoration-violet-300 underline-offset-2 hover:text-violet-900 disabled:opacity-50"
+                      >
+                        {flagBusy === r.userId ? "Loading…" : `${r.flagSameCount} same checks`}
+                      </button>
                     ) : null}
                   </td>
                   <td className="px-4 py-3 max-w-[240px] text-xs text-navy/55">
@@ -438,6 +639,84 @@ export default function AttendanceModulePage() {
           <PaginationBar page={page} pageSize={pageSize} total={rows.length} onPage={setPage} onPageSize={setPageSize} />
         )}
       </section>
+
+      {flagDetail && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-navy/40 p-4">
+          <div className="flex max-h-[90vh] w-full max-w-3xl flex-col rounded-2xl bg-white shadow-card">
+            <div className="border-b border-navy/10 px-5 py-4">
+              <h2 className="text-lg font-semibold">Flag location checks</h2>
+              <p className="mt-1 text-sm text-navy/60">
+                {flagDetail.name} · {flagDetail.phone} · {date}
+              </p>
+              <p className="mt-1 text-xs text-violet-800">
+                {flagDetail.sameCount} checks at the same lat/lng (thirty-minute intervals)
+              </p>
+              <label className="mt-3 flex items-center gap-2 text-xs font-medium text-navy/60">
+                <input
+                  type="checkbox"
+                  checked={flagShowAll}
+                  onChange={(e) => setFlagShowAll(e.target.checked)}
+                  className="rounded border-navy/20"
+                />
+                Show all interval checks (not only same-location group)
+              </label>
+            </div>
+            <div className="overflow-auto px-5 py-4">
+              {(flagShowAll ? flagDetail.sessions : [{ punchInAt: "", punchOutAt: null, snapshots: flagDetail.sameSnapshots }]).map(
+                (sess, idx) => {
+                  const list = flagShowAll ? sess.snapshots : flagDetail.sameSnapshots;
+                  if (!list.length) {
+                    return (
+                      <p key={idx} className="text-sm text-navy/50">
+                        No interval snapshots recorded yet.
+                      </p>
+                    );
+                  }
+                  return (
+                    <div key={idx} className={flagShowAll && idx > 0 ? "mt-6 border-t border-navy/10 pt-4" : ""}>
+                      {flagShowAll && "punchInAt" in sess && sess.punchInAt ? (
+                        <p className="mb-2 text-xs font-semibold text-navy/55">
+                          Session {idx + 1}: {fmtDateTime(sess.punchInAt)} → {fmtDateTime(sess.punchOutAt)}
+                        </p>
+                      ) : null}
+                      <table className="min-w-full text-left text-sm">
+                        <thead className="text-[11px] font-semibold uppercase tracking-wider text-navy/45">
+                          <tr>
+                            <th className="px-2 py-2">#</th>
+                            <th className="px-2 py-2">Interval</th>
+                            <th className="px-2 py-2">Latitude</th>
+                            <th className="px-2 py-2">Longitude</th>
+                            <th className="px-2 py-2">Recorded</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {list.map((snap, i) => (
+                            <tr
+                              key={`${snap.slot}-${i}`}
+                              className={`border-t border-navy/5 ${snap.sameGroup || !flagShowAll ? "bg-violet-50/80" : ""}`}
+                            >
+                              <td className="px-2 py-2">{i + 1}</td>
+                              <td className="px-2 py-2 text-xs">{snap.slotLabel || `Slot ${snap.slot}`}</td>
+                              <td className="px-2 py-2 font-mono text-xs">{snap.lat.toFixed(6)}</td>
+                              <td className="px-2 py-2 font-mono text-xs">{snap.lng.toFixed(6)}</td>
+                              <td className="px-2 py-2 text-xs text-navy/55">{fmtDateTime(snap.recordedAt)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                }
+              )}
+            </div>
+            <div className="flex justify-end gap-2 border-t border-navy/10 px-5 py-4">
+              <button type="button" onClick={() => setFlagDetail(null)} className="admin-btn-secondary">
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {pending && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-navy/40 p-4">
