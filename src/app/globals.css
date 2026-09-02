@@ -26,6 +26,11 @@ body {
   @apply bg-sand text-ink antialiased;
 }
 
+/* Capacitor — keep headers below status bar (time, battery) */
+body.capacitor-native .app-header-safe {
+  padding-top: max(0.75rem, var(--status-bar-height, 28px));
+}
+
 .leaflet-container {
   background: #e8eef8;
   font-family: inherit;

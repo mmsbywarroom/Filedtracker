@@ -4,7 +4,6 @@ import android.util.Log;
 
 import org.json.JSONObject;
 
-import java.io.IOException;
 import java.util.concurrent.TimeUnit;
 
 import okhttp3.MediaType;
@@ -68,7 +67,7 @@ public final class TrackingApi {
                     Log.w(TAG, "track heartbeat " + res.code());
                 }
             }
-        } catch (IOException e) {
+        } catch (Exception e) {
             Log.w(TAG, "postHeartbeat failed", e);
         }
     }

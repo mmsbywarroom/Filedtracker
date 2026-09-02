@@ -8,6 +8,8 @@ import RouteMap from "@/components/RouteMapDynamic";
 import { formatDuration, formatKm, mapGpsSpreadFromFixes, shouldCreditTrackStep, sessionTravelMeters } from "@/lib/utils";
 import { isSlotDueNow, MAX_INTERVAL_SLOTS } from "@/lib/attendanceIntervalFlag";
 import { isNativeApp, syncNativeBackgroundTracking } from "@/lib/nativeBackgroundLocation";
+import { logoutUser } from "@/lib/nativeApp";
+import { NativeLocationBanner } from "@/components/NativeLocationBanner";
 import {
   captureGpsFix,
   getFreshPosition,
@@ -715,8 +717,7 @@ export default function DashboardPage() {
   }, [open, livePos, todayDistanceMeters]);
 
   async function logout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    window.location.href = "/";
+    await logoutUser();
   }
 
   if (!user) {
@@ -751,6 +752,7 @@ export default function DashboardPage() {
   return (
     <main className="min-h-screen overflow-x-hidden bg-sand">
       <div className="mx-auto max-w-6xl px-4 py-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+        <NativeLocationBanner punchedIn={Boolean(open)} punchInAt={open?.punchInAt} />
         <header className="mb-4 flex flex-wrap items-start justify-between gap-2 rounded-3xl bg-white px-4 py-3 shadow-card">
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <BrandMark size={56} />

@@ -50,7 +50,7 @@ export default function HomePage() {
 
   return (
     <main className="flex min-h-screen flex-col bg-sand">
-      <header className="bg-ink text-white">
+      <header className="app-header-safe bg-ink text-white">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4">
           <div className="flex items-center gap-3">
             <BrandMark size={56} tone="onDark" />

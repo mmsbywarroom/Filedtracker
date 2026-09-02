@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { averageDescriptors, loadFaceModels, scanFace, type FaceScan, type FaceScanError } from "@/lib/face";
+import { ensureNativeCameraPermission } from "@/lib/nativeApp";
 import { isIosBrowser } from "@/lib/deviceGeo";
 import { useLang } from "@/lib/i18n";
 import { jpegQuality, jpegSize } from "@/lib/network";
@@ -93,6 +94,11 @@ export function FaceCapture({ actionLabel, onCapture, busy, mode = "verify", tur
     (async () => {
       try {
         const ios = isIosBrowser();
+        const camOk = await ensureNativeCameraPermission();
+        if (!camOk) {
+          setError(t("camAllow"));
+          return;
+        }
         // Lower ideal resolution = faster preview + faster ML
         stream = await navigator.mediaDevices.getUserMedia({
           video: {
