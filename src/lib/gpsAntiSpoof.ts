@@ -303,48 +303,45 @@ export async function recordGpsSpoofLog(opts: {
   attendanceId?: string | null;
 }) {
   try {
-    if (opts.attendanceId && (opts.outcome === "blocked" || opts.outcome === "flagged")) {
-      const existing = await prisma.gpsSpoofLog.findFirst({
-        where: { attendanceId: opts.attendanceId, outcome: opts.outcome },
-      });
-      if (existing) return existing;
-    }
+    const data = {
+      userName: opts.user.name,
+      userPhone: opts.user.phone,
+      userDesignation: opts.user.designation || "",
+      assemblyName: opts.user.assemblyName || "",
+      zone: opts.user.zone || "",
+      district: opts.user.district || "",
+      action: opts.action,
+      outcome: opts.outcome,
+      flags: opts.flags,
+      lat: opts.lat ?? null,
+      lng: opts.lng ?? null,
+      accuracy: opts.accuracy ?? null,
+      sampleCount: opts.sampleCount ?? 0,
+      maxSpreadM: opts.maxSpreadM ?? null,
+      detail: opts.detail,
+      attendanceId: opts.attendanceId ?? null,
+    };
 
-    if (!opts.attendanceId && opts.outcome === "blocked") {
-      const ymd = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
-      const dayStart = new Date(`${ymd}T00:00:00+05:30`);
+    // One log per user for blocked/flagged — update existing instead of creating duplicates.
+    if (opts.outcome === "blocked" || opts.outcome === "flagged") {
       const existing = await prisma.gpsSpoofLog.findFirst({
-        where: {
-          userId: opts.userId,
-          action: opts.action,
-          outcome: "blocked",
-          attendanceId: null,
-          createdAt: { gte: dayStart },
-        },
+        where: { userId: opts.userId, outcome: { in: ["blocked", "flagged"] } },
+        orderBy: { createdAt: "desc" },
       });
-      if (existing) return existing;
+      if (existing) {
+        return await prisma.gpsSpoofLog.update({
+          where: { id: existing.id },
+          data: {
+            ...data,
+            outcome: opts.outcome === "blocked" || existing.outcome === "blocked" ? "blocked" : "flagged",
+            createdAt: new Date(),
+          },
+        });
+      }
     }
 
     return await prisma.gpsSpoofLog.create({
-      data: {
-        userId: opts.userId,
-        userName: opts.user.name,
-        userPhone: opts.user.phone,
-        userDesignation: opts.user.designation || "",
-        assemblyName: opts.user.assemblyName || "",
-        zone: opts.user.zone || "",
-        district: opts.user.district || "",
-        action: opts.action,
-        outcome: opts.outcome,
-        flags: opts.flags,
-        lat: opts.lat ?? null,
-        lng: opts.lng ?? null,
-        accuracy: opts.accuracy ?? null,
-        sampleCount: opts.sampleCount ?? 0,
-        maxSpreadM: opts.maxSpreadM ?? null,
-        detail: opts.detail,
-        attendanceId: opts.attendanceId ?? null,
-      },
+      data: { userId: opts.userId, ...data },
     });
   } catch (e) {
     console.error("recordGpsSpoofLog", e);

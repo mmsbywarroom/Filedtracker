@@ -4,6 +4,15 @@ import { GPS_SPOOF_FLAG_LABELS, type GpsSpoofFlag } from "@/lib/gpsAntiSpoof";
 import { reviewScopeWhere } from "@/lib/hierarchy";
 import { prisma } from "@/lib/prisma";
 
+function dedupeLatestPerUser<T extends { userId: string; createdAt: Date }>(rows: T[]): T[] {
+  const byUser = new Map<string, T>();
+  for (const r of rows) {
+    const prev = byUser.get(r.userId);
+    if (!prev || r.createdAt > prev.createdAt) byUser.set(r.userId, r);
+  }
+  return Array.from(byUser.values()).sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+}
+
 export async function GET(req: Request) {
   const s = await requireAdmin();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -36,11 +45,13 @@ export async function GET(req: Request) {
     where.outcome = outcome;
   }
 
-  const rows = await prisma.gpsSpoofLog.findMany({
-    where,
-    orderBy: { createdAt: "desc" },
-    take: 500,
-  });
+  const rows = dedupeLatestPerUser(
+    await prisma.gpsSpoofLog.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      take: 2000,
+    })
+  ).slice(0, 500);
 
   const userIds = Array.from(new Set(rows.map((r) => r.userId)));
   const bypassRows =
@@ -100,4 +111,23 @@ export async function GET(req: Request) {
     }));
 
   return NextResponse.json({ logs });
+}
+
+/** Permanently delete all spoof logs in admin scope (one-time cleanup). */
+export async function DELETE() {
+  const s = await requireAdmin();
+  if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const scoped = await prisma.user.findMany({
+    where: reviewScopeWhere(s.admin),
+    select: { id: true },
+  });
+  const ids = scoped.map((u) => u.id);
+  if (!ids.length) return NextResponse.json({ deleted: 0 });
+
+  const result = await prisma.gpsSpoofLog.deleteMany({
+    where: { userId: { in: ids } },
+  });
+
+  return NextResponse.json({ deleted: result.count, ok: true });
 }
