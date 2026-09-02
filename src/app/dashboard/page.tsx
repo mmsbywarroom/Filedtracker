@@ -774,7 +774,7 @@ export default function DashboardPage() {
 
         {gpsOffFlag && (
           <div className="mb-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
-            <p className="font-semibold">Punched out because GPS was turned off</p>
+            <p className="font-semibold">{t("gpsOffTitle")}</p>
             <p className="mt-1">{t("gpsOffFlag")}</p>
           </div>
         )}
@@ -846,9 +846,7 @@ export default function DashboardPage() {
                   {t("live")} · {formatDuration(live?.durationMs || 0)} · {formatKm(live?.travelMeters || 0)}
                 </span>
                 <p className="text-xs text-amber-800">
-                  {isNativeApp()
-                    ? "Background GPS active — allow Always location. Notification dikhegi jab punched in ho."
-                    : "Har 30 minute GPS check — app open rakhein. Screen band / doosra app = check miss ho sakta hai (browser limit). Install Field Tracking app for background GPS."}
+                  {isNativeApp() ? t("nativeGpsActive") : t("nativeGpsBrowserHint")}
                 </p>
               </div>
             ) : (
@@ -859,7 +857,7 @@ export default function DashboardPage() {
                   disabled={locating}
                   className="w-full rounded-2xl bg-teal px-5 py-4 text-base font-semibold text-white disabled:opacity-70"
                 >
-                  {locating ? "Getting location…" : t("punchIn")}
+                  {locating ? t("gpsLocating") : t("punchIn")}
                 </button>
                 <p className="text-center text-xs text-navy/45 sm:text-left">{t("punchStart")}</p>
               </div>
@@ -869,17 +867,15 @@ export default function DashboardPage() {
 
         {!livePos && mode === "idle" && !open && (
           <div className="mb-3 rounded-2xl border border-teal/25 bg-teal/5 p-4">
-            <p className="text-sm font-semibold text-navy">Step 1 — Enable location (required)</p>
-            <p className="mt-1 text-xs text-navy/60">
-              iPhone needs your tap to find GPS. Allow Location when asked, then Punch In.
-            </p>
+            <p className="text-sm font-semibold text-navy">{t("enableLocationTitle")}</p>
+            <p className="mt-1 text-xs text-navy/60">{t("enableLocationHint")}</p>
             <button
               type="button"
               onClick={enableLocation}
               disabled={locating}
               className="mt-3 w-full rounded-xl bg-teal px-4 py-3 text-sm font-semibold text-white disabled:opacity-70"
             >
-              {locating ? "Finding location…" : "Show my location on map"}
+              {locating ? t("findingLocation") : t("showMyLocation")}
             </button>
           </div>
         )}
@@ -894,6 +890,8 @@ export default function DashboardPage() {
                 locating={locating}
                 locationError={gpsError}
                 onLocateMe={enableLocation}
+                refreshGpsLabel={t("refreshGps")}
+                updatingGpsLabel={t("pleaseWait")}
                 durationMs={live?.durationMs}
                 distanceMeters={live?.travelMeters}
               />

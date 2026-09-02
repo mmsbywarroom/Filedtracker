@@ -13,6 +13,8 @@ type Props = {
   liveLocation?: { lat: number; lng: number } | null;
   locating?: boolean;
   locationError?: string;
+  refreshGpsLabel?: string;
+  updatingGpsLabel?: string;
   onLocateMe?: () => void;
   startLabel?: string;
   endLabel?: string;
@@ -54,6 +56,8 @@ export default function RouteMap({
   locating,
   locationError,
   onLocateMe,
+  refreshGpsLabel = "Refresh GPS",
+  updatingGpsLabel = "Updating…",
   startLabel = "Punch in",
   endLabel = "Punch out",
   durationMs,
@@ -251,7 +255,7 @@ export default function RouteMap({
           disabled={locating}
           className="absolute right-3 top-3 z-10 rounded-full bg-white/95 px-3 py-1.5 text-[11px] font-semibold text-navy/70 shadow ring-1 ring-navy/10 active:scale-[0.98] disabled:opacity-70 touch-manipulation"
         >
-          {locating ? "Updating…" : "↻ Refresh GPS"}
+          {locating ? updatingGpsLabel : `↻ ${refreshGpsLabel}`}
         </button>
       )}
       {!error && !liveLocation && !points.length && !punchIn && (

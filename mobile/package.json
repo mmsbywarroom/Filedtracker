@@ -6,7 +6,7 @@
   "scripts": {
     "build:plugin": "npm run build --prefix plugins/field-background-location",
     "cap:sync": "npm run build:plugin && npx cap sync",
-    "cap:icons": "npx capacitor-assets generate --android --assetPath assets --iconBackgroundColor \"#ffffff\" --splashBackgroundColor \"#F5F0E1\"",
+    "cap:icons": "node scripts/make-icon.mjs && npx capacitor-assets generate --android --assetPath assets --iconBackgroundColor \"#0A1628\" --iconBackgroundColorDark \"#0A1628\" --splashBackgroundColor \"#F5F0E1\"",
     "cap:open:android": "npx cap open android",
     "cap:open:ios": "npx cap open ios",
     "cap:run:android": "npx cap run android",
@@ -25,6 +25,7 @@
   "devDependencies": {
     "@capacitor/assets": "^3.0.5",
     "@capacitor/cli": "^7.4.2",
+    "sharp": "^0.33.5",
     "typescript": "^5.6.2"
   },
   "capacitor": {
