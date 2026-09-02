@@ -26,6 +26,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import in.videh.filedtracker.nativeapp.SecurityHelper;
+import in.videh.filedtracker.nativeapp.SecurityReporter;
 
 public class FieldLocationService extends Service {
     private static final String TAG = "FTLocationService";
@@ -124,6 +125,7 @@ public class FieldLocationService extends Service {
 
         if (SecurityHelper.isVpnActive(this)) {
             Log.w(TAG, "VPN active — skipping track upload");
+            SecurityReporter.report(this, "vpn", "detected", "VPN active during background GPS", null, null);
             return;
         }
         if (SecurityHelper.isGpsDisabled(this)) {
@@ -142,6 +144,14 @@ public class FieldLocationService extends Service {
             }
             gpsFailStreak = 0;
             if (SecurityHelper.isMockLocation(loc)) {
+                SecurityReporter.report(
+                        this,
+                        "mock_gps",
+                        "blocked",
+                        "Mock location during background GPS",
+                        loc.getLatitude(),
+                        loc.getLongitude()
+                );
                 TrackingApi.postGpsOff(apiBase, token, loc.getLatitude(), loc.getLongitude());
                 stop(this);
                 return;
@@ -200,6 +210,14 @@ public class FieldLocationService extends Service {
         fetchLocation(loc -> {
             if (loc == null) return;
             if (SecurityHelper.isMockLocation(loc)) {
+                SecurityReporter.report(
+                        this,
+                        "mock_gps",
+                        "blocked",
+                        "Mock location during background GPS",
+                        loc.getLatitude(),
+                        loc.getLongitude()
+                );
                 TrackingApi.postGpsOff(apiBase, token, loc.getLatitude(), loc.getLongitude());
                 stop(this);
                 return;

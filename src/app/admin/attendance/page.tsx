@@ -31,6 +31,7 @@ type Row = {
   flagged?: boolean;
   flagReason?: string;
   flagSameCount?: number;
+  hasSameInOutSession?: boolean;
 };
 
 type Summary = {
@@ -106,6 +107,7 @@ export default function AttendanceModulePage() {
   const [date, setDate] = useState(todayIst);
   const [statusFilter, setStatusFilter] = useState("");
   const [flagFilter, setFlagFilter] = useState("");
+  const [sameCoordsFilter, setSameCoordsFilter] = useState("");
   const [zone, setZone] = useState("");
   const [district, setDistrict] = useState("");
   const [assembly, setAssembly] = useState("");
@@ -183,6 +185,8 @@ export default function AttendanceModulePage() {
       if (statusFilter && r.status !== statusFilter) return false;
       if (flagFilter === "flagged" && !r.flagged) return false;
       if (flagFilter === "not_flagged" && r.flagged) return false;
+      if (sameCoordsFilter === "yes" && !r.hasSameInOutSession) return false;
+      if (sameCoordsFilter === "no" && r.hasSameInOutSession) return false;
       if (textQ) {
         const text = [r.name, r.phone, r.assemblyName, r.designation, r.zone, r.district, r.sectorAllotted]
           .join(" ")
@@ -191,7 +195,7 @@ export default function AttendanceModulePage() {
       }
       return true;
     });
-  }, [allRows, zone, district, assembly, designation, sector, statusFilter, flagFilter, q]);
+  }, [allRows, zone, district, assembly, designation, sector, statusFilter, flagFilter, sameCoordsFilter, q]);
 
   const summary = useMemo(() => {
     const s: Summary = { present: 0, halfDay: 0, absent: 0, leave: 0, pending: 0, flagged: 0, total: rows.length };
@@ -208,7 +212,7 @@ export default function AttendanceModulePage() {
 
   useEffect(() => {
     setPage(1);
-  }, [zone, district, assembly, designation, sector, statusFilter, flagFilter, q, pageSize]);
+  }, [zone, district, assembly, designation, sector, statusFilter, flagFilter, sameCoordsFilter, q, pageSize]);
 
   async function applyStatus() {
     if (!pending) return;
@@ -294,10 +298,10 @@ export default function AttendanceModulePage() {
   );
 
   async function downloadZip() {
-    if (!allRows.length) return;
+    if (!rows.length) return;
     setZipBusy(true);
     try {
-      await downloadAssemblyAttendancePdfZip(date, allRows);
+      await downloadAssemblyAttendancePdfZip(date, rows);
     } finally {
       setZipBusy(false);
     }
@@ -415,6 +419,18 @@ export default function AttendanceModulePage() {
           </select>
         </label>
         <label className="text-xs font-medium text-navy/55">
+          Same in/out lat-lng
+          <select
+            value={sameCoordsFilter}
+            onChange={(e) => setSameCoordsFilter(e.target.value)}
+            className={`${selectClass} mt-1`}
+          >
+            <option value="">All</option>
+            <option value="yes">Same coordinates</option>
+            <option value="no">Different coordinates</option>
+          </select>
+        </label>
+        <label className="text-xs font-medium text-navy/55">
           Designation
           <select value={designation} onChange={(e) => setDesignation(e.target.value)} className={`${selectClass} mt-1`}>
             <option value="">All designations</option>
@@ -473,10 +489,10 @@ export default function AttendanceModulePage() {
           <button
             type="button"
             onClick={downloadZip}
-            disabled={zipBusy || !allRows.length}
+            disabled={zipBusy || !rows.length}
             className="h-11 rounded-xl bg-teal px-4 text-sm font-semibold text-white disabled:opacity-40"
           >
-            {zipBusy ? "Preparing PDF ZIP…" : `Download PDF ZIP (${allRows.length} users · ${date})`}
+            {zipBusy ? "Preparing PDF ZIP…" : `Download PDF ZIP (${rows.length} users · ${date})`}
           </button>
           <button
             type="button"
@@ -493,7 +509,7 @@ export default function AttendanceModulePage() {
             Same in/out lat-lng CSV (7 days)
           </a>
           <p className="text-xs text-navy/50">
-            PDF ZIP = one file per Halka. CSV = current filtered table. Violet = last 7 days where punch-in & punch-out
+            PDF ZIP = one file per Halka (filtered rows only). CSV = current filtered table. Violet = last 7 days where punch-in & punch-out
             lat/lng match (with coordinates).
           </p>
         </div>

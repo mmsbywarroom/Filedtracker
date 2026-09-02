@@ -79,6 +79,12 @@ export default function AdminShell({ children }: { children: ReactNode }) {
       group: "Logs",
     },
     {
+      href: "/admin/security-violations",
+      label: t("securityViolationLogs"),
+      match: (p: string) => p.startsWith("/admin/security-violations"),
+      group: "Logs",
+    },
+    {
       href: "/admin/auto-punch-out",
       label: t("autoPunchOutLogs"),
       match: (p: string) => p.startsWith("/admin/auto-punch-out"),

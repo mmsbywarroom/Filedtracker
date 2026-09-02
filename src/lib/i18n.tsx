@@ -36,6 +36,7 @@ const dict = {
     inProgress: "In progress",
     live: "Live",
     punchStart: "Punch in to start your travel footprint.",
+    punchInWindow: "Punch in is only allowed between 5:00 AM and 1:00 PM (IST).",
     lookCamera: "Look at the camera as you would to unlock your phone.",
     camStarting: "Camera opening…",
     faceLocked: "Face locked",
@@ -93,6 +94,7 @@ const dict = {
     designation: "Designation",
     gpsOffLogs: "GPS off logs",
     gpsSpoofLogs: "Fake GPS logs",
+    securityViolationLogs: "VPN / Fake GPS / Spoof",
     gpsVerifying: "Verifying real GPS location…",
     gpsLocating: "Getting your location…",
     gpsSpoofAutoOut:
@@ -174,6 +176,7 @@ const dict = {
     inProgress: "ਚਾਲੂ",
     live: "ਲਾਈਵ",
     punchStart: "ਰਸਤਾ ਸ਼ੁਰੂ ਕਰਨ ਲਈ ਪੰਚ ਇਨ ਕਰੋ",
+    punchInWindow: "ਪੰਚ ਇਨ ਸਿਰਫ਼ ਸਵੇਰੇ 5:00 ਤੋਂ ਦੁਪਹਿਰ 1:00 ਵਜੇ ਤੱਕ (IST) ਕੀਤਾ ਜਾ ਸਕਦਾ ਹੈ।",
     lookCamera: "ਫੋਨ ਅਨਲਾਕ ਵਾਂਗ ਕੈਮਰਾ ਵੱਲ ਵੇਖੋ",
     camStarting: "ਕੈਮਰਾ ਖੁੱਲ ਰਿਹਾ…",
     faceLocked: "ਚਿਹਰਾ ਲਾਕ",
@@ -231,6 +234,7 @@ const dict = {
     designation: "ਅਹੁਦਾ",
     gpsOffLogs: "GPS ਬੰਦ ਲਾਗ",
     gpsSpoofLogs: "ਫੇਕ GPS ਲਾਗ",
+    securityViolationLogs: "VPN / ਫੇਕ GPS / Spoof",
     gpsVerifying: "ਅਸਲੀ GPS ਜਾਂਚ ਹੋ ਰਹੀ ਹੈ…",
     gpsLocating: "ਤੁਹਾਡੀ ਥਾਂ ਲੱਭੀ ਜਾ ਰਹੀ ਹੈ…",
     gpsSpoofAutoOut:

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { parseClientSource } from "@/lib/clientSource";
+import { isWithinPunchInWindow, punchInWindowMessage } from "@/lib/punchInWindow";
 import { prisma } from "@/lib/prisma";
 import { downsample, sessionTravelMeters } from "@/lib/utils";
 import { sanitizeFaceImage } from "@/lib/faceImage";
@@ -19,7 +20,7 @@ function istDayBounds(d = new Date()) {
   };
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   const s = await requireUser(req);
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
@@ -128,6 +129,8 @@ export async function GET() {
       : null,
     todayDistanceMeters,
     history: history.map((h) => ({ ...h, points: h.id === mapId ? mapPoints : [] })),
+    punchInAllowed: isWithinPunchInWindow(),
+    punchInWindowMessage: punchInWindowMessage(),
   });
 }
 
@@ -190,6 +193,9 @@ export async function POST(req: Request) {
       { error: "You are on approved leave today. Punch in is not allowed." },
       { status: 403 }
     );
+  }
+  if (!isWithinPunchInWindow()) {
+    return NextResponse.json({ error: punchInWindowMessage(), code: "PUNCH_IN_WINDOW" }, { status: 403 });
   }
   const holiday = await findHolidayToday();
   if (holiday && holidayAppliesTo(holiday, user.designation)) {

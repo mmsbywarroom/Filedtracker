@@ -17,4 +17,5 @@
     <string name="live_map">ਲਾਈਵ ਨਕਸ਼ਾ</string>
     <string name="vpn_blocked">ਪੰਚ ਕਰਨ ਤੋਂ ਪਹਿਲਾਂ VPN ਬੰਦ ਕਰੋ।</string>
     <string name="mock_gps_blocked">ਫੇਕ GPS ਮਿਲਿਆ। Location spoofing ਐਪ ਹਟਾਓ।</string>
+    <string name="punch_in_window_blocked">ਪੰਚ ਇਨ ਸਿਰਫ਼ ਸਵੇਰੇ 5:00 ਤੋਂ ਦੁਪਹਿਰ 1:00 ਵਜੇ ਤੱਕ (IST) ਕੀਤਾ ਜਾ ਸਕਦਾ ਹੈ।</string>
 </resources>

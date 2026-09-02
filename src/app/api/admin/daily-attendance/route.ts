@@ -14,6 +14,7 @@ import {
 import { adminPresentLabel, adminPresentRemark, ensureAdminPresentPunch, removeAdminPresentPunch, closeOpenPunchForAdminLeave } from "@/lib/adminPresentPunch";
 import { holidayAppliesTo, holidayLeaveReason } from "@/lib/holidays";
 import { userPinnedFlagFromSessions, filterValidIntervalSnapshots } from "@/lib/attendanceIntervalFlag";
+import { isExactSamePunchInOut } from "@/lib/stationarySessions";
 
 export async function GET(req: Request) {
   const s = await requireAdmin();
@@ -58,7 +59,7 @@ export async function GET(req: Request) {
   const [punches, leaves, marks, holiday] = await Promise.all([
     prisma.attendance.findMany({
       where: { userId: { in: ids }, punchInAt: { gte: start, lte: end } },
-      select: { id: true, userId: true, punchInAt: true, punchOutAt: true },
+      select: { id: true, userId: true, punchInAt: true, punchOutAt: true, punchInLat: true, punchInLng: true, punchOutLat: true, punchOutLng: true },
     }),
     prisma.leaveRequest.findMany({
       where: {
@@ -99,10 +100,29 @@ export async function GET(req: Request) {
     snapsByAttendance.set(snap.attendanceId, list);
   }
 
-  const punchesByUser = new Map<string, { id: string; punchInAt: Date; punchOutAt: Date | null }[]>();
+  const punchesByUser = new Map<
+    string,
+    {
+      id: string;
+      punchInAt: Date;
+      punchOutAt: Date | null;
+      punchInLat: number;
+      punchInLng: number;
+      punchOutLat: number | null;
+      punchOutLng: number | null;
+    }[]
+  >();
   for (const p of punches) {
     const list = punchesByUser.get(p.userId) || [];
-    list.push({ id: p.id, punchInAt: p.punchInAt, punchOutAt: p.punchOutAt });
+    list.push({
+      id: p.id,
+      punchInAt: p.punchInAt,
+      punchOutAt: p.punchOutAt,
+      punchInLat: p.punchInLat,
+      punchInLng: p.punchInLng,
+      punchOutLat: p.punchOutLat,
+      punchOutLng: p.punchOutLng,
+    });
     punchesByUser.set(p.userId, list);
   }
   const onLeave = new Set(leaves.map((l) => l.userId));
@@ -148,6 +168,15 @@ export async function GET(req: Request) {
             .sort((a, b) => (b!.getTime() - a!.getTime()))[0] || null
         : null;
 
+      const hasSameInOutSession = sessions.some((sess) =>
+        isExactSamePunchInOut({
+          punchInLat: sess.punchInLat,
+          punchInLng: sess.punchInLng,
+          punchOutLat: sess.punchOutLat,
+          punchOutLng: sess.punchOutLng,
+        })
+      );
+
       return {
         userId: u.id,
         name: u.name,
@@ -169,6 +198,7 @@ export async function GET(req: Request) {
         flagged: pinFlag.flagged,
         flagReason: pinFlag.reason,
         flagSameCount: pinFlag.sameCount,
+        hasSameInOutSession,
       };
     });
 

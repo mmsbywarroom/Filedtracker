@@ -26,6 +26,11 @@ cd android-native
 
 APK: `android-native/app/build/outputs/apk/debug/app-debug.apk`
 
+Also copied to `public/aap-attendance-native.apk` for download from the server.
+
+> **Note:** The Capacitor app builds to `mobile/android/app/build/outputs/apk/debug/`.  
+> The **native** app is in `android-native/` — not the `mobile/` folder.
+
 ## Server requirements
 
 Deploy latest server code so native Bearer auth works on all user APIs and OTP verify returns `token` in JSON.

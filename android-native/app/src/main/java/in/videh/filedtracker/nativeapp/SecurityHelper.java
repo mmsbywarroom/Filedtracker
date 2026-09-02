@@ -57,21 +57,49 @@ public final class SecurityHelper {
     }
 
     public static boolean hasKnownMockGpsApp(Context ctx) {
+        return findMockGpsAppPackage(ctx) != null;
+    }
+
+    /** Installed user app package name, if a known spoof / fake GPS app is present. */
+    public static String findMockGpsAppPackage(Context ctx) {
         PackageManager pm = ctx.getPackageManager();
         List<ApplicationInfo> apps = pm.getInstalledApplications(0);
         for (ApplicationInfo info : apps) {
+            if ((info.flags & ApplicationInfo.FLAG_SYSTEM) != 0) continue;
             String pkg = info.packageName.toLowerCase();
             for (String bad : MOCK_GPS_PACKAGES) {
                 if (pkg.equals(bad) || pkg.contains("fakegps") || pkg.contains("mocklocation") || pkg.contains("gpsjoystick")) {
-                    if ((info.flags & ApplicationInfo.FLAG_SYSTEM) == 0) return true;
+                    return info.packageName;
                 }
             }
         }
-        return false;
+        return null;
+    }
+
+    public static void reportViolations(Context ctx, Location loc, String action) {
+        if (isVpnActive(ctx)) {
+            SecurityReporter.report(ctx, "vpn", action, "VPN active on device", locLat(loc), locLng(loc));
+        }
+        String spoofPkg = findMockGpsAppPackage(ctx);
+        if (spoofPkg != null) {
+            SecurityReporter.report(ctx, "spoof_app", action, spoofPkg, locLat(loc), locLng(loc));
+        }
+        if (loc != null && isMockLocation(loc)) {
+            SecurityReporter.report(ctx, "mock_gps", action, "Mock location flag on GPS fix", loc.getLatitude(), loc.getLongitude());
+        }
+    }
+
+    private static Double locLat(Location loc) {
+        return loc != null ? loc.getLatitude() : null;
+    }
+
+    private static Double locLng(Location loc) {
+        return loc != null ? loc.getLongitude() : null;
     }
 
     /** Throws with user message if punch should be blocked. */
     public static void assertSecureForPunch(Context ctx, Location loc) {
+        reportViolations(ctx, loc, "blocked");
         if (isVpnActive(ctx)) {
             throw new SecurityException("Turn off VPN before punch in/out.");
         }

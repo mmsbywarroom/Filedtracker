@@ -18,7 +18,7 @@ import {
   withTimeout,
   type GpsFix,
 } from "@/lib/deviceGeo";
-import { apiFetch } from "@/lib/clientHeaders";
+import { isWithinPunchInWindow } from "@/lib/punchInWindow";
 import { LangToggle, useLang } from "@/lib/i18n";
 
 const AUTO_12H_MS = 12 * 60 * 60 * 1000;
@@ -100,6 +100,7 @@ export default function DashboardPage() {
   const [gpsError, setGpsError] = useState("");
   const [bootError, setBootError] = useState("");
   const [booting, setBooting] = useState(true);
+  const [punchInAllowed, setPunchInAllowed] = useState(() => isWithinPunchInWindow());
 
   const applyPosition = useCallback((pos: GeolocationPosition, force = false) => {
     const acc = pos.coords.accuracy || 9999;
@@ -182,6 +183,7 @@ export default function DashboardPage() {
       if (attRes.ok) {
         setOpen(att.open ?? null);
         setTodayDistanceMeters(Number(att.todayDistanceMeters) || 0);
+        setPunchInAllowed(att.punchInAllowed !== false && isWithinPunchInWindow());
         const last = att.history?.[0];
         if (!att.open && last?.punchOutReason === "gps_off" && last.punchOutAt) {
           const age = Date.now() - new Date(last.punchOutAt).getTime();
@@ -656,6 +658,10 @@ export default function DashboardPage() {
   async function beginPunchIn() {
     setMsg("");
     setOkMsg(false);
+    if (!isWithinPunchInWindow()) {
+      setMsg(t("punchInWindow"));
+      return;
+    }
     startGeoTracking();
 
     if (!lastFix.current && livePos) {
@@ -854,12 +860,16 @@ export default function DashboardPage() {
                 <button
                   type="button"
                   onClick={beginPunchIn}
-                  disabled={locating}
+                  disabled={locating || !punchInAllowed}
                   className="w-full rounded-2xl bg-teal px-5 py-4 text-base font-semibold text-white disabled:opacity-70"
                 >
                   {locating ? t("gpsLocating") : t("punchIn")}
                 </button>
-                <p className="text-center text-xs text-navy/45 sm:text-left">{t("punchStart")}</p>
+                {!punchInAllowed ? (
+                  <p className="text-center text-xs font-medium text-amber-800 sm:text-left">{t("punchInWindow")}</p>
+                ) : (
+                  <p className="text-center text-xs text-navy/45 sm:text-left">{t("punchStart")}</p>
+                )}
               </div>
             )}
           </div>

@@ -17,4 +17,5 @@
     <string name="live_map">Live map</string>
     <string name="vpn_blocked">Turn off VPN before punch in/out.</string>
     <string name="mock_gps_blocked">Fake GPS detected. Uninstall location spoof apps.</string>
+    <string name="punch_in_window_blocked">Punch in is only allowed between 5:00 AM and 1:00 PM (IST).</string>
 </resources>

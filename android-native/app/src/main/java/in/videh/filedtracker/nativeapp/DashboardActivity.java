@@ -130,7 +130,10 @@ public class DashboardActivity extends AppCompatActivity {
         userName.setText(user.optString("name", ""));
         userMeta.setText(user.optString("sectorAllotted", "") + " · " + user.optString("assemblyName", ""));
 
+        scanSecurityOnDashboard();
+
         registerFaceBtn.setVisibility(faceRegistered ? View.GONE : View.VISIBLE);
+        boolean punchInAllowed = PunchInWindow.isAllowed();
         if (open != null) {
             sessionStatus.setText(R.string.punched_in);
             punchInBtn.setVisibility(View.GONE);
@@ -138,18 +141,40 @@ public class DashboardActivity extends AppCompatActivity {
             gpsText.setText("Background GPS active — allow Always location for 30-min tracking.");
         } else {
             sessionStatus.setText(R.string.not_punched_in);
-            punchInBtn.setVisibility(faceRegistered ? View.VISIBLE : View.GONE);
+            punchInBtn.setVisibility(faceRegistered && punchInAllowed ? View.VISIBLE : View.GONE);
             punchOutBtn.setVisibility(View.GONE);
-            gpsText.setText("");
+            if (faceRegistered && !punchInAllowed) {
+                gpsText.setText(R.string.punch_in_window_blocked);
+            } else {
+                gpsText.setText("");
+            }
+        }
+    }
+
+    /** Log VPN / spoof apps even when user is not punching (admin audit). */
+    private void scanSecurityOnDashboard() {
+        if (SecurityHelper.isVpnActive(this)) {
+            SecurityReporter.report(this, "vpn", "detected", "VPN active on device", null, null);
+        }
+        String pkg = SecurityHelper.findMockGpsAppPackage(this);
+        if (pkg != null) {
+            SecurityReporter.report(this, "spoof_app", "detected", pkg, null, null);
         }
     }
 
     private void ensureLocationThenFace(String mode) {
+        if (MODE_PUNCH_IN.equals(mode) && !PunchInWindow.isAllowed()) {
+            messageText.setText(R.string.punch_in_window_blocked);
+            return;
+        }
         if (SecurityHelper.isVpnActive(this)) {
+            SecurityReporter.report(this, "vpn", "blocked", "VPN active on device", null, null);
             messageText.setText(R.string.vpn_blocked);
             return;
         }
         if (SecurityHelper.hasKnownMockGpsApp(this)) {
+            String pkg = SecurityHelper.findMockGpsAppPackage(this);
+            SecurityReporter.report(this, "spoof_app", "blocked", pkg != null ? pkg : "spoof app", null, null);
             messageText.setText(R.string.mock_gps_blocked);
             return;
         }

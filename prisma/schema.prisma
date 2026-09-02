@@ -299,6 +299,29 @@ model GpsSpoofBypass {
   @@index([userId, expiresAt])
 }
 
+/// VPN / mock GPS / spoof-app detections from native (and web) clients — admin audit log.
+model SecurityViolationLog {
+  id              String   @id @default(cuid())
+  userId          String
+  userName        String
+  userPhone       String
+  userDesignation String   @default("")
+  assemblyName    String   @default("")
+  zone            String   @default("")
+  district        String   @default("")
+  violationType   String
+  clientSource    String   @default("native")
+  action          String   @default("blocked")
+  detail          String   @default("")
+  lat             Float?
+  lng             Float?
+  createdAt       DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([userId])
+  @@index([violationType])
+}
+
 model Holiday {
   id            String   @id @default(cuid())
   date          DateTime @unique @db.Date

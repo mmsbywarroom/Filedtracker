@@ -6,6 +6,7 @@ import { LazyFacePhoto } from "@/components/LazyFacePhoto";
 import { AdminReportToolbar } from "@/components/AdminReportToolbar";
 import { PaginationBar } from "@/components/PaginationBar";
 import { downloadCsv, downloadPdf, reasonLabel, uniqueSorted } from "@/lib/reportExport";
+import { isExactSamePunchInOut } from "@/lib/stationarySessions";
 import { formatKm } from "@/lib/utils";
 import { clientSourceLabel } from "@/lib/clientSource";
 
@@ -68,6 +69,7 @@ export default function DailyRecordsPage() {
   const [district, setDistrict] = useState("");
   const [designation, setDesignation] = useState("");
   const [reason, setReason] = useState("");
+  const [sameCoords, setSameCoords] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
 
@@ -112,13 +114,16 @@ export default function DailyRecordsPage() {
       if (district && r.district !== district) return false;
       if (designation && r.designation !== designation) return false;
       if (reason && rowReason(r) !== reason) return false;
+      const same = isExactSamePunchInOut(r);
+      if (sameCoords === "yes" && !same) return false;
+      if (sameCoords === "no" && same) return false;
       return true;
     });
-  }, [rows, q, zone, district, designation, reason]);
+  }, [rows, q, zone, district, designation, reason, sameCoords]);
 
   useEffect(() => {
     setPage(1);
-  }, [q, zone, district, designation, reason, pageSize]);
+  }, [q, zone, district, designation, reason, sameCoords, pageSize]);
 
   const pageRows = useMemo(
     () => filtered.slice((page - 1) * pageSize, (page - 1) * pageSize + pageSize),
@@ -178,6 +183,23 @@ export default function DailyRecordsPage() {
       <p className="mt-1 text-sm text-navy/60">
         {loading ? "Loading…" : `${rows.length} punches · ${live} live · ${done} completed`}
       </p>
+
+      <div className="mt-4 flex flex-wrap items-end gap-3">
+        <label className="block text-sm">
+          <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-navy/45">
+            Punch in/out coordinates
+          </span>
+          <select
+            value={sameCoords}
+            onChange={(e) => setSameCoords(e.target.value)}
+            className="rounded-lg border border-navy/15 bg-white px-3 py-2 text-sm"
+          >
+            <option value="">All records</option>
+            <option value="yes">Same lat/lng (punch in = punch out)</option>
+            <option value="no">Different lat/lng</option>
+          </select>
+        </label>
+      </div>
 
       <AdminReportToolbar
         date={date}
