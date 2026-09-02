@@ -2,15 +2,17 @@ import { prisma } from "@/lib/prisma";
 import { closeOpenAttendance } from "@/lib/punchOut";
 import { haversineMeters } from "@/lib/utils";
 import {
-  GPS_PINNED_SPREAD_M,
-  GPS_SPOOF_FLAG_LABELS,
   activeGpsBypass,
-  gpsTrackSpreadM,
-  hasNaturalGpsJitter,
   recordGpsSpoofLog,
-  type GpsSample,
   type GpsSpoofFlag,
 } from "@/lib/gpsAntiSpoof";
+import {
+  buildSpoofEvidence,
+  convictSpoofIfProven,
+  GPS_PINNED_SPREAD_M,
+  isRealPhoneSignature,
+  type GpsSample as VerdictSample,
+} from "@/lib/gpsSpoofVerdict";
 
 /** How many surprise GPS checks per session (5–6). */
 export const GPS_RANDOM_PROBE_COUNT = Math.min(
@@ -81,7 +83,7 @@ export function parseProbeSchedule(raw: unknown): number[] {
   return raw.map((n) => Number(n)).filter((n) => Number.isFinite(n) && n > 0);
 }
 
-function probesToSamples(probes: RandomProbeRow[]): GpsSample[] {
+function probesToSamples(probes: RandomProbeRow[]): VerdictSample[] {
   return probes.map((p) => ({
     lat: p.lat,
     lng: p.lng,
@@ -105,7 +107,7 @@ export function checkRandomProbeTimeSpread(probes: RandomProbeRow[], minSpanMs =
 /** Check 3 — all probe coordinates within pinned spread. */
 export function checkRandomProbeSpread(probes: RandomProbeRow[], maxM = GPS_PINNED_SPREAD_M) {
   const samples = probesToSamples(probes);
-  return samples.length >= 2 && gpsTrackSpreadM(samples) < maxM;
+  return samples.length >= 2 && maxProbeSpread(samples) < maxM;
 }
 
 /** Check 4 — every reading identical (duplicate coords). */
@@ -123,7 +125,7 @@ export function checkRandomProbePerfectAccuracy(probes: RandomProbeRow[]) {
 
 /** Check 6 — no natural phone GPS jitter across random checks. */
 export function checkRandomProbeNoJitter(probes: RandomProbeRow[]) {
-  return !hasNaturalGpsJitter(probesToSamples(probes));
+  return maxProbeSpread(probesToSamples(probes)) >= GPS_PINNED_SPREAD_M;
 }
 
 export type RandomProbeAnalysis = {
@@ -135,66 +137,45 @@ export type RandomProbeAnalysis = {
 };
 
 /**
- * Run all 6 random-probe checks. Block only when every check passes (pinned fake GPS pattern).
+ * Run random-probe analysis via multi-signal verdict (same rules as 30 min observation).
  */
 export function analyzeRandomProbes(probes: RandomProbeRow[]): RandomProbeAnalysis {
-  const samples = probesToSamples(probes);
-  const spread = gpsTrackSpreadM(samples);
+  const randomSamples: VerdictSample[] = probes.map((p) => ({
+    lat: p.lat,
+    lng: p.lng,
+    accuracy: p.accuracy,
+    at: p.recordedAt.getTime(),
+  }));
+  const spread = randomSamples.length >= 2 ? maxProbeSpread(randomSamples) : 0;
+  const evidence = buildSpoofEvidence({ samples: [], randomProbes: randomSamples });
+  const verdict = convictSpoofIfProven(evidence);
+
   const checks = {
-    count: checkRandomProbeCount(probes),
+    count: probes.length >= GPS_RANDOM_PROBE_COUNT,
     timeSpread: checkRandomProbeTimeSpread(probes),
-    pinnedSpread: checkRandomProbeSpread(probes),
+    pinnedSpread: spread < GPS_PINNED_SPREAD_M,
     identical: checkRandomProbeIdentical(probes),
     perfectAccuracy: checkRandomProbePerfectAccuracy(probes),
-    noJitter: checkRandomProbeNoJitter(probes),
+    noJitter: spread < GPS_PINNED_SPREAD_M,
   };
 
-  if (!checks.count) {
-    return {
-      shouldBlock: false,
-      flags: [],
-      detail: `Random GPS checks: ${probes.length}/${GPS_RANDOM_PROBE_COUNT} received`,
-      maxSpreadM: spread,
-      checks,
-    };
-  }
-
-  if (!checks.noJitter || !checks.pinnedSpread) {
-    return {
-      shouldBlock: false,
-      flags: [],
-      detail: `Random GPS jitter ${Math.round(spread)} m — real phone`,
-      maxSpreadM: spread,
-      checks,
-    };
-  }
-
-  const flags: GpsSpoofFlag[] = [];
-  if (checks.identical) flags.push("duplicate_coordinates");
-  if (checks.perfectAccuracy) flags.push("suspicious_perfect_accuracy");
-  flags.push("random_probe_pinned");
-
-  const allSpoof =
-    checks.count &&
-    checks.timeSpread &&
-    checks.pinnedSpread &&
-    checks.identical &&
-    checks.perfectAccuracy &&
-    checks.noJitter;
-
-  const detail = allSpoof
-    ? `${GPS_RANDOM_PROBE_COUNT} random GPS checks all pinned (0–${GPS_PINNED_SPREAD_M} m) with fake-perfect accuracy — spoof app`
-    : flags.length
-      ? flags.map((f) => GPS_SPOOF_FLAG_LABELS[f]).join("; ")
-      : "Random GPS checks inconclusive";
-
   return {
-    shouldBlock: allSpoof,
-    flags: Array.from(new Set(flags)),
-    detail,
+    shouldBlock: verdict.shouldBlock && checks.count,
+    flags: verdict.flags,
+    detail: verdict.detail,
     maxSpreadM: spread,
     checks,
   };
+}
+
+function maxProbeSpread(samples: { lat: number; lng: number }[]) {
+  let max = 0;
+  for (let i = 0; i < samples.length; i++) {
+    for (let j = i + 1; j < samples.length; j++) {
+      max = Math.max(max, haversineMeters(samples[i], samples[j]));
+    }
+  }
+  return max;
 }
 
 export async function ensureProbeSchedule(attendanceId: string, punchInAt: Date) {
@@ -245,6 +226,13 @@ export async function submitRandomGpsProbe(opts: {
 
   if ((open.gpsMapSpreadM ?? 0) >= GPS_PINNED_SPREAD_M) {
     return { ok: true as const, cleared: true as const, reason: "map_jitter" as const };
+  }
+
+  const probeSample: VerdictSample[] = [
+    { lat: opts.lat, lng: opts.lng, accuracy: opts.accuracy ?? null, at: Date.now() },
+  ];
+  if (isRealPhoneSignature(probeSample, open.gpsMapSpreadM ?? 0).real) {
+    return { ok: true as const, cleared: true as const, reason: "natural_accuracy" as const };
   }
 
   const schedule = parseProbeSchedule(open.gpsProbeSchedule);

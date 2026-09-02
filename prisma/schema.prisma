@@ -98,9 +98,12 @@ model Attendance {
   gpsMapSpreadM  Float?
   /// Ms offsets from punch-in for 5–6 surprise GPS checks (client + server).
   gpsProbeSchedule Json?
+  /// Raw map GPS fixes {lat,lng,accuracy,at} for spoof verdict audit (last ~80).
+  gpsMapProbeLog Json?
   createdAt     DateTime @default(now())
   points        TrackPoint[]
   gpsRandomProbes GpsRandomProbe[]
+  intervalSnapshots AttendanceIntervalSnapshot[]
 
   @@index([userId, punchInAt])
   @@index([punchOutReason])
@@ -127,6 +130,20 @@ model GpsRandomProbe {
   lat          Float
   lng          Float
   accuracy     Float?
+  recordedAt   DateTime   @default(now())
+
+  @@unique([attendanceId, slot])
+  @@index([attendanceId])
+}
+
+/// Lat/lng every 30 min between punch-in and punch-out — used for admin flag (≥8 same coords).
+model AttendanceIntervalSnapshot {
+  id           String     @id @default(cuid())
+  attendanceId String
+  attendance   Attendance @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
+  slot         Int
+  lat          Float
+  lng          Float
   recordedAt   DateTime   @default(now())
 
   @@unique([attendanceId, slot])

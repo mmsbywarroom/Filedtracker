@@ -9,11 +9,6 @@ import { autoPunchOutIfStale, closeStaleSessionForRePunch } from "@/lib/punchOut
 import { requireUserFaceMatch } from "@/lib/requireFaceMatch";
 import { findHolidayToday, holidayAppliesTo } from "@/lib/holidays";
 import { assertPanIndiaPunchLocation, isPanIndiaPunchPhone } from "@/lib/panIndiaPunch";
-import { enforceGpsAntiSpoofInstant, schedulePunchInGpsVerification } from "@/lib/gpsAntiSpoof";
-import {
-  buildRandomProbeSchedule,
-  ensureProbeSchedule,
-} from "@/lib/gpsRandomProbe";
 
 function istDayBounds(d = new Date()) {
   const ymd = d.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
@@ -43,15 +38,13 @@ export async function GET() {
     void autoPunchOutIfStale(s.sub).catch(() => {});
   }
 
-  let gpsProbeSchedule: number[] = [];
-  let gpsProbesDone: number[] = [];
+  let intervalSnapshotsDone: number[] = [];
   if (openFresh) {
-    gpsProbeSchedule = await ensureProbeSchedule(openFresh.id, openFresh.punchInAt);
-    const probes = await prisma.gpsRandomProbe.findMany({
+    const snaps = await prisma.attendanceIntervalSnapshot.findMany({
       where: { attendanceId: openFresh.id },
       select: { slot: true },
     });
-    gpsProbesDone = probes.map((p) => p.slot);
+    intervalSnapshotsDone = snaps.map((p) => p.slot);
   }
 
   const history = await prisma.attendance.findMany({
@@ -129,8 +122,7 @@ export async function GET() {
           ...openFresh,
           points: mapPoints,
           distanceMeters: openDistance,
-          gpsProbeSchedule,
-          gpsProbesDone,
+          intervalSnapshotsDone,
         }
       : null,
     todayDistanceMeters,
@@ -181,23 +173,6 @@ export async function POST(req: Request) {
   if (!user || !user.isActive) {
     return NextResponse.json({ error: "Account not found or inactive." }, { status: 403 });
   }
-
-  await enforceGpsAntiSpoofInstant({
-    userId: s.sub,
-    user: {
-      name: user.name,
-      phone: user.phone,
-      designation: user.designation,
-      assemblyName: user.assemblyName,
-      zone: user.zone,
-      district: user.district,
-    },
-    action: "punch_in",
-    lat,
-    lng,
-    accuracy: Number.isFinite(Number(body?.accuracy)) ? Number(body.accuracy) : null,
-    gpsSamples: body?.gpsSamples,
-  });
 
   const { start, end } = istDayBounds();
   const onLeave = await prisma.leaveRequest.findFirst({
@@ -267,24 +242,5 @@ export async function POST(req: Request) {
     select: { id: true, punchInAt: true },
   });
 
-  const gpsProbeSchedule = buildRandomProbeSchedule(attendance.id, attendance.punchInAt);
-  await prisma.attendance.update({
-    where: { id: attendance.id },
-    data: { gpsProbeSchedule },
-  });
-
-  schedulePunchInGpsVerification({
-    userId: s.sub,
-    user: {
-      name: user.name,
-      phone: user.phone,
-      designation: user.designation,
-      assemblyName: user.assemblyName,
-      zone: user.zone,
-      district: user.district,
-    },
-    attendanceId: attendance.id,
-  });
-
-  return NextResponse.json({ attendance: { ...attendance, gpsProbeSchedule, gpsProbesDone: [] }, ok: true });
+  return NextResponse.json({ attendance: { ...attendance, intervalSnapshotsDone: [] }, ok: true });
 }

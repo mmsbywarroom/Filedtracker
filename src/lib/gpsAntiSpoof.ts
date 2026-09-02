@@ -1,4 +1,10 @@
-import { prisma } from "@/lib/prisma";
+import {
+  buildSpoofEvidence,
+  convictSpoofIfProven,
+  isRealPhoneSignature,
+  mergeMapProbeLog,
+  parseMapProbeLog,
+} from "@/lib/gpsSpoofVerdict";
 import { closeOpenAttendance } from "@/lib/punchOut";
 import { haversineMeters } from "@/lib/utils";
 
@@ -35,7 +41,7 @@ const SUSPICIOUS_PERFECT_M = Number(process.env.GPS_SUSPICIOUS_PERFECT_M || 3);
 const STATIONARY_SESSION_M = Number(process.env.GPS_STATIONARY_SESSION_M || 80);
 const STATIONARY_MIN_MS = Number(process.env.GPS_STATIONARY_MIN_MS || 2 * 60 * 60 * 1000);
 
-export const GPS_ANTI_SPOOF_ENABLED = process.env.GPS_ANTI_SPOOF_ENABLED !== "false";
+export const GPS_ANTI_SPOOF_ENABLED = process.env.GPS_ANTI_SPOOF_ENABLED === "true";
 /** Observe track points after punch-in before deciding fake GPS (default 30 min). */
 export const GPS_OBSERVE_MS = Number(process.env.GPS_OBSERVE_MS || 30 * 60 * 1000);
 /** Real field movement — spread above this over observation = genuine user. */
@@ -192,70 +198,39 @@ export function hasNaturalGpsJitter(samples: GpsSample[], mapSpreadM = 0): boole
 }
 
 /**
- * After punch-in, watch live map track points (default 30 min).
- * Step 1: check map GPS is jittering 2–20 m or moving 20 m+ → real user, never block.
- * Step 2: only if still pinned (<2 m) with fake-perfect accuracy → block.
+ * After punch-in observation — uses multi-signal verdict (never blocks on 0 m travel alone).
  */
-export function analyzeObservationSession(samples: GpsSample[], mapSpreadM = 0) {
+export function analyzeObservationSession(
+  samples: GpsSample[],
+  mapSpreadM = 0,
+  opts?: { travelM?: number; observeMs?: number; randomProbes?: GpsSample[] }
+) {
   const spread = Math.max(gpsTrackSpreadM(samples), mapSpreadM);
+  const evidence = buildSpoofEvidence({
+    samples,
+    mapSpreadM,
+    travelM: opts?.travelM,
+    randomProbes: opts?.randomProbes,
+    observeMs: opts?.observeMs,
+  });
+  const verdict = convictSpoofIfProven(evidence);
 
-  if (samples.length < GPS_MIN_OBSERVATION_POINTS) {
+  if (samples.length < GPS_MIN_OBSERVATION_POINTS && !(opts?.randomProbes?.length ?? 0)) {
     return {
       shouldBlock: false,
       flags: [] as GpsSpoofFlag[],
-      detail: "Not enough live map GPS points during observation",
+      detail: "Not enough map GPS samples for spoof conviction",
       maxSpreadM: spread,
-    };
-  }
-
-  // First: live map GPS — idhar-udhar 2–20 m? Real phone → stop fake check (band karo).
-  if (hasNaturalGpsJitter(samples, mapSpreadM)) {
-    const detail =
-      spread >= GPS_NATURAL_MOVEMENT_M
-        ? `Map GPS moved ${Math.round(spread)} m during observation — real user`
-        : `Map GPS jitter ${Math.round(spread)} m (${GPS_PINNED_SPREAD_M}–${GPS_NATURAL_MOVEMENT_M} m) — real phone GPS`;
-    return {
-      shouldBlock: false,
-      flags: [] as GpsSpoofFlag[],
-      detail,
-      maxSpreadM: spread,
-    };
-  }
-
-  const analysis = analyzeGpsSamples(samples);
-  if (analysis.flags.includes("impossible_jump") || analysis.flags.includes("samples_too_far_apart")) {
-    return {
-      shouldBlock: true,
-      flags: analysis.flags,
-      detail: `${analysis.detail} · Detected on live map track`,
-      maxSpreadM: spread,
-    };
-  }
-
-  // Pinned on map (<2 m spread entire observation) + fake-perfect readings → spoof app
-  const accuracies = samples
-    .map((s) => s.accuracy)
-    .filter((a): a is number => a != null && Number.isFinite(a));
-  const withAccuracy = samples.filter((s) => s.accuracy != null).length;
-  const allPerfect =
-    accuracies.length >= GPS_MIN_OBSERVATION_POINTS &&
-    withAccuracy >= GPS_MIN_OBSERVATION_POINTS &&
-    accuracies.every((a) => a <= SUSPICIOUS_PERFECT_M);
-
-  if (allPerfect) {
-    return {
-      shouldBlock: true,
-      flags: ["duplicate_coordinates", "suspicious_perfect_accuracy"] as GpsSpoofFlag[],
-      detail: `Map GPS pinned (0–${GPS_PINNED_SPREAD_M} m jitter) with fake-perfect accuracy over ${Math.round(GPS_OBSERVE_MS / 60000)} min — spoof app`,
-      maxSpreadM: spread,
+      score: 0,
     };
   }
 
   return {
-    shouldBlock: false,
-    flags: ["duplicate_coordinates"] as GpsSpoofFlag[],
-    detail: `Map GPS mostly still (${Math.round(spread)} m) but natural accuracy — no block`,
+    shouldBlock: verdict.shouldBlock,
+    flags: verdict.flags,
+    detail: verdict.detail,
     maxSpreadM: spread,
+    score: verdict.score,
   };
 }
 
@@ -391,25 +366,16 @@ export async function enforceGpsAntiSpoof(opts: {
       userId: opts.userId,
       user: opts.user,
       action: opts.action,
-      outcome: analysis.blocked ? "blocked" : "flagged",
+      outcome: "flagged",
       flags: analysis.flags,
       lat: opts.lat,
       lng: opts.lng,
       accuracy: opts.accuracy ?? null,
       sampleCount: samples.length,
       maxSpreadM: analysis.maxSpreadM,
-      detail: analysis.detail,
+      detail: `${analysis.detail} · Punch-time sample only — not used to block`,
       attendanceId: opts.attendanceId,
     });
-  }
-
-  if (!analysis.ok) {
-    return {
-      ok: false as const,
-      flags: analysis.flags,
-      error: userFacingGpsError(analysis.flags),
-      code: "GPS_SPOOF" as const,
-    };
   }
 
   return { ok: true as const, flags: analysis.flags };
@@ -491,45 +457,55 @@ async function verifyPunchInGpsLater(opts: {
         punchInLng: true,
         punchInAt: true,
         gpsMapSpreadM: true,
-        points: { orderBy: { recordedAt: "asc" }, take: 200 },
+        gpsMapProbeLog: true,
+        distanceMeters: true,
       },
     });
     if (!live) return;
 
-    if ((live.gpsMapSpreadM ?? 0) >= GPS_PINNED_SPREAD_M) return;
-
-    const liveSamples = trackPointsToSamples(
-      { lat: live.punchInLat, lng: live.punchInLng, at: live.punchInAt },
-      live.points
-    );
-
-    if (
-      liveSamples.length >= GPS_JITTER_MIN_POINTS &&
-      hasNaturalGpsJitter(liveSamples, live.gpsMapSpreadM ?? 0)
-    ) {
-      return;
-    }
+    const mapSamples = parseMapProbeLog(live.gpsMapProbeLog);
+    const safe = isRealPhoneSignature(mapSamples, live.gpsMapSpreadM ?? 0, live.distanceMeters ?? 0);
+    if (safe.real) return;
   }
 
   if (await activeGpsBypass(opts.userId)) return;
 
   const attendance = await prisma.attendance.findFirst({
     where: { id: opts.attendanceId, userId: opts.userId, punchOutAt: null },
-    include: { points: { orderBy: { recordedAt: "asc" }, take: 200 } },
+    select: {
+      id: true,
+      punchInLat: true,
+      punchInLng: true,
+      punchInAt: true,
+      gpsMapSpreadM: true,
+      gpsMapProbeLog: true,
+      distanceMeters: true,
+      points: { orderBy: { recordedAt: "asc" }, take: 200 },
+    },
   });
   if (!attendance) return;
 
-  if ((attendance.gpsMapSpreadM ?? 0) >= GPS_PINNED_SPREAD_M) return;
+  const mapSamples = parseMapProbeLog(attendance.gpsMapProbeLog);
+  const randomRows = await prisma.gpsRandomProbe.findMany({
+    where: { attendanceId: attendance.id },
+    orderBy: { slot: "asc" },
+  });
+  const randomProbes: GpsSample[] = randomRows.map((p) => ({
+    lat: p.lat,
+    lng: p.lng,
+    accuracy: p.accuracy,
+    at: p.recordedAt.getTime(),
+  }));
 
-  const samples = trackPointsToSamples(
-    { lat: attendance.punchInLat, lng: attendance.punchInLng, at: attendance.punchInAt },
-    attendance.points
-  );
-
-  const observation = analyzeObservationSession(samples, attendance.gpsMapSpreadM ?? 0);
+  const observeMs = Date.now() - attendance.punchInAt.getTime();
+  const observation = analyzeObservationSession(mapSamples, attendance.gpsMapSpreadM ?? 0, {
+    travelM: attendance.distanceMeters,
+    observeMs,
+    randomProbes,
+  });
   if (!observation.shouldBlock) return;
 
-  const last = attendance.points[attendance.points.length - 1];
+  const last = mapSamples[mapSamples.length - 1];
   const lat = last?.lat ?? attendance.punchInLat;
   const lng = last?.lng ?? attendance.punchInLng;
 
@@ -541,7 +517,7 @@ async function verifyPunchInGpsLater(opts: {
     flags: observation.flags,
     lat,
     lng,
-    sampleCount: samples.length,
+    sampleCount: mapSamples.length,
     maxSpreadM: observation.maxSpreadM,
     detail: observation.detail,
     attendanceId: attendance.id,
@@ -552,7 +528,7 @@ async function verifyPunchInGpsLater(opts: {
     lng,
     accuracy: last?.accuracy ?? null,
     reason: "gps_spoof",
-    address: "Auto punch-out: fake GPS detected after observation",
+    address: "Auto punch-out: fake GPS convicted after multi-signal verification",
   });
 }
 
@@ -579,38 +555,39 @@ async function verifyPunchOutGpsLater(opts: {
 
   const attendance = await prisma.attendance.findUnique({
     where: { id: opts.attendanceId },
-    include: { points: { orderBy: { recordedAt: "asc" }, take: 80 } },
+    select: {
+      id: true,
+      punchInAt: true,
+      punchOutAt: true,
+      gpsMapSpreadM: true,
+      gpsMapProbeLog: true,
+      distanceMeters: true,
+    },
   });
   if (!attendance) return;
 
-  if ((attendance.gpsMapSpreadM ?? 0) >= GPS_NATURAL_MOVEMENT_M) return;
-  if (attendance.distanceMeters >= GPS_NATURAL_MOVEMENT_M) return;
-
-  const samples = trackPointsToSamples(
-    { lat: attendance.punchInLat, lng: attendance.punchInLng, at: attendance.punchInAt },
-    attendance.points,
-    {
-      lat: opts.lat,
-      lng: opts.lng,
-      accuracy: opts.accuracy ?? null,
-      at: attendance.punchOutAt?.getTime() ?? Date.now(),
-    }
-  );
-  const observation = analyzeObservationSession(samples, attendance.gpsMapSpreadM ?? 0);
+  const mapSamples = parseMapProbeLog(attendance.gpsMapProbeLog);
+  const observeMs = attendance.punchOutAt
+    ? attendance.punchOutAt.getTime() - attendance.punchInAt.getTime()
+    : 0;
+  const observation = analyzeObservationSession(mapSamples, attendance.gpsMapSpreadM ?? 0, {
+    travelM: attendance.distanceMeters,
+    observeMs,
+  });
   if (!observation.shouldBlock) return;
 
   await recordGpsSpoofLog({
     userId: opts.userId,
     user: opts.user,
     action: "punch_out",
-    outcome: "blocked",
+    outcome: "flagged",
     flags: observation.flags,
     lat: opts.lat,
     lng: opts.lng,
     accuracy: opts.accuracy ?? null,
-    sampleCount: samples.length,
+    sampleCount: mapSamples.length,
     maxSpreadM: observation.maxSpreadM,
-    detail: `${observation.detail} · Session review after punch-out`,
+    detail: `${observation.detail} · Post punch-out review (no auto block)`,
     attendanceId: attendance.id,
   });
 }

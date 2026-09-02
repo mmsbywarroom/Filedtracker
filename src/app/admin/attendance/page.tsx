@@ -26,9 +26,20 @@ type Row = {
   punchInAt: string | null;
   punchOutAt: string | null;
   sessionCount?: number;
+  flagged?: boolean;
+  flagReason?: string;
+  flagSameCount?: number;
 };
 
-type Summary = { present: number; halfDay: number; absent: number; leave: number; pending: number; total: number };
+type Summary = {
+  present: number;
+  halfDay: number;
+  absent: number;
+  leave: number;
+  pending: number;
+  flagged: number;
+  total: number;
+};
 
 function todayIst() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
@@ -62,6 +73,7 @@ const selectClass = "h-11 w-full rounded-xl border border-navy/15 bg-white px-3 
 export default function AttendanceModulePage() {
   const [date, setDate] = useState(todayIst);
   const [statusFilter, setStatusFilter] = useState("");
+  const [flagFilter, setFlagFilter] = useState("");
   const [zone, setZone] = useState("");
   const [district, setDistrict] = useState("");
   const [assembly, setAssembly] = useState("");
@@ -116,6 +128,8 @@ export default function AttendanceModulePage() {
       if (designation && r.designation !== designation) return false;
       if (sectorQ && !(r.sectorAllotted || "").toLowerCase().includes(sectorQ)) return false;
       if (statusFilter && r.status !== statusFilter) return false;
+      if (flagFilter === "flagged" && !r.flagged) return false;
+      if (flagFilter === "not_flagged" && r.flagged) return false;
       if (textQ) {
         const text = [r.name, r.phone, r.assemblyName, r.designation, r.zone, r.district, r.sectorAllotted]
           .join(" ")
@@ -124,23 +138,24 @@ export default function AttendanceModulePage() {
       }
       return true;
     });
-  }, [allRows, zone, district, assembly, designation, sector, statusFilter, q]);
+  }, [allRows, zone, district, assembly, designation, sector, statusFilter, flagFilter, q]);
 
   const summary = useMemo(() => {
-    const s: Summary = { present: 0, halfDay: 0, absent: 0, leave: 0, pending: 0, total: rows.length };
+    const s: Summary = { present: 0, halfDay: 0, absent: 0, leave: 0, pending: 0, flagged: 0, total: rows.length };
     for (const r of rows) {
       if (r.status === "present") s.present += 1;
       else if (r.status === "half_day") s.halfDay += 1;
       else if (r.status === "leave") s.leave += 1;
       else if (r.status === "pending") s.pending += 1;
       else s.absent += 1;
+      if (r.flagged) s.flagged += 1;
     }
     return s;
   }, [rows]);
 
   useEffect(() => {
     setPage(1);
-  }, [zone, district, assembly, designation, sector, statusFilter, q, pageSize]);
+  }, [zone, district, assembly, designation, sector, statusFilter, flagFilter, q, pageSize]);
 
   async function applyStatus() {
     if (!pending) return;
@@ -192,10 +207,11 @@ export default function AttendanceModulePage() {
       <p className="mt-1 text-sm text-navy/55">
         Auto: punch by 10:30 + 6–12h = Present · after 10:30 to 1:00 = Half-day · after 1:00 PM no punch = Absent ·
         until 1:00 PM, no punch stays Pending. Leave mark / approved leave / holiday (that designation) = Leave. Multiple punch-ins
-        the same day (e.g. after GPS/phone off) are added together for hours. Manual change requires a reason.
+        the same day (e.g. after GPS/phone off) are added together for hours. Manual change requires a reason. Flag: 8+ thirty-minute
+        location checks at the same lat/lng during a session (no block — admin review only).
       </p>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
         <div className="rounded-2xl bg-emerald-600 px-4 py-3 text-white shadow-card">
           <p className="text-xs uppercase tracking-wider text-white/75">Present</p>
           <p className="text-2xl font-semibold">{summary.present}</p>
@@ -216,6 +232,11 @@ export default function AttendanceModulePage() {
         <div className="rounded-2xl bg-sky-600 px-4 py-3 text-white shadow-card">
           <p className="text-xs uppercase tracking-wider text-white/75">Leave</p>
           <p className="text-2xl font-semibold">{summary.leave}</p>
+        </div>
+        <div className="rounded-2xl bg-violet-600 px-4 py-3 text-white shadow-card">
+          <p className="text-xs uppercase tracking-wider text-white/75">Flagged</p>
+          <p className="text-xs text-white/70">Same lat/lng ×8</p>
+          <p className="text-2xl font-semibold">{summary.flagged}</p>
         </div>
         <div className="rounded-2xl bg-ink px-4 py-3 text-white shadow-card">
           <p className="text-xs uppercase tracking-wider text-white/75">Total</p>
@@ -251,6 +272,14 @@ export default function AttendanceModulePage() {
             <option value="pending">Pending punch-in</option>
             <option value="absent">Absent</option>
             <option value="leave">Leave</option>
+          </select>
+        </label>
+        <label className="text-xs font-medium text-navy/55">
+          Flag
+          <select value={flagFilter} onChange={(e) => setFlagFilter(e.target.value)} className={`${selectClass} mt-1`}>
+            <option value="">All</option>
+            <option value="flagged">Flagged only</option>
+            <option value="not_flagged">Not flagged</option>
           </select>
         </label>
         <label className="text-xs font-medium text-navy/55">
@@ -336,6 +365,7 @@ export default function AttendanceModulePage() {
                 <th className="px-4 py-3">Punch out</th>
                 <th className="px-4 py-3">Hours</th>
                 <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3">Flag</th>
                 <th className="px-4 py-3">Why</th>
               </tr>
             </thead>
@@ -380,7 +410,24 @@ export default function AttendanceModulePage() {
                       {r.source === "manual" ? "Manual" : "Auto"}
                     </p>
                   </td>
-                  <td className="px-4 py-3 max-w-[240px] text-xs text-navy/55">{r.reason}</td>
+                  <td className="px-4 py-3">
+                    {r.flagged ? (
+                      <span className="inline-flex rounded-lg bg-violet-100 px-2 py-1 text-xs font-semibold text-violet-800">
+                        Flagged
+                      </span>
+                    ) : (
+                      <span className="text-xs text-navy/35">—</span>
+                    )}
+                    {r.flagged && r.flagSameCount ? (
+                      <p className="mt-1 text-[10px] text-violet-700/80">{r.flagSameCount} same checks</p>
+                    ) : null}
+                  </td>
+                  <td className="px-4 py-3 max-w-[240px] text-xs text-navy/55">
+                    {r.flagged && r.flagReason ? (
+                      <p className="mb-1 font-medium text-violet-800">{r.flagReason}</p>
+                    ) : null}
+                    {r.reason}
+                  </td>
                 </tr>
               ))}
             </tbody>

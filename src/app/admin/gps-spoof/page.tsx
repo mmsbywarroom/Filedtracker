@@ -185,10 +185,9 @@ export default function GpsSpoofLogsPage() {
       <p className="text-xs uppercase tracking-[0.2em] text-teal">Alerts</p>
       <h1 className="text-2xl font-semibold">Fake GPS / spoof logs</h1>
       <p className="mt-1 text-sm text-navy/55">
-        Punch allowed first. Map GPS is watched live (2–20 m jitter on the blue dot). If the
-        phone GPS moves naturally on the map, fake check stops. Only pinned spoof apps (&lt;2 m for
-        30 min) are blocked — one log per user. Six surprise random GPS checks in the first 90
-        min also block if all readings stay pinned. Each user appears at most once in this list.
+        Punch allowed first. Block only after multi-signal proof: 30 min map GPS audit + 6 random
+        checks. Real phones pass via natural accuracy variance or movement — never blocked for 0 m
+        travel alone. One log per user. Six surprise random GPS checks in the first 90 min.
       </p>
 
       <AdminReportToolbar

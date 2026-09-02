@@ -13,6 +13,7 @@ import {
 } from "@/lib/dailyAttendance";
 import { adminPresentLabel, adminPresentRemark, ensureAdminPresentPunch, removeAdminPresentPunch, closeOpenPunchForAdminLeave } from "@/lib/adminPresentPunch";
 import { holidayAppliesTo, holidayLeaveReason } from "@/lib/holidays";
+import { userPinnedFlagFromSessions } from "@/lib/attendanceIntervalFlag";
 
 export async function GET(req: Request) {
   const s = await requireAdmin();
@@ -50,14 +51,14 @@ export async function GET(req: Request) {
     return NextResponse.json({
       date,
       rows: [],
-      summary: { present: 0, halfDay: 0, absent: 0, leave: 0, pending: 0, total: 0 },
+      summary: { present: 0, halfDay: 0, absent: 0, leave: 0, pending: 0, flagged: 0, total: 0 },
     });
   }
 
   const [punches, leaves, marks, holiday] = await Promise.all([
     prisma.attendance.findMany({
       where: { userId: { in: ids }, punchInAt: { gte: start, lte: end } },
-      select: { userId: true, punchInAt: true, punchOutAt: true },
+      select: { id: true, userId: true, punchInAt: true, punchOutAt: true },
     }),
     prisma.leaveRequest.findMany({
       where: {
@@ -74,10 +75,25 @@ export async function GET(req: Request) {
     prisma.holiday.findUnique({ where: { date: dateOnly } }),
   ]);
 
-  const punchesByUser = new Map<string, { punchInAt: Date; punchOutAt: Date | null }[]>();
+  const attendanceIds = punches.map((p) => p.id);
+  const snaps = attendanceIds.length
+    ? await prisma.attendanceIntervalSnapshot.findMany({
+        where: { attendanceId: { in: attendanceIds } },
+        select: { attendanceId: true, lat: true, lng: true },
+      })
+    : [];
+
+  const snapsByAttendance = new Map<string, { lat: number; lng: number }[]>();
+  for (const snap of snaps) {
+    const list = snapsByAttendance.get(snap.attendanceId) || [];
+    list.push({ lat: snap.lat, lng: snap.lng });
+    snapsByAttendance.set(snap.attendanceId, list);
+  }
+
+  const punchesByUser = new Map<string, { id: string; punchInAt: Date; punchOutAt: Date | null }[]>();
   for (const p of punches) {
     const list = punchesByUser.get(p.userId) || [];
-    list.push({ punchInAt: p.punchInAt, punchOutAt: p.punchOutAt });
+    list.push({ id: p.id, punchInAt: p.punchInAt, punchOutAt: p.punchOutAt });
     punchesByUser.set(p.userId, list);
   }
   const onLeave = new Set(leaves.map((l) => l.userId));
@@ -88,6 +104,7 @@ export async function GET(req: Request) {
   let absent = 0;
   let leave = 0;
   let pending = 0;
+  let flagged = 0;
 
   const allRows = users
     .filter((u) => canSeeUser(s.admin, u))
@@ -95,7 +112,7 @@ export async function GET(req: Request) {
       const sessions = punchesByUser.get(u.id) || [];
       const manual = markByUser.get(u.id);
       const resolved = resolveDayAttendanceStatus({
-        sessions,
+        sessions: sessions.map((x) => ({ punchInAt: x.punchInAt, punchOutAt: x.punchOutAt })),
         asOf,
         dateYmd: date,
         onApprovedLeave: onLeave.has(u.id),
@@ -108,6 +125,12 @@ export async function GET(req: Request) {
           : null,
       });
       const { status, source, reason, hours, firstIn, sessionCount } = resolved;
+
+      const pinFlag = userPinnedFlagFromSessions(
+        sessions.map((sess) => ({
+          snapshots: snapsByAttendance.get(sess.id) || [],
+        }))
+      );
 
       const lastOut = sessions.length
         ? sessions
@@ -134,6 +157,9 @@ export async function GET(req: Request) {
         punchInAt: firstIn,
         punchOutAt: lastOut,
         markId: manual?.id || null,
+        flagged: pinFlag.flagged,
+        flagReason: pinFlag.reason,
+        flagSameCount: pinFlag.sameCount,
       };
     });
 
@@ -159,12 +185,13 @@ export async function GET(req: Request) {
     else if (r.status === "leave") leave += 1;
     else if (r.status === "pending") pending += 1;
     else absent += 1;
+    if (r.flagged) flagged += 1;
   }
 
   return NextResponse.json({
     date,
     rows,
-    summary: { present, halfDay, absent, leave, pending, total: rows.length },
+    summary: { present, halfDay, absent, leave, pending, flagged, total: rows.length },
     rules: {
       present: `Punch in by 10:30 AM and stay on duty 6–12 hours`,
       halfDay: `Punch in after 10:30 AM and by 1:00 PM`,

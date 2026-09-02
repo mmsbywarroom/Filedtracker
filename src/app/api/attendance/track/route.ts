@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { sessionTravelMeters, shouldCreditTrackStep } from "@/lib/utils";
 import { autoPunchOutIfStale, closeOpenAttendance } from "@/lib/punchOut";
 import { assertInsideCallCenterSite, isCallCenterDesignation } from "@/lib/callCenterGeofence";
-import { isPanIndiaPunchPhone } from "@/lib/panIndiaPunch";
+import { mergeMapProbeLog } from "@/lib/gpsSpoofVerdict";
 
 export async function POST(req: Request) {
   const s = await requireUser();
@@ -21,6 +21,7 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   const points = Array.isArray(body?.points) ? body.points : [];
   const mapGpsSpreadM = Number(body?.mapGpsSpreadM);
+  const mapProbesRaw = Array.isArray(body?.mapProbes) ? body.mapProbes : [];
   const open = await prisma.attendance.findFirst({
     where: { userId: s.sub, punchOutAt: null },
     include: { points: { orderBy: { recordedAt: "desc" }, take: 1 } },
@@ -55,7 +56,19 @@ export async function POST(req: Request) {
       accuracy: Number.isFinite(Number(p.accuracy)) ? Number(p.accuracy) : null,
     });
   }
-  if (!cleaned.length && !Number.isFinite(mapGpsSpreadM)) return NextResponse.json({ ok: true });
+  const incomingMapProbes = mapProbesRaw
+    .slice(0, 40)
+    .map((p: { lat?: number; lng?: number; accuracy?: number; at?: number }) => ({
+      lat: Number(p.lat),
+      lng: Number(p.lng),
+      accuracy: Number.isFinite(Number(p.accuracy)) ? Number(p.accuracy) : null,
+      at: Number.isFinite(Number(p.at)) ? Number(p.at) : Date.now(),
+    }))
+    .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng));
+
+  if (!cleaned.length && !Number.isFinite(mapGpsSpreadM) && !incomingMapProbes.length) {
+    return NextResponse.json({ ok: true });
+  }
 
   const user = await prisma.user.findUnique({
     where: { id: s.sub },
@@ -95,9 +108,16 @@ export async function POST(req: Request) {
     });
   }
 
-  const spreadUpdate: { distanceMeters?: number; gpsMapSpreadM?: number } = {};
+  const spreadUpdate: {
+    distanceMeters?: number;
+    gpsMapSpreadM?: number;
+    gpsMapProbeLog?: ReturnType<typeof mergeMapProbeLog>;
+  } = {};
   if (Number.isFinite(mapGpsSpreadM) && mapGpsSpreadM > (open.gpsMapSpreadM ?? 0)) {
     spreadUpdate.gpsMapSpreadM = mapGpsSpreadM;
+  }
+  if (incomingMapProbes.length) {
+    spreadUpdate.gpsMapProbeLog = mergeMapProbeLog(open.gpsMapProbeLog, incomingMapProbes);
   }
 
   if (cleaned.length) {

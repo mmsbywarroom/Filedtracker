@@ -6,6 +6,7 @@ import { FaceCapture } from "@/components/FaceCapture";
 import { BrandMark } from "@/components/BrandMark";
 import RouteMap from "@/components/RouteMapDynamic";
 import { formatDuration, formatKm, mapGpsSpreadFromFixes, shouldCreditTrackStep, sessionTravelMeters } from "@/lib/utils";
+import { buildIntervalSlotOffsets } from "@/lib/attendanceIntervalFlag";
 import {
   captureGpsFix,
   isIosBrowser,
@@ -58,8 +59,7 @@ type Attendance = {
   punchOutReason?: string | null;
   distanceMeters: number;
   points: Point[];
-  gpsProbeSchedule?: number[];
-  gpsProbesDone?: number[];
+  intervalSnapshotsDone?: number[];
 };
 
 export default function DashboardPage() {
@@ -71,9 +71,10 @@ export default function DashboardPage() {
   const [msg, setMsg] = useState("");
   const [okMsg, setOkMsg] = useState(false);
   const buffer = useRef<Point[]>([]);
-  const mapProbeFixes = useRef<{ lat: number; lng: number }[]>([]);
-  const randomProbeTimers = useRef<number[]>([]);
-  const randomProbesSent = useRef<Set<number>>(new Set());
+  const mapProbeFixes = useRef<{ lat: number; lng: number; accuracy: number; at: number }[]>([]);
+  const mapProbeBatch = useRef<{ lat: number; lng: number; accuracy: number; at: number }[]>([]);
+  const intervalSnapshotTimers = useRef<number[]>([]);
+  const intervalSnapshotsSent = useRef<Set<number>>(new Set());
   const lastFix = useRef<{ lat: number; lng: number } | null>(null);
   const lastRecorded = useRef<{ lat: number; lng: number; at: number } | null>(null);
   const liveAcc = useRef<number>(Infinity);
@@ -292,66 +293,54 @@ export default function DashboardPage() {
     refresh();
   }
 
-  async function sendRandomGpsProbe(slot: number) {
-    if (randomProbesSent.current.has(slot)) return;
+  async function sendIntervalSnapshot(slot: number) {
+    if (intervalSnapshotsSent.current.has(slot)) return;
     try {
       const pos = await locateDevice();
-      randomProbesSent.current.add(slot);
-      const res = await fetch("/api/attendance/gps-probe", {
+      intervalSnapshotsSent.current.add(slot);
+      await fetch("/api/attendance/interval-snapshot", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           slot,
           lat: pos.coords.latitude,
           lng: pos.coords.longitude,
-          accuracy: pos.coords.accuracy,
         }),
       });
-      if (res.status === 409) {
-        const data = await res.json().catch(() => ({}));
-        if (data?.code === "GPS_SPOOF") {
-          setOpen(null);
-          setMode("idle");
-          setMsg(t("gpsSpoofAutoOut"));
-          refresh();
-        }
-      }
     } catch {
-      randomProbesSent.current.delete(slot);
+      intervalSnapshotsSent.current.delete(slot);
     }
   }
 
-  function clearRandomProbeTimers() {
-    for (const id of randomProbeTimers.current) window.clearTimeout(id);
-    randomProbeTimers.current = [];
+  function clearIntervalSnapshotTimers() {
+    for (const id of intervalSnapshotTimers.current) window.clearTimeout(id);
+    intervalSnapshotTimers.current = [];
   }
 
-  function scheduleRandomGpsProbes(session: Attendance) {
-    clearRandomProbeTimers();
-    randomProbesSent.current = new Set(session.gpsProbesDone || []);
-    const schedule = session.gpsProbeSchedule;
-    if (!schedule?.length) return;
+  function scheduleIntervalSnapshots(session: Attendance) {
+    clearIntervalSnapshotTimers();
+    intervalSnapshotsSent.current = new Set(session.intervalSnapshotsDone || []);
     const punchInMs = new Date(session.punchInAt).getTime();
-    schedule.forEach((offsetMs, idx) => {
+    buildIntervalSlotOffsets().forEach((offsetMs, idx) => {
       const slot = idx + 1;
-      if (randomProbesSent.current.has(slot)) return;
+      if (intervalSnapshotsSent.current.has(slot)) return;
       const fireAt = punchInMs + offsetMs;
       const delay = Math.max(0, fireAt - Date.now());
       const id = window.setTimeout(() => {
-        void sendRandomGpsProbe(slot);
+        void sendIntervalSnapshot(slot);
       }, delay);
-      randomProbeTimers.current.push(id);
+      intervalSnapshotTimers.current.push(id);
     });
   }
 
   useEffect(() => {
     if (!open) {
       mapProbeFixes.current = [];
-      clearRandomProbeTimers();
-      randomProbesSent.current.clear();
+      clearIntervalSnapshotTimers();
+      intervalSnapshotsSent.current.clear();
       return;
     }
-    scheduleRandomGpsProbes(open);
+    scheduleIntervalSnapshots(open);
     lastFix.current = open.points[open.points.length - 1] || { lat: open.punchInLat, lng: open.punchInLng };
     const lastPt = open.points[open.points.length - 1];
     lastRecorded.current = lastPt
@@ -365,13 +354,14 @@ export default function DashboardPage() {
 
     const flush = async () => {
       const batch = buffer.current.splice(0, buffer.current.length);
+      const mapBatch = mapProbeBatch.current.splice(0, mapProbeBatch.current.length);
       const mapGpsSpreadM = mapGpsSpreadFromFixes(mapProbeFixes.current);
       try {
         const res = await fetch("/api/attendance/track", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           keepalive: true,
-          body: JSON.stringify({ points: batch, mapGpsSpreadM }),
+          body: JSON.stringify({ points: batch, mapGpsSpreadM, mapProbes: mapBatch }),
         });
         if (res.status === 409) {
           const data = await res.json().catch(() => ({}));
@@ -388,7 +378,7 @@ export default function DashboardPage() {
             setMsg(data?.error || "Auto punched out: you left the 1000 m office boundary.");
             refresh();
           }
-        } else if (res.status === 400 && batch.length === 0) {
+        } else if (res.status === 400 && batch.length === 0 && mapBatch.length === 0) {
           // Session may already have been closed by server cron
           refresh();
         }
@@ -403,7 +393,9 @@ export default function DashboardPage() {
       const next = { lat: pos.coords.latitude, lng: pos.coords.longitude };
       setLivePos(next);
       if (acc <= 65) {
-        mapProbeFixes.current.push(next);
+        const probe = { lat: next.lat, lng: next.lng, accuracy: acc, at: Date.now() };
+        mapProbeFixes.current.push(probe);
+        mapProbeBatch.current.push(probe);
         if (mapProbeFixes.current.length > 48) {
           mapProbeFixes.current = mapProbeFixes.current.slice(-48);
         }
@@ -470,7 +462,7 @@ export default function DashboardPage() {
       navigator.geolocation.clearWatch(watch);
       clearInterval(t);
       window.clearInterval(ping);
-      clearRandomProbeTimers();
+      clearIntervalSnapshotTimers();
       document.removeEventListener("visibilitychange", onHide);
       perm?.removeEventListener("change", onPerm);
       if (gpsDenyResetTimer.current != null) window.clearTimeout(gpsDenyResetTimer.current);
