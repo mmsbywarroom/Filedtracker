@@ -241,6 +241,20 @@ model GpsSpoofLog {
   @@index([outcome])
 }
 
+/// Admin allowed punch despite GPS spoof block (until expiresAt, IST end-of-day by default).
+model GpsSpoofBypass {
+  id        String   @id @default(cuid())
+  userId    String
+  expiresAt DateTime
+  adminId   String
+  adminName String   @default("")
+  reason    String
+  logId     String?
+  createdAt DateTime @default(now())
+
+  @@index([userId, expiresAt])
+}
+
 model Holiday {
   id            String   @id @default(cuid())
   date          DateTime @unique @db.Date

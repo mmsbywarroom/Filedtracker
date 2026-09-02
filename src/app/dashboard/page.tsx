@@ -8,7 +8,6 @@ import RouteMap from "@/components/RouteMapDynamic";
 import { formatDuration, formatKm, shouldCreditTrackStep, sessionTravelMeters } from "@/lib/utils";
 import {
   captureGpsFix,
-  collectGpsSamplesForPunch,
   isIosBrowser,
   locateDevice,
   withTimeout,
@@ -195,6 +194,12 @@ export default function DashboardPage() {
           if (age >= 0 && age < 10 * 60 * 1000) {
             setOkMsg(true);
             setMsg("Auto punched out: you left the 1000 m office boundary.");
+          }
+        }
+        if (!att.open && last?.punchOutReason === "gps_spoof" && last.punchOutAt) {
+          const age = Date.now() - new Date(last.punchOutAt).getTime();
+          if (age >= 0 && age < 10 * 60 * 1000) {
+            setMsg(t("gpsSpoofAutoOut"));
           }
         }
       }
@@ -451,39 +456,38 @@ export default function DashboardPage() {
     setMsg("");
     setOkMsg(false);
     try {
-      let lat: number;
-      let lng: number;
-      let accuracy: number | null = null;
-      let gpsSamples: { lat: number; lng: number; accuracy: number | null; at: number }[] = [];
-
-      setMsg(t("gpsVerifying"));
-
       await verifyFace(descriptor);
 
-      if (kind === "out") {
-        if (buffer.current.length) {
-          const batch = buffer.current.splice(0, buffer.current.length);
-          fetch("/api/attendance/track", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            keepalive: true,
-            body: JSON.stringify({ points: batch }),
-          }).catch(() => {});
-        }
-        const collected = await collectGpsSamplesForPunch({ count: 3, intervalMs: 2000 });
-        lat = collected.lat;
-        lng = collected.lng;
-        accuracy = collected.accuracy;
-        gpsSamples = collected.samples;
-      } else {
-        const collected = await collectGpsSamplesForPunch({ count: 3, intervalMs: 2000 });
-        lat = collected.lat;
-        lng = collected.lng;
-        accuracy = collected.accuracy;
-        gpsSamples = collected.samples;
+      if (kind === "out" && buffer.current.length) {
+        const batch = buffer.current.splice(0, buffer.current.length);
+        fetch("/api/attendance/track", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          keepalive: true,
+          body: JSON.stringify({ points: batch }),
+        }).catch(() => {});
       }
 
-      const payload = { lat, lng, accuracy, image, descriptor, gpsSamples };
+      let fix: GpsFix = punchGpsRef.current || {
+        lat: lastFix.current?.lat ?? livePos?.lat ?? 0,
+        lng: lastFix.current?.lng ?? livePos?.lng ?? 0,
+        accuracy: Number.isFinite(liveAcc.current) && liveAcc.current < 9000 ? liveAcc.current : null,
+        at: Date.now(),
+      };
+
+      if (!Number.isFinite(fix.lat) || !Number.isFinite(fix.lng) || (fix.lat === 0 && fix.lng === 0)) {
+        setMsg(t("gpsLocating"));
+        fix = await captureGpsFix(lastFix.current, liveAcc.current);
+      }
+
+      const payload = {
+        lat: fix.lat,
+        lng: fix.lng,
+        accuracy: fix.accuracy,
+        image,
+        descriptor,
+        gpsSamples: [fix],
+      };
       const url = kind === "in" ? "/api/attendance" : "/api/attendance/punch-out";
       const res = await withTimeout(
         fetch(url, {
@@ -491,7 +495,7 @@ export default function DashboardPage() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
         }),
-        45000,
+        20000,
         "Punch timed out. Check network and try again."
       );
       const data = await readApiJson<{ error?: string }>(res);

@@ -7,7 +7,11 @@ import { assertInsideCallCenterSite, isCallCenterDesignation } from "@/lib/callC
 import { closeOpenAttendance } from "@/lib/punchOut";
 import { requireUserFaceMatch } from "@/lib/requireFaceMatch";
 import { assertPanIndiaPunchLocation, isPanIndiaPunchPhone } from "@/lib/panIndiaPunch";
-import { enforceGpsAntiSpoof, flagStationarySession } from "@/lib/gpsAntiSpoof";
+import {
+  enforceGpsAntiSpoofInstant,
+  flagStationarySession,
+  schedulePunchOutGpsVerification,
+} from "@/lib/gpsAntiSpoof";
 
 export async function POST(req: Request) {
   const s = await requireUser();
@@ -41,7 +45,7 @@ export async function POST(req: Request) {
   });
   if (!user) return NextResponse.json({ error: "Account not found." }, { status: 403 });
 
-  const gpsCheck = await enforceGpsAntiSpoof({
+  await enforceGpsAntiSpoofInstant({
     userId: s.sub,
     user: {
       name: user.name,
@@ -57,9 +61,6 @@ export async function POST(req: Request) {
     accuracy: Number.isFinite(Number(body?.accuracy)) ? Number(body.accuracy) : null,
     gpsSamples: body?.gpsSamples,
   });
-  if (!gpsCheck.ok) {
-    return NextResponse.json({ error: gpsCheck.error, code: gpsCheck.code }, { status: 403 });
-  }
 
   if (isPanIndiaPunchPhone(user?.phone)) {
     const india = assertPanIndiaPunchLocation(lat, lng);
@@ -115,6 +116,22 @@ export async function POST(req: Request) {
     distanceMeters: attendance.distanceMeters,
     lat,
     lng,
+  });
+
+  schedulePunchOutGpsVerification({
+    userId: s.sub,
+    user: {
+      name: user.name,
+      phone: user.phone,
+      designation: user.designation,
+      assemblyName: user.assemblyName,
+      zone: user.zone,
+      district: user.district,
+    },
+    attendanceId: attendance.id,
+    lat,
+    lng,
+    accuracy: Number.isFinite(Number(body?.accuracy)) ? Number(body.accuracy) : null,
   });
 
   return NextResponse.json({ attendance, ok: true });

@@ -9,7 +9,7 @@ import { autoPunchOutIfStale, closeStaleSessionForRePunch } from "@/lib/punchOut
 import { requireUserFaceMatch } from "@/lib/requireFaceMatch";
 import { findHolidayToday, holidayAppliesTo } from "@/lib/holidays";
 import { assertPanIndiaPunchLocation, isPanIndiaPunchPhone } from "@/lib/panIndiaPunch";
-import { enforceGpsAntiSpoof } from "@/lib/gpsAntiSpoof";
+import { enforceGpsAntiSpoofInstant, schedulePunchInGpsVerification } from "@/lib/gpsAntiSpoof";
 
 function istDayBounds(d = new Date()) {
   const ymd = d.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
@@ -161,7 +161,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Account not found or inactive." }, { status: 403 });
   }
 
-  const gpsCheck = await enforceGpsAntiSpoof({
+  await enforceGpsAntiSpoofInstant({
     userId: s.sub,
     user: {
       name: user.name,
@@ -177,9 +177,6 @@ export async function POST(req: Request) {
     accuracy: Number.isFinite(Number(body?.accuracy)) ? Number(body.accuracy) : null,
     gpsSamples: body?.gpsSamples,
   });
-  if (!gpsCheck.ok) {
-    return NextResponse.json({ error: gpsCheck.error, code: gpsCheck.code }, { status: 403 });
-  }
 
   const { start, end } = istDayBounds();
   const onLeave = await prisma.leaveRequest.findFirst({
@@ -248,5 +245,19 @@ export async function POST(req: Request) {
     },
     select: { id: true, punchInAt: true },
   });
+
+  schedulePunchInGpsVerification({
+    userId: s.sub,
+    user: {
+      name: user.name,
+      phone: user.phone,
+      designation: user.designation,
+      assemblyName: user.assemblyName,
+      zone: user.zone,
+      district: user.district,
+    },
+    attendanceId: attendance.id,
+  });
+
   return NextResponse.json({ attendance, ok: true });
 }

@@ -171,12 +171,12 @@ export function assemblyExportCode(assemblyName: string): string | null {
   return null;
 }
 
-export function assemblyExportFileName(assemblyName: string): string {
+export function assemblyExportFileName(assemblyName: string, ext: "csv" | "pdf" = "csv"): string {
   const code = assemblyExportCode(assemblyName);
-  if (code) return `${code}.csv`;
+  if (code) return `${code}.${ext}`;
   const safe = String(assemblyName || "Unknown")
     .replace(/[^\w\s.-]+/g, "")
     .trim()
     .replace(/\s+/g, "_");
-  return `UNMAPPED_${safe || "Unknown"}.csv`;
+  return `UNMAPPED_${safe || "Unknown"}.${ext}`;
 }

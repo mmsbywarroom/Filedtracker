@@ -26,6 +26,7 @@ type Log = {
   maxSpreadM: number | null;
   detail: string;
   attendanceId: string | null;
+  bypassUntil: string | null;
 };
 
 function todayIst() {
@@ -52,6 +53,10 @@ export default function GpsSpoofLogsPage() {
   const [designation, setDesignation] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const [unblockPending, setUnblockPending] = useState<{ userId: string; name: string; logId: string } | null>(null);
+  const [unblockReason, setUnblockReason] = useState("");
+  const [unblockErr, setUnblockErr] = useState("");
+  const [unblockBusy, setUnblockBusy] = useState(false);
 
   async function load() {
     const params = new URLSearchParams();
@@ -71,6 +76,34 @@ export default function GpsSpoofLogsPage() {
   useEffect(() => {
     load();
   }, []);
+
+  async function applyUnblock() {
+    if (!unblockPending) return;
+    if (unblockReason.trim().length < 3) {
+      setUnblockErr("Reason is required (at least 3 characters).");
+      return;
+    }
+    setUnblockBusy(true);
+    setUnblockErr("");
+    const res = await fetch("/api/admin/gps-spoof/unblock", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId: unblockPending.userId,
+        logId: unblockPending.logId,
+        reason: unblockReason.trim(),
+      }),
+    });
+    setUnblockBusy(false);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setUnblockErr(data.error || "Could not unblock user.");
+      return;
+    }
+    setUnblockPending(null);
+    setUnblockReason("");
+    load();
+  }
 
   const zones = useMemo(() => uniqueSorted(logs.map((r) => r.zone)), [logs]);
   const districts = useMemo(
@@ -163,6 +196,7 @@ export default function GpsSpoofLogsPage() {
         reasons={[
           { value: "blocked", label: "Blocked" },
           { value: "flagged", label: "Flagged only" },
+          { value: "bypassed", label: "Bypassed (admin)" },
         ]}
         onApply={load}
         onCsv={() => downloadCsv(`gps-spoof-${date || "all"}`, exportHeaders, exportRows)}
@@ -179,6 +213,7 @@ export default function GpsSpoofLogsPage() {
                 <th className="px-4 py-3">Action</th>
                 <th className="px-4 py-3">Reason</th>
                 <th className="px-4 py-3">Location</th>
+                <th className="px-4 py-3">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -199,10 +234,14 @@ export default function GpsSpoofLogsPage() {
                     <p className="font-medium">{actionLabel(r.action)}</p>
                     <span
                       className={`mt-1 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${
-                        r.outcome === "blocked" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-800"
+                        r.outcome === "blocked"
+                          ? "bg-red-50 text-red-700"
+                          : r.outcome === "bypassed"
+                            ? "bg-emerald-50 text-emerald-700"
+                            : "bg-amber-50 text-amber-800"
                       }`}
                     >
-                      {r.outcome === "blocked" ? "Blocked" : "Flagged"}
+                      {r.outcome === "blocked" ? "Blocked" : r.outcome === "bypassed" ? "Bypassed" : "Flagged"}
                     </span>
                   </td>
                   <td className="px-4 py-3">
@@ -242,6 +281,32 @@ export default function GpsSpoofLogsPage() {
                       </p>
                     )}
                   </td>
+                  <td className="px-4 py-3">
+                    {r.bypassUntil ? (
+                      <p className="text-xs font-semibold text-emerald-700">
+                        Unblocked until{" "}
+                        {new Date(r.bypassUntil).toLocaleString("en-IN", {
+                          timeZone: "Asia/Kolkata",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </p>
+                    ) : r.outcome === "blocked" ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUnblockPending({ userId: r.userId, name: r.name, logId: r.id });
+                          setUnblockReason("");
+                          setUnblockErr("");
+                        }}
+                        className="rounded-xl bg-teal px-3 py-1.5 text-xs font-semibold text-white"
+                      >
+                        Unblock punch
+                      </button>
+                    ) : (
+                      <span className="text-xs text-navy/40">—</span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -254,6 +319,50 @@ export default function GpsSpoofLogsPage() {
           <PaginationBar page={page} pageSize={pageSize} total={filtered.length} onPage={setPage} onPageSize={setPageSize} />
         )}
       </section>
+
+      {unblockPending && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-navy/40 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-card">
+            <h2 className="text-lg font-semibold">Unblock punch-in</h2>
+            <p className="mt-1 text-sm text-navy/60">
+              Allow <span className="font-semibold">{unblockPending.name}</span> to punch in again today even if GPS
+              looks suspicious. Bypass lasts until 11:59 PM IST tonight.
+            </p>
+            <label className="mt-4 block text-xs font-medium text-navy/55">
+              Reason (required)
+              <textarea
+                value={unblockReason}
+                onChange={(e) => setUnblockReason(e.target.value)}
+                rows={3}
+                placeholder="Why are you allowing this user to punch?"
+                className="mt-1 w-full rounded-xl border border-navy/10 px-3 py-2 text-sm"
+              />
+            </label>
+            {unblockErr && <p className="mt-2 text-sm text-red-600">{unblockErr}</p>}
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setUnblockPending(null);
+                  setUnblockReason("");
+                  setUnblockErr("");
+                }}
+                className="admin-btn-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={applyUnblock}
+                disabled={unblockBusy}
+                className="admin-btn-ink disabled:opacity-50"
+              >
+                {unblockBusy ? "Saving…" : "Unblock"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

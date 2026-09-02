@@ -94,6 +94,9 @@ const dict = {
     gpsOffLogs: "GPS off logs",
     gpsSpoofLogs: "Fake GPS logs",
     gpsVerifying: "Verifying real GPS location…",
+    gpsLocating: "Getting your location…",
+    gpsSpoofAutoOut:
+      "Your session was ended — fake or invalid GPS was detected. Turn off location spoofing apps and punch again from your real field location.",
     gpsOffFlag: "You were punched out because GPS was turned off. Keep Location on while you are punched in.",
     autoPunchOutLogs: "Auto punch-out",
     faceResetLogs: "Face reset logs",
@@ -206,6 +209,9 @@ const dict = {
     gpsOffLogs: "GPS ਬੰਦ ਲਾਗ",
     gpsSpoofLogs: "ਫੇਕ GPS ਲਾਗ",
     gpsVerifying: "ਅਸਲੀ GPS ਜਾਂਚ ਹੋ ਰਹੀ ਹੈ…",
+    gpsLocating: "ਤੁਹਾਡੀ ਥਾਂ ਲੱਭੀ ਜਾ ਰਹੀ ਹੈ…",
+    gpsSpoofAutoOut:
+      "ਤੁਹਾਡਾ ਸੈਸ਼ਨ ਬੰਦ ਕਰ ਦਿੱਤਾ ਗਿਆ — ਫੇਕ ਜਾਂ ਗਲਤ GPS ਮਿਲਿਆ। Location spoofing ਐਪ ਬੰਦ ਕਰੋ ਅਤੇ ਅਸਲ ਫੀਲਡ ਥਾਂ ਤੋਂ ਦੁਬਾਰਾ ਪੰਚ ਕਰੋ।",
     gpsOffFlag: "GPS ਬੰਦ ਹੋਣ ਕਰਕੇ ਤੁਹਾਡਾ ਪੰਚ ਆਉਟ ਹੋ ਗਿਆ। ਪੰਚ ਇਨ ਦੌਰਾਨ Location ਚਾਲੂ ਰੱਖੋ।",
     autoPunchOutLogs: "ਆਟੋ ਪੰਚ-ਆਉਟ",
     faceResetLogs: "ਫੇਸ ਰੀਸੈਟ ਲਾਗ",

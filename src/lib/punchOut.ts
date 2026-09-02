@@ -5,7 +5,7 @@ export const AUTO_PUNCH_OUT_MS = 12 * 60 * 60 * 1000;
 /** Gap with no track points before a new punch-in may start a fresh session (screen-off is OK). */
 export const RE_PUNCH_GAP_MS = 45 * 60 * 1000;
 
-export type PunchOutReason = "manual" | "gps_off" | "auto_12h" | "auto_geofence" | "tracking_gap";
+export type PunchOutReason = "manual" | "gps_off" | "auto_12h" | "auto_geofence" | "tracking_gap" | "gps_spoof";
 
 export async function closeOpenAttendance(opts: {
   userId: string;
@@ -64,6 +64,9 @@ export async function closeOpenAttendance(opts: {
   }
   if (opts.reason === "auto_geofence") {
     address = opts.address || "Auto punch-out: left Call Center 1000 m boundary";
+  }
+  if (opts.reason === "gps_spoof") {
+    address = opts.address || "Auto punch-out: fake or invalid GPS detected";
   }
 
   return prisma.attendance.update({

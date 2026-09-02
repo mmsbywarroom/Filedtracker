@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { closeOpenAttendance } from "@/lib/punchOut";
 import { haversineMeters } from "@/lib/utils";
 
 export type GpsSample = { lat: number; lng: number; accuracy: number | null; at?: number };
@@ -33,15 +34,64 @@ const STATIONARY_SESSION_M = Number(process.env.GPS_STATIONARY_SESSION_M || 80);
 const STATIONARY_MIN_MS = Number(process.env.GPS_STATIONARY_MIN_MS || 2 * 60 * 60 * 1000);
 
 export const GPS_ANTI_SPOOF_ENABLED = process.env.GPS_ANTI_SPOOF_ENABLED !== "false";
+/** Wait for track points before background punch-in GPS check (default 90s). */
+export const PUNCH_GPS_VERIFY_DELAY_MS = Number(process.env.PUNCH_GPS_VERIFY_DELAY_MS || 90000);
 
-const BLOCK_FLAGS = new Set<GpsSpoofFlag>([
-  "few_samples",
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export function istDayEnd(from = new Date()) {
+  const ymd = from.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  return new Date(`${ymd}T23:59:59.999+05:30`);
+}
+
+export async function activeGpsBypass(userId: string) {
+  return prisma.gpsSpoofBypass.findFirst({
+    where: { userId, expiresAt: { gt: new Date() } },
+    orderBy: { expiresAt: "desc" },
+  });
+}
+
+export async function grantGpsBypass(opts: {
+  userId: string;
+  adminId: string;
+  adminName: string;
+  reason: string;
+  logId?: string | null;
+  expiresAt?: Date;
+}) {
+  const expiresAt = opts.expiresAt ?? istDayEnd();
+  await prisma.gpsSpoofBypass.deleteMany({
+    where: { userId: opts.userId, expiresAt: { gt: new Date() } },
+  });
+  return prisma.gpsSpoofBypass.create({
+    data: {
+      userId: opts.userId,
+      expiresAt,
+      adminId: opts.adminId,
+      adminName: opts.adminName,
+      reason: opts.reason,
+      logId: opts.logId ?? null,
+    },
+  });
+}
+
+/** Strong spoof signals — block on these alone. */
+const HARD_BLOCK_FLAGS = new Set<GpsSpoofFlag>([
   "poor_accuracy",
   "samples_too_far_apart",
   "impossible_jump",
-  "duplicate_coordinates",
-  "suspicious_perfect_accuracy",
 ]);
+
+/** Standing still gives identical readings — only block when coords are pinned AND accuracy is fake-perfect. */
+function isGpsSpoofBlocked(flags: GpsSpoofFlag[]): boolean {
+  if (flags.some((f) => HARD_BLOCK_FLAGS.has(f))) return true;
+  return flags.includes("duplicate_coordinates") && flags.includes("suspicious_perfect_accuracy");
+}
+
+/** @deprecated use isGpsSpoofBlocked — kept for tests */
+const BLOCK_FLAGS = HARD_BLOCK_FLAGS;
 
 export function parseGpsSamples(raw: unknown): GpsSample[] {
   if (!Array.isArray(raw)) return [];
@@ -101,7 +151,7 @@ export function analyzeGpsSamples(samples: GpsSample[]) {
   }
 
   const uniqueFlags = Array.from(new Set(flags));
-  const blocked = uniqueFlags.some((f) => BLOCK_FLAGS.has(f));
+  const blocked = isGpsSpoofBlocked(uniqueFlags);
   const detail = uniqueFlags.length
     ? uniqueFlags.map((f) => GPS_SPOOF_FLAG_LABELS[f]).join("; ")
     : "OK";
@@ -147,7 +197,7 @@ export async function recordGpsSpoofLog(opts: {
   userId: string;
   user: LogUser;
   action: string;
-  outcome: "blocked" | "flagged";
+  outcome: "blocked" | "flagged" | "bypassed";
   flags: GpsSpoofFlag[];
   lat?: number | null;
   lng?: number | null;
@@ -198,8 +248,29 @@ export async function enforceGpsAntiSpoof(opts: {
     return { ok: true as const, flags: [] as GpsSpoofFlag[] };
   }
 
+  const bypass = await activeGpsBypass(opts.userId);
   const samples = parseGpsSamples(opts.gpsSamples);
   const analysis = analyzeGpsSamples(samples);
+
+  if (bypass) {
+    if (analysis.flags.length) {
+      await recordGpsSpoofLog({
+        userId: opts.userId,
+        user: opts.user,
+        action: opts.action,
+        outcome: "bypassed",
+        flags: analysis.flags,
+        lat: opts.lat,
+        lng: opts.lng,
+        accuracy: opts.accuracy ?? null,
+        sampleCount: samples.length,
+        maxSpreadM: analysis.maxSpreadM,
+        detail: `${analysis.detail} · Admin bypass until ${bypass.expiresAt.toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}`,
+        attendanceId: opts.attendanceId,
+      });
+    }
+    return { ok: true as const, flags: analysis.flags, bypassed: true as const };
+  }
 
   if (analysis.flags.length) {
     await recordGpsSpoofLog({
@@ -228,6 +299,209 @@ export async function enforceGpsAntiSpoof(opts: {
   }
 
   return { ok: true as const, flags: analysis.flags };
+}
+
+/** Instant punch — do not block; GPS is verified in background from track points. */
+export async function enforceGpsAntiSpoofInstant(opts: {
+  userId: string;
+  user: LogUser;
+  action: "punch_in" | "punch_out";
+  lat: number;
+  lng: number;
+  accuracy?: number | null;
+  gpsSamples?: unknown;
+}) {
+  if (!GPS_ANTI_SPOOF_ENABLED) {
+    return { ok: true as const, flags: [] as GpsSpoofFlag[], deferred: true as const };
+  }
+
+  const bypass = await activeGpsBypass(opts.userId);
+  if (bypass) {
+    const samples = parseGpsSamples(opts.gpsSamples);
+    if (samples.length === 0) {
+      samples.push({
+        lat: opts.lat,
+        lng: opts.lng,
+        accuracy: opts.accuracy ?? null,
+        at: Date.now(),
+      });
+    }
+    const analysis = analyzeGpsSamples(samples);
+    if (analysis.flags.length) {
+      await recordGpsSpoofLog({
+        userId: opts.userId,
+        user: opts.user,
+        action: opts.action,
+        outcome: "bypassed",
+        flags: analysis.flags,
+        lat: opts.lat,
+        lng: opts.lng,
+        accuracy: opts.accuracy ?? null,
+        sampleCount: samples.length,
+        maxSpreadM: analysis.maxSpreadM,
+        detail: `${analysis.detail} · Admin bypass active`,
+      });
+    }
+    return { ok: true as const, flags: analysis.flags, bypassed: true as const };
+  }
+
+  return { ok: true as const, flags: [] as GpsSpoofFlag[], deferred: true as const };
+}
+
+function trackPointsToSamples(
+  punchIn: { lat: number; lng: number; at: Date },
+  points: { lat: number; lng: number; accuracy: number | null; recordedAt: Date }[],
+  punchOut?: { lat: number; lng: number; accuracy: number | null; at: number }
+): GpsSample[] {
+  const samples: GpsSample[] = [
+    { lat: punchIn.lat, lng: punchIn.lng, accuracy: null, at: punchIn.at.getTime() },
+    ...points.map((p) => ({
+      lat: p.lat,
+      lng: p.lng,
+      accuracy: p.accuracy,
+      at: p.recordedAt.getTime(),
+    })),
+  ];
+  if (punchOut) {
+    samples.push({
+      lat: punchOut.lat,
+      lng: punchOut.lng,
+      accuracy: punchOut.accuracy,
+      at: punchOut.at,
+    });
+  }
+  return samples;
+}
+
+export function schedulePunchInGpsVerification(opts: {
+  userId: string;
+  user: LogUser;
+  attendanceId: string;
+}) {
+  void verifyPunchInGpsLater(opts).catch((e) => console.error("verifyPunchInGpsLater", e));
+}
+
+async function verifyPunchInGpsLater(opts: {
+  userId: string;
+  user: LogUser;
+  attendanceId: string;
+}) {
+  await sleep(PUNCH_GPS_VERIFY_DELAY_MS);
+  if (await activeGpsBypass(opts.userId)) return;
+
+  const attendance = await prisma.attendance.findFirst({
+    where: { id: opts.attendanceId, userId: opts.userId, punchOutAt: null },
+    include: { points: { orderBy: { recordedAt: "asc" }, take: 40 } },
+  });
+  if (!attendance) return;
+
+  const samples = trackPointsToSamples(
+    { lat: attendance.punchInLat, lng: attendance.punchInLng, at: attendance.punchInAt },
+    attendance.points
+  );
+  if (samples.length < MIN_SAMPLES) return;
+
+  const analysis = analyzeGpsSamples(samples);
+  if (!analysis.flags.length) return;
+
+  const last = attendance.points[attendance.points.length - 1];
+  const lat = last?.lat ?? attendance.punchInLat;
+  const lng = last?.lng ?? attendance.punchInLng;
+
+  if (analysis.blocked) {
+    await recordGpsSpoofLog({
+      userId: opts.userId,
+      user: opts.user,
+      action: "punch_in",
+      outcome: "blocked",
+      flags: analysis.flags,
+      lat,
+      lng,
+      sampleCount: samples.length,
+      maxSpreadM: analysis.maxSpreadM,
+      detail: `${analysis.detail} · Auto punch-out after background GPS check`,
+      attendanceId: attendance.id,
+    });
+    await closeOpenAttendance({
+      userId: opts.userId,
+      lat,
+      lng,
+      accuracy: last?.accuracy ?? null,
+      reason: "gps_spoof",
+      address: "Auto punch-out: fake or invalid GPS detected",
+    });
+    return;
+  }
+
+  await recordGpsSpoofLog({
+    userId: opts.userId,
+    user: opts.user,
+    action: "punch_in",
+    outcome: "flagged",
+    flags: analysis.flags,
+    lat,
+    lng,
+    sampleCount: samples.length,
+    maxSpreadM: analysis.maxSpreadM,
+    detail: `${analysis.detail} · Background GPS check`,
+    attendanceId: attendance.id,
+  });
+}
+
+export function schedulePunchOutGpsVerification(opts: {
+  userId: string;
+  user: LogUser;
+  attendanceId: string;
+  lat: number;
+  lng: number;
+  accuracy?: number | null;
+}) {
+  void verifyPunchOutGpsLater(opts).catch((e) => console.error("verifyPunchOutGpsLater", e));
+}
+
+async function verifyPunchOutGpsLater(opts: {
+  userId: string;
+  user: LogUser;
+  attendanceId: string;
+  lat: number;
+  lng: number;
+  accuracy?: number | null;
+}) {
+  if (await activeGpsBypass(opts.userId)) return;
+
+  const attendance = await prisma.attendance.findUnique({
+    where: { id: opts.attendanceId },
+    include: { points: { orderBy: { recordedAt: "asc" }, take: 80 } },
+  });
+  if (!attendance) return;
+
+  const samples = trackPointsToSamples(
+    { lat: attendance.punchInLat, lng: attendance.punchInLng, at: attendance.punchInAt },
+    attendance.points,
+    {
+      lat: opts.lat,
+      lng: opts.lng,
+      accuracy: opts.accuracy ?? null,
+      at: attendance.punchOutAt?.getTime() ?? Date.now(),
+    }
+  );
+  const analysis = analyzeGpsSamples(samples);
+  if (!analysis.flags.length) return;
+
+  await recordGpsSpoofLog({
+    userId: opts.userId,
+    user: opts.user,
+    action: "punch_out",
+    outcome: analysis.blocked ? "blocked" : "flagged",
+    flags: analysis.flags,
+    lat: opts.lat,
+    lng: opts.lng,
+    accuracy: opts.accuracy ?? null,
+    sampleCount: samples.length,
+    maxSpreadM: analysis.maxSpreadM,
+    detail: `${analysis.detail} · Background GPS check after punch-out`,
+    attendanceId: attendance.id,
+  });
 }
 
 export async function flagStationarySession(opts: {

@@ -32,7 +32,7 @@ export async function GET(req: Request) {
       lte: new Date(`${date}T23:59:59.999+05:30`),
     };
   }
-  if (outcome === "blocked" || outcome === "flagged") {
+  if (outcome === "blocked" || outcome === "flagged" || outcome === "bypassed") {
     where.outcome = outcome;
   }
 
@@ -41,6 +41,19 @@ export async function GET(req: Request) {
     orderBy: { createdAt: "desc" },
     take: 500,
   });
+
+  const userIds = Array.from(new Set(rows.map((r) => r.userId)));
+  const bypassRows =
+    userIds.length === 0
+      ? []
+      : await prisma.gpsSpoofBypass.findMany({
+          where: { userId: { in: userIds }, expiresAt: { gt: new Date() } },
+          orderBy: { expiresAt: "desc" },
+        });
+  const bypassByUser = new Map<string, string>();
+  for (const b of bypassRows) {
+    if (!bypassByUser.has(b.userId)) bypassByUser.set(b.userId, b.expiresAt.toISOString());
+  }
 
   const logs = rows
     .filter((r) => {
@@ -83,6 +96,7 @@ export async function GET(req: Request) {
       maxSpreadM: r.maxSpreadM,
       detail: r.detail,
       attendanceId: r.attendanceId,
+      bypassUntil: bypassByUser.get(r.userId) ?? null,
     }));
 
   return NextResponse.json({ logs });

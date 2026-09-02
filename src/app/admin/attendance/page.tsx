@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { PaginationBar } from "@/components/PaginationBar";
 import { SearchSelect } from "@/components/SearchSelect";
 import { hierarchyDesignations } from "@/lib/hierarchy";
-import { downloadAssemblyAttendanceZip } from "@/lib/assemblyAttendanceZip";
+import { downloadAssemblyAttendancePdfZip } from "@/lib/assemblyAttendancePdf";
 
 type AttStatus = "present" | "half_day" | "absent" | "leave";
 type RowStatus = AttStatus | "pending";
@@ -179,7 +179,7 @@ export default function AttendanceModulePage() {
     if (!allRows.length) return;
     setZipBusy(true);
     try {
-      await downloadAssemblyAttendanceZip(date, allRows);
+      await downloadAssemblyAttendancePdfZip(date, allRows);
     } finally {
       setZipBusy(false);
     }
@@ -315,10 +315,11 @@ export default function AttendanceModulePage() {
             disabled={zipBusy || !allRows.length}
             className="h-11 rounded-xl bg-teal px-4 text-sm font-semibold text-white disabled:opacity-40"
           >
-            {zipBusy ? "Preparing ZIP…" : `Download ZIP (${allRows.length} users · ${date})`}
+            {zipBusy ? "Preparing PDF ZIP…" : `Download PDF ZIP (${allRows.length} users · ${date})`}
           </button>
           <p className="text-xs text-navy/50">
-            One CSV per assembly — file name = Halka code (e.g. DB_JU_Jalandhar Cantt.csv) for selected date only.
+            One PDF per Halka — file name = Halka code (e.g. DB_JU_Jalandhar Cantt.pdf). Each PDF has that Halka
+            summary + full attendance table for the selected date.
           </p>
         </div>
       </div>
