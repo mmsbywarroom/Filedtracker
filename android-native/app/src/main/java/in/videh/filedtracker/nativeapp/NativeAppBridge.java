@@ -7,6 +7,7 @@ import android.os.Build;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
 
+import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
 import in.videh.filedtracker.bglocation.FieldLocationService;
@@ -41,10 +42,44 @@ public class NativeAppBridge {
     @JavascriptInterface
     public String requestLocationPermissions() {
         activity.runOnUiThread(() -> {
-            LocationHelper.requestLocationPermissions(activity);
-            LocationHelper.requestNotifications(activity);
+            if (activity instanceof WebShellActivity) {
+                ((WebShellActivity) activity).requestAllPermissions();
+            } else {
+                LocationHelper.requestLocationPermissions(activity);
+                LocationHelper.requestNotifications(activity);
+            }
         });
         return LocationHelper.permissionStatusJson(activity);
+    }
+
+    @JavascriptInterface
+    public void requestCameraPermission() {
+        activity.runOnUiThread(() -> {
+            if (activity instanceof WebShellActivity) {
+                ((WebShellActivity) activity).requestAllPermissions();
+            } else if (ContextCompat.checkSelfPermission(activity, Manifest.permission.CAMERA)
+                    != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(activity, new String[]{Manifest.permission.CAMERA}, 4100);
+            }
+        });
+    }
+
+    @JavascriptInterface
+    public int getStatusBarHeightPx() {
+        if (activity instanceof WebShellActivity) {
+            return ((WebShellActivity) activity).getStatusBarHeightPx();
+        }
+        int id = activity.getResources().getIdentifier("status_bar_height", "dimen", "android");
+        if (id > 0) return activity.getResources().getDimensionPixelSize(id);
+        return (int) (28 * activity.getResources().getDisplayMetrics().density);
+    }
+
+    @JavascriptInterface
+    public int getNavigationBarHeightPx() {
+        if (activity instanceof WebShellActivity) {
+            return ((WebShellActivity) activity).getNavigationBarHeightPx();
+        }
+        return 0;
     }
 
     @JavascriptInterface

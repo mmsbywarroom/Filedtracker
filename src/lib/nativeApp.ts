@@ -5,7 +5,10 @@ import { isPureNativeApp, pureNativeBridge } from "@/lib/pureNativeApp";
 
 export async function ensureNativeCameraPermission(): Promise<boolean> {
   if (!isNativeApp()) return true;
-  if (isPureNativeApp()) return true;
+  if (isPureNativeApp()) {
+    pureNativeBridge()?.requestCameraPermission?.();
+    return true;
+  }
   try {
     const { Camera } = await import("@capacitor/camera");
     const cur = await Camera.checkPermissions();

@@ -26,9 +26,18 @@ body {
   @apply bg-sand text-ink antialiased;
 }
 
-/* Capacitor — keep headers below status bar (time, battery) */
-body.capacitor-native .app-header-safe {
+/* Capacitor + pure native WebView — keep content below status bar */
+body.capacitor-native .app-header-safe,
+body.pure-native-app .app-header-safe {
   padding-top: max(0.75rem, var(--status-bar-height, 28px));
+}
+
+body.pure-native-app .native-safe-top {
+  padding-top: max(0.75rem, var(--status-bar-height, 28px));
+}
+
+body.pure-native-app .native-safe-bottom {
+  padding-bottom: max(1.25rem, var(--navigation-bar-height, env(safe-area-inset-bottom, 0px)));
 }
 
 .leaflet-container {

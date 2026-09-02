@@ -5,6 +5,9 @@ declare global {
       stopTracking(): void;
       getLocationPermissionStatus(): string;
       requestLocationPermissions(): string;
+      requestCameraPermission(): void;
+      getStatusBarHeightPx(): number;
+      getNavigationBarHeightPx(): number;
       openLocationSettings(): void;
       clearSessionAndCookies(): void;
       exitApp(): void;
@@ -16,6 +19,7 @@ declare global {
 /** Pure native Android app (WebView shell), not Capacitor. */
 export function isPureNativeApp() {
   if (typeof window === "undefined") return false;
+  if (typeof navigator !== "undefined" && navigator.userAgent.includes("AAPNative/")) return true;
   return window.__PURE_NATIVE_APP__ === true || !!window.NativeAppBridge;
 }
 

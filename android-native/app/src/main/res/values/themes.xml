@@ -5,7 +5,9 @@
         <item name="colorPrimaryVariant">#0A1628</item>
         <item name="colorOnPrimary">#FFFFFF</item>
         <item name="colorSecondary">#0D9488</item>
-        <item name="android:statusBarColor">#0A1628</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowBackground">#F5F0E1</item>
     </style>
 </resources>

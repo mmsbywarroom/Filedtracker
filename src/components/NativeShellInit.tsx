@@ -10,18 +10,35 @@ function isAppRoot(path: string) {
   return APP_ROOT_PATHS.has(p);
 }
 
+function applyNativeInsets() {
+  const bridge = pureNativeBridge();
+  if (!bridge) return;
+  try {
+    const top = bridge.getStatusBarHeightPx?.() ?? 0;
+    const bottom = bridge.getNavigationBarHeightPx?.() ?? 0;
+    if (top > 0) {
+      document.documentElement.style.setProperty("--status-bar-height", `${top}px`);
+    }
+    if (bottom > 0) {
+      document.documentElement.style.setProperty("--navigation-bar-height", `${bottom}px`);
+    }
+  } catch {
+    /* bridge not ready */
+  }
+}
+
 /** Pure native WebView shell: status bar inset + back exits app on main screens. */
 export function NativeShellInit() {
   useEffect(() => {
     if (!isPureNativeApp()) return;
 
     document.body.classList.add("pure-native-app");
-    document.documentElement.style.setProperty("--status-bar-height", "28px");
+    applyNativeInsets();
+    window.setTimeout(applyNativeInsets, 300);
+    window.setTimeout(applyNativeInsets, 1200);
 
-    const onPopState = () => {
-      /* allow normal history */
-    };
-    window.addEventListener("popstate", onPopState);
+    const onResume = () => applyNativeInsets();
+    window.addEventListener("ft-app-resume", onResume);
 
     const onBack = () => {
       if (isAppRoot(window.location.pathname)) {
@@ -36,7 +53,7 @@ export function NativeShellInit() {
     window.addEventListener("ft-native-back", onBack);
 
     return () => {
-      window.removeEventListener("popstate", onPopState);
+      window.removeEventListener("ft-app-resume", onResume);
       window.removeEventListener("ft-native-back", onBack);
     };
   }, []);

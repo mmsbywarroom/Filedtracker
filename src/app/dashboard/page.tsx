@@ -20,6 +20,8 @@ import {
 } from "@/lib/deviceGeo";
 import { isWithinPunchInWindow } from "@/lib/punchInWindow";
 import { LangToggle, useLang } from "@/lib/i18n";
+import { LATEST_NATIVE_APK } from "@/lib/apkDownload";
+import { useClientNativeApp } from "@/hooks/useClientNativeApp";
 
 const AUTO_12H_MS = 12 * 60 * 60 * 1000;
 
@@ -69,6 +71,7 @@ type Attendance = {
 
 export default function DashboardPage() {
   const { t } = useLang();
+  const inNativeApp = useClientNativeApp();
   const [user, setUser] = useState<User | null>(null);
   const [open, setOpen] = useState<Attendance | null>(null);
   const [mode, setMode] = useState<"idle" | "register" | "in" | "out">("idle");
@@ -756,8 +759,8 @@ export default function DashboardPage() {
   }
 
   return (
-    <main className="min-h-screen overflow-x-hidden bg-sand">
-      <div className="mx-auto max-w-6xl px-4 py-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+    <main className="native-safe-top native-safe-bottom min-h-screen overflow-x-hidden bg-sand">
+      <div className="mx-auto max-w-6xl px-4 py-5">
         <NativeLocationBanner punchedIn={Boolean(open)} punchInAt={open?.punchInAt} />
         <header className="mb-4 flex flex-wrap items-start justify-between gap-2 rounded-3xl bg-white px-4 py-3 shadow-card">
           <div className="flex min-w-0 flex-1 items-center gap-3">
@@ -919,10 +922,10 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {!isNativeApp() && (
+        {!inNativeApp && (
           <a
-            href="/aap-attendance.apk"
-            download="AAP-Attendance.apk"
+            href={LATEST_NATIVE_APK}
+            download="AAP-Attendance-native.apk"
             className="mt-3 flex items-center justify-between rounded-2xl border border-navy/10 bg-navy px-4 py-3 text-white shadow-card"
           >
             <div>

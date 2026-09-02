@@ -18,3 +18,4 @@ mobile/android/.gradle
 mobile/android/app/build
 mobile/android/build
 AAP-Attendance*.apk
+!public/aap-attendance-native.apk
