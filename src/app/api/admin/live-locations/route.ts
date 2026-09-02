@@ -4,6 +4,15 @@ import { prisma } from "@/lib/prisma";
 import { canSeeUser, userScopeWhere } from "@/lib/hierarchy";
 import { istDateString, istDayBounds } from "@/lib/dailyAttendance";
 
+type LocFix = { lat: number; lng: number; at: Date; source: string };
+
+function pickLatestFix(candidates: (LocFix | null | undefined)[]): LocFix | null {
+  const valid = candidates.filter((c): c is LocFix => !!c && Number.isFinite(c.lat) && Number.isFinite(c.lng));
+  if (!valid.length) return null;
+  valid.sort((a, b) => b.at.getTime() - a.at.getTime());
+  return valid[0];
+}
+
 export async function GET(req: Request) {
   const s = await requireAdmin();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -45,7 +54,15 @@ export async function GET(req: Request) {
       punchInLng: true,
       punchOutLat: true,
       punchOutLng: true,
+      lastKnownLat: true,
+      lastKnownLng: true,
+      lastKnownAt: true,
       points: { orderBy: { recordedAt: "desc" }, take: 1, select: { lat: true, lng: true, recordedAt: true } },
+      intervalSnapshots: {
+        orderBy: { recordedAt: "desc" },
+        take: 1,
+        select: { lat: true, lng: true, recordedAt: true },
+      },
     },
   });
 
@@ -68,14 +85,45 @@ export async function GET(req: Request) {
   }
 
   const userById = new Map(visible.map((u) => [u.id, u]));
-  const rows = Array.from(byUser.entries())
+  type LiveRow = {
+    userId: string;
+    name: string;
+    phone: string;
+    designation: string;
+    assemblyName: string;
+    sectorAllotted: string;
+    zone: string;
+    district: string;
+    isLive: boolean;
+    lat: number;
+    lng: number;
+    recordedAt: string;
+    locationSource: string;
+    punchInAt: string;
+    punchOutAt: string | null;
+  };
+
+  const rows: LiveRow[] = Array.from(byUser.entries())
     .map(([userId, att]) => {
       const u = userById.get(userId)!;
       const isLive = !att.punchOutAt;
       const lastPt = att.points[0];
-      const lat = lastPt?.lat ?? (isLive ? att.punchInLat : att.punchOutLat ?? att.punchInLat);
-      const lng = lastPt?.lng ?? (isLive ? att.punchInLng : att.punchOutLng ?? att.punchInLng);
-      const recordedAt = lastPt?.recordedAt ?? (isLive ? att.punchInAt : att.punchOutAt ?? att.punchInAt);
+      const lastSnap = att.intervalSnapshots[0];
+      const fix = pickLatestFix([
+        att.lastKnownLat != null && att.lastKnownLng != null && att.lastKnownAt
+          ? { lat: att.lastKnownLat, lng: att.lastKnownLng, at: att.lastKnownAt, source: "heartbeat" }
+          : null,
+        lastPt ? { lat: lastPt.lat, lng: lastPt.lng, at: lastPt.recordedAt, source: "track" } : null,
+        lastSnap
+          ? { lat: lastSnap.lat, lng: lastSnap.lng, at: lastSnap.recordedAt, source: "interval" }
+          : null,
+        isLive
+          ? { lat: att.punchInLat, lng: att.punchInLng, at: att.punchInAt, source: "punch_in" }
+          : att.punchOutLat != null && att.punchOutLng != null && att.punchOutAt
+            ? { lat: att.punchOutLat, lng: att.punchOutLng, at: att.punchOutAt, source: "punch_out" }
+            : { lat: att.punchInLat, lng: att.punchInLng, at: att.punchInAt, source: "punch_in" },
+      ]);
+      if (!fix) return null;
       return {
         userId,
         name: u.name,
@@ -86,14 +134,15 @@ export async function GET(req: Request) {
         zone: u.zone,
         district: u.district,
         isLive,
-        lat,
-        lng,
-        recordedAt: recordedAt.toISOString(),
+        lat: fix.lat,
+        lng: fix.lng,
+        recordedAt: fix.at.toISOString(),
+        locationSource: fix.source,
         punchInAt: att.punchInAt.toISOString(),
         punchOutAt: att.punchOutAt?.toISOString() || null,
       };
     })
-    .filter((r) => Number.isFinite(r.lat) && Number.isFinite(r.lng))
+    .filter((r): r is LiveRow => r != null)
     .filter((r) => !liveOnly || r.isLive);
 
   return NextResponse.json({ date, users: rows });

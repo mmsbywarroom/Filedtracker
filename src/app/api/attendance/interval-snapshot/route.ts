@@ -1,7 +1,13 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { MAX_INTERVAL_SLOTS } from "@/lib/attendanceIntervalFlag";
+import {
+  INTERVAL_SNAPSHOT_EARLY_MS,
+  INTERVAL_SNAPSHOT_LATE_MS,
+  isSlotDueNow,
+  MAX_INTERVAL_SLOTS,
+  slotDueAtMs,
+} from "@/lib/attendanceIntervalFlag";
 
 export async function POST(req: Request) {
   const s = await requireUser();
@@ -24,11 +30,35 @@ export async function POST(req: Request) {
   });
   if (!open) return NextResponse.json({ error: "No active session." }, { status: 400 });
 
+  const now = Date.now();
+  const due = slotDueAtMs(open.punchInAt, slot);
+  if (now < due - INTERVAL_SNAPSHOT_EARLY_MS) {
+    return NextResponse.json(
+      { error: "This interval check is not due yet.", code: "SLOT_TOO_EARLY" },
+      { status: 400 }
+    );
+  }
+  if (now > due + INTERVAL_SNAPSHOT_LATE_MS) {
+    return NextResponse.json(
+      { error: "This interval was missed — cannot backfill old slots.", code: "SLOT_MISSED" },
+      { status: 400 }
+    );
+  }
+  if (!isSlotDueNow(open.punchInAt, slot, now)) {
+    return NextResponse.json({ error: "Outside allowed window for this interval.", code: "SLOT_WINDOW" }, { status: 400 });
+  }
+
+  const recordedAt = new Date();
   await prisma.attendanceIntervalSnapshot.upsert({
     where: { attendanceId_slot: { attendanceId: open.id, slot } },
-    create: { attendanceId: open.id, slot, lat, lng },
-    update: { lat, lng, recordedAt: new Date() },
+    create: { attendanceId: open.id, slot, lat, lng, recordedAt },
+    update: { lat, lng, recordedAt },
   });
 
-  return NextResponse.json({ ok: true, slot });
+  await prisma.attendance.update({
+    where: { id: open.id },
+    data: { lastKnownLat: lat, lastKnownLng: lng, lastKnownAt: recordedAt },
+  });
+
+  return NextResponse.json({ ok: true, slot, scheduledAt: new Date(due).toISOString() });
 }

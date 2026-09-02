@@ -235,6 +235,9 @@ export async function POST(req: Request) {
       punchInLng: lng,
       punchInAddress: address,
       punchInFace,
+      lastKnownLat: lat,
+      lastKnownLng: lng,
+      lastKnownAt: new Date(),
       points: {
         create: { lat, lng, recordedAt: new Date(), accuracy: Number(body?.accuracy) || null },
       },

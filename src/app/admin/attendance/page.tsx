@@ -46,6 +46,7 @@ type Summary = {
 type SnapshotRow = {
   slot: number;
   slotLabel: string;
+  scheduledAt?: string;
   lat: number;
   lng: number;
   recordedAt: string;
@@ -683,10 +684,11 @@ export default function AttendanceModulePage() {
                         <thead className="text-[11px] font-semibold uppercase tracking-wider text-navy/45">
                           <tr>
                             <th className="px-2 py-2">#</th>
+                            <th className="px-2 py-2">Due (IST)</th>
                             <th className="px-2 py-2">Interval</th>
                             <th className="px-2 py-2">Latitude</th>
                             <th className="px-2 py-2">Longitude</th>
-                            <th className="px-2 py-2">Recorded</th>
+                            <th className="px-2 py-2">GPS recorded</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -696,6 +698,9 @@ export default function AttendanceModulePage() {
                               className={`border-t border-navy/5 ${snap.sameGroup || !flagShowAll ? "bg-violet-50/80" : ""}`}
                             >
                               <td className="px-2 py-2">{i + 1}</td>
+                              <td className="px-2 py-2 text-xs whitespace-nowrap">
+                                {snap.scheduledAt ? fmtDateTime(snap.scheduledAt) : "—"}
+                              </td>
                               <td className="px-2 py-2 text-xs">{snap.slotLabel || `Slot ${snap.slot}`}</td>
                               <td className="px-2 py-2 font-mono text-xs">{snap.lat.toFixed(6)}</td>
                               <td className="px-2 py-2 font-mono text-xs">{snap.lng.toFixed(6)}</td>

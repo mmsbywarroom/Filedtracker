@@ -297,8 +297,7 @@ export default function DashboardPage() {
     if (intervalSnapshotsSent.current.has(slot)) return;
     try {
       const pos = await locateDevice();
-      intervalSnapshotsSent.current.add(slot);
-      await fetch("/api/attendance/interval-snapshot", {
+      const res = await fetch("/api/attendance/interval-snapshot", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -307,8 +306,16 @@ export default function DashboardPage() {
           lng: pos.coords.longitude,
         }),
       });
+      if (res.ok) {
+        intervalSnapshotsSent.current.add(slot);
+        return;
+      }
+      const data = await res.json().catch(() => ({}));
+      if (data?.code === "SLOT_MISSED" || data?.code === "SLOT_TOO_EARLY") {
+        intervalSnapshotsSent.current.add(slot);
+      }
     } catch {
-      intervalSnapshotsSent.current.delete(slot);
+      /* retry when timer fires again for future slots */
     }
   }
 
@@ -325,7 +332,8 @@ export default function DashboardPage() {
       const slot = idx + 1;
       if (intervalSnapshotsSent.current.has(slot)) return;
       const fireAt = punchInMs + offsetMs;
-      const delay = Math.max(0, fireAt - Date.now());
+      if (fireAt <= Date.now()) return;
+      const delay = fireAt - Date.now();
       const id = window.setTimeout(() => {
         void sendIntervalSnapshot(slot);
       }, delay);
@@ -356,12 +364,13 @@ export default function DashboardPage() {
       const batch = buffer.current.splice(0, buffer.current.length);
       const mapBatch = mapProbeBatch.current.splice(0, mapProbeBatch.current.length);
       const mapGpsSpreadM = mapGpsSpreadFromFixes(mapProbeFixes.current);
+      const heartbeat = lastFix.current ? { lat: lastFix.current.lat, lng: lastFix.current.lng } : null;
       try {
         const res = await fetch("/api/attendance/track", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           keepalive: true,
-          body: JSON.stringify({ points: batch, mapGpsSpreadM, mapProbes: mapBatch }),
+          body: JSON.stringify({ points: batch, mapGpsSpreadM, mapProbes: mapBatch, heartbeat }),
         });
         if (res.status === 409) {
           const data = await res.json().catch(() => ({}));
@@ -392,6 +401,7 @@ export default function DashboardPage() {
       const acc = pos.coords.accuracy || 9999;
       const next = { lat: pos.coords.latitude, lng: pos.coords.longitude };
       setLivePos(next);
+      lastFix.current = next;
       if (acc <= 65) {
         const probe = { lat: next.lat, lng: next.lng, accuracy: acc, at: Date.now() };
         mapProbeFixes.current.push(probe);

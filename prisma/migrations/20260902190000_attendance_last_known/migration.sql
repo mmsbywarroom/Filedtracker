@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE "Attendance" ADD COLUMN "lastKnownLat" DOUBLE PRECISION,
+ADD COLUMN "lastKnownLng" DOUBLE PRECISION,
+ADD COLUMN "lastKnownAt" TIMESTAMP(3);

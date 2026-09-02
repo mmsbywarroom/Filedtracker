@@ -5,6 +5,7 @@ import { sessionTravelMeters, shouldCreditTrackStep } from "@/lib/utils";
 import { autoPunchOutIfStale, closeOpenAttendance } from "@/lib/punchOut";
 import { assertInsideCallCenterSite, isCallCenterDesignation } from "@/lib/callCenterGeofence";
 import { mergeMapProbeLog } from "@/lib/gpsSpoofVerdict";
+import { isPanIndiaPunchPhone } from "@/lib/panIndiaPunch";
 
 export async function POST(req: Request) {
   const s = await requireUser();
@@ -66,7 +67,11 @@ export async function POST(req: Request) {
     }))
     .filter((p) => Number.isFinite(p.lat) && Number.isFinite(p.lng));
 
-  if (!cleaned.length && !Number.isFinite(mapGpsSpreadM) && !incomingMapProbes.length) {
+  const hbLat = Number(body?.heartbeat?.lat);
+  const hbLng = Number(body?.heartbeat?.lng);
+  const hasHeartbeat = Number.isFinite(hbLat) && Number.isFinite(hbLng);
+
+  if (!cleaned.length && !Number.isFinite(mapGpsSpreadM) && !incomingMapProbes.length && !hasHeartbeat) {
     return NextResponse.json({ ok: true });
   }
 
@@ -112,6 +117,9 @@ export async function POST(req: Request) {
     distanceMeters?: number;
     gpsMapSpreadM?: number;
     gpsMapProbeLog?: ReturnType<typeof mergeMapProbeLog>;
+    lastKnownLat?: number;
+    lastKnownLng?: number;
+    lastKnownAt?: Date;
   } = {};
   if (Number.isFinite(mapGpsSpreadM) && mapGpsSpreadM > (open.gpsMapSpreadM ?? 0)) {
     spreadUpdate.gpsMapSpreadM = mapGpsSpreadM;
@@ -131,6 +139,14 @@ export async function POST(req: Request) {
       punchInAt: open.punchInAt,
       points: allPoints,
     });
+    const last = cleaned[cleaned.length - 1];
+    spreadUpdate.lastKnownLat = last.lat;
+    spreadUpdate.lastKnownLng = last.lng;
+    spreadUpdate.lastKnownAt = last.recordedAt;
+  } else if (hasHeartbeat) {
+    spreadUpdate.lastKnownLat = hbLat;
+    spreadUpdate.lastKnownLng = hbLng;
+    spreadUpdate.lastKnownAt = new Date();
   }
 
   if (Object.keys(spreadUpdate).length) {

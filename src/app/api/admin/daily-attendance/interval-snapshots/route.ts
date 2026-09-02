@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canSeeUser } from "@/lib/hierarchy";
-import { coordKey, dominantCoordGroup, slotLabel } from "@/lib/attendanceIntervalFlag";
+import { coordKey, dominantCoordGroup, slotDueAtMs, slotLabel } from "@/lib/attendanceIntervalFlag";
 import { istDayBounds } from "@/lib/dailyAttendance";
 
 export async function GET(req: Request) {
@@ -53,6 +53,7 @@ export async function GET(req: Request) {
     const snapshots = sess.intervalSnapshots.map((snap) => ({
       slot: snap.slot,
       slotLabel: slotLabel(snap.slot),
+      scheduledAt: new Date(slotDueAtMs(sess.punchInAt, snap.slot)).toISOString(),
       lat: snap.lat,
       lng: snap.lng,
       recordedAt: snap.recordedAt.toISOString(),

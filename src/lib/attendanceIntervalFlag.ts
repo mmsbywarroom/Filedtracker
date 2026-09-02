@@ -2,6 +2,20 @@
 export const INTERVAL_SNAPSHOT_MS = 30 * 60 * 1000;
 export const PINNED_FLAG_MIN_COUNT = 8;
 export const MAX_INTERVAL_SLOTS = 24; // 12 h session cap
+/** Accept snapshot from 2 min before scheduled time. */
+export const INTERVAL_SNAPSHOT_EARLY_MS = 2 * 60 * 1000;
+/** Grace after scheduled time (timer drift / slow GPS). */
+export const INTERVAL_SNAPSHOT_LATE_MS = 15 * 60 * 1000;
+
+export function slotDueAtMs(punchInAt: Date | number, slot: number): number {
+  const t = typeof punchInAt === "number" ? punchInAt : punchInAt.getTime();
+  return t + slot * INTERVAL_SNAPSHOT_MS;
+}
+
+export function isSlotDueNow(punchInAt: Date, slot: number, now = Date.now()): boolean {
+  const due = slotDueAtMs(punchInAt, slot);
+  return now >= due - INTERVAL_SNAPSHOT_EARLY_MS && now <= due + INTERVAL_SNAPSHOT_LATE_MS;
+}
 
 export function coordKey(lat: number, lng: number): string {
   return `${lat.toFixed(5)},${lng.toFixed(5)}`;
