@@ -6,7 +6,7 @@ import { FaceCapture } from "@/components/FaceCapture";
 import { BrandMark } from "@/components/BrandMark";
 import RouteMap from "@/components/RouteMapDynamic";
 import { formatDuration, formatKm, mapGpsSpreadFromFixes, shouldCreditTrackStep, sessionTravelMeters } from "@/lib/utils";
-import { buildIntervalSlotOffsets } from "@/lib/attendanceIntervalFlag";
+import { isSlotDueNow, MAX_INTERVAL_SLOTS } from "@/lib/attendanceIntervalFlag";
 import {
   captureGpsFix,
   isIosBrowser,
@@ -75,6 +75,8 @@ export default function DashboardPage() {
   const mapProbeBatch = useRef<{ lat: number; lng: number; accuracy: number; at: number }[]>([]);
   const intervalSnapshotTimers = useRef<number[]>([]);
   const intervalSnapshotsSent = useRef<Set<number>>(new Set());
+  const intervalSnapshotBusy = useRef(false);
+  const intervalVisibilityHandler = useRef<(() => void) | null>(null);
   const lastFix = useRef<{ lat: number; lng: number } | null>(null);
   const lastRecorded = useRef<{ lat: number; lng: number; at: number } | null>(null);
   const liveAcc = useRef<number>(Infinity);
@@ -294,7 +296,8 @@ export default function DashboardPage() {
   }
 
   async function sendIntervalSnapshot(slot: number) {
-    if (intervalSnapshotsSent.current.has(slot)) return;
+    if (intervalSnapshotsSent.current.has(slot) || intervalSnapshotBusy.current) return;
+    intervalSnapshotBusy.current = true;
     try {
       const pos = await locateDevice();
       const res = await fetch("/api/attendance/interval-snapshot", {
@@ -311,11 +314,24 @@ export default function DashboardPage() {
         return;
       }
       const data = await res.json().catch(() => ({}));
-      if (data?.code === "SLOT_MISSED" || data?.code === "SLOT_TOO_EARLY") {
+      if (data?.code === "SLOT_MISSED" || data?.code === "SLOT_TOO_EARLY" || data?.alreadyRecorded) {
         intervalSnapshotsSent.current.add(slot);
       }
     } catch {
-      /* retry when timer fires again for future slots */
+      /* next 60s poll retries while still in due window */
+    } finally {
+      intervalSnapshotBusy.current = false;
+    }
+  }
+
+  async function pollDueIntervalSnapshot(punchInAt: string) {
+    if (intervalSnapshotBusy.current) return;
+    const punchIn = new Date(punchInAt);
+    for (let slot = 1; slot <= MAX_INTERVAL_SLOTS; slot++) {
+      if (intervalSnapshotsSent.current.has(slot)) continue;
+      if (!isSlotDueNow(punchIn, slot)) continue;
+      await sendIntervalSnapshot(slot);
+      return;
     }
   }
 
@@ -324,31 +340,34 @@ export default function DashboardPage() {
     intervalSnapshotTimers.current = [];
   }
 
-  function scheduleIntervalSnapshots(session: Attendance) {
+  function startIntervalSnapshotPoller(session: Attendance) {
     clearIntervalSnapshotTimers();
     intervalSnapshotsSent.current = new Set(session.intervalSnapshotsDone || []);
-    const punchInMs = new Date(session.punchInAt).getTime();
-    buildIntervalSlotOffsets().forEach((offsetMs, idx) => {
-      const slot = idx + 1;
-      if (intervalSnapshotsSent.current.has(slot)) return;
-      const fireAt = punchInMs + offsetMs;
-      if (fireAt <= Date.now()) return;
-      const delay = fireAt - Date.now();
-      const id = window.setTimeout(() => {
-        void sendIntervalSnapshot(slot);
-      }, delay);
-      intervalSnapshotTimers.current.push(id);
-    });
+    const punchInAt = session.punchInAt;
+    void pollDueIntervalSnapshot(punchInAt);
+    const pollId = window.setInterval(() => {
+      void pollDueIntervalSnapshot(punchInAt);
+    }, 60_000);
+    intervalSnapshotTimers.current.push(pollId);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void pollDueIntervalSnapshot(punchInAt);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    intervalVisibilityHandler.current = onVisible;
   }
 
   useEffect(() => {
     if (!open) {
       mapProbeFixes.current = [];
       clearIntervalSnapshotTimers();
+      if (intervalVisibilityHandler.current) {
+        document.removeEventListener("visibilitychange", intervalVisibilityHandler.current);
+        intervalVisibilityHandler.current = null;
+      }
       intervalSnapshotsSent.current.clear();
       return;
     }
-    scheduleIntervalSnapshots(open);
+    startIntervalSnapshotPoller(open);
     lastFix.current = open.points[open.points.length - 1] || { lat: open.punchInLat, lng: open.punchInLng };
     const lastPt = open.points[open.points.length - 1];
     lastRecorded.current = lastPt
@@ -473,6 +492,10 @@ export default function DashboardPage() {
       clearInterval(t);
       window.clearInterval(ping);
       clearIntervalSnapshotTimers();
+      if (intervalVisibilityHandler.current) {
+        document.removeEventListener("visibilitychange", intervalVisibilityHandler.current);
+        intervalVisibilityHandler.current = null;
+      }
       document.removeEventListener("visibilitychange", onHide);
       perm?.removeEventListener("change", onPerm);
       if (gpsDenyResetTimer.current != null) window.clearTimeout(gpsDenyResetTimer.current);
@@ -792,6 +815,10 @@ export default function DashboardPage() {
                 <span className="min-w-0 break-words text-sm text-navy/60">
                   {t("live")} · {formatDuration(live?.durationMs || 0)} · {formatKm(live?.travelMeters || 0)}
                 </span>
+                <p className="text-xs text-amber-800">
+                  Har 30 minute GPS check — app open rakhein. Screen band / doosra app = check miss ho sakta hai (phone
+                  limit).
+                </p>
               </div>
             ) : (
               <div className="flex flex-col gap-2">

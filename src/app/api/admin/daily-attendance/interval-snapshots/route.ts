@@ -2,7 +2,14 @@ import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canSeeUser } from "@/lib/hierarchy";
-import { coordKey, dominantCoordGroup, slotDueAtMs, slotLabel } from "@/lib/attendanceIntervalFlag";
+import {
+  coordKey,
+  dominantCoordGroup,
+  filterValidIntervalSnapshots,
+  isValidIntervalSnapshot,
+  slotDueAtMs,
+  slotLabel,
+} from "@/lib/attendanceIntervalFlag";
 import { istDayBounds } from "@/lib/dailyAttendance";
 
 export async function GET(req: Request) {
@@ -42,31 +49,43 @@ export async function GET(req: Request) {
       punchOutAt: true,
       intervalSnapshots: {
         orderBy: { slot: "asc" },
-        select: { slot: true, lat: true, lng: true, recordedAt: true },
+        select: { slot: true, lat: true, lng: true, recordedAt: true, scheduledAt: true },
       },
     },
   });
 
   const mapped = sessions.map((sess) => {
-    const dominant = dominantCoordGroup(sess.intervalSnapshots);
+    const validSnaps = filterValidIntervalSnapshots(
+      sess.intervalSnapshots.map((snap) => ({ ...snap, punchInAt: sess.punchInAt }))
+    );
+    const dominant = dominantCoordGroup(validSnaps);
     const dominantKey = dominant?.key || "";
-    const snapshots = sess.intervalSnapshots.map((snap) => ({
-      slot: snap.slot,
-      slotLabel: slotLabel(snap.slot),
-      scheduledAt: new Date(slotDueAtMs(sess.punchInAt, snap.slot)).toISOString(),
-      lat: snap.lat,
-      lng: snap.lng,
-      recordedAt: snap.recordedAt.toISOString(),
-      sameGroup: coordKey(snap.lat, snap.lng) === dominantKey,
-    }));
+    const snapshots = sess.intervalSnapshots.map((snap) => {
+      const scheduledAt = snap.scheduledAt
+        ? snap.scheduledAt.toISOString()
+        : new Date(slotDueAtMs(sess.punchInAt, snap.slot)).toISOString();
+      const valid = isValidIntervalSnapshot(sess.punchInAt, snap.slot, snap.recordedAt);
+      return {
+        slot: snap.slot,
+        slotLabel: slotLabel(snap.slot),
+        scheduledAt,
+        lat: snap.lat,
+        lng: snap.lng,
+        recordedAt: snap.recordedAt.toISOString(),
+        valid,
+        sameGroup: valid && coordKey(snap.lat, snap.lng) === dominantKey,
+      };
+    });
+    const validOnly = snapshots.filter((x) => x.valid);
     return {
       attendanceId: sess.id,
       punchInAt: sess.punchInAt.toISOString(),
       punchOutAt: sess.punchOutAt?.toISOString() || null,
-      snapshotCount: snapshots.length,
+      snapshotCount: validOnly.length,
+      invalidCount: snapshots.length - validOnly.length,
       dominantCount: dominant?.count || 0,
       dominantCoord: dominantKey || null,
-      sameSnapshots: snapshots.filter((x) => x.sameGroup),
+      sameSnapshots: validOnly.filter((x) => x.sameGroup),
       snapshots,
     };
   });

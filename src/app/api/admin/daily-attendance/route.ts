@@ -13,7 +13,7 @@ import {
 } from "@/lib/dailyAttendance";
 import { adminPresentLabel, adminPresentRemark, ensureAdminPresentPunch, removeAdminPresentPunch, closeOpenPunchForAdminLeave } from "@/lib/adminPresentPunch";
 import { holidayAppliesTo, holidayLeaveReason } from "@/lib/holidays";
-import { userPinnedFlagFromSessions } from "@/lib/attendanceIntervalFlag";
+import { userPinnedFlagFromSessions, filterValidIntervalSnapshots } from "@/lib/attendanceIntervalFlag";
 
 export async function GET(req: Request) {
   const s = await requireAdmin();
@@ -76,12 +76,21 @@ export async function GET(req: Request) {
   ]);
 
   const attendanceIds = punches.map((p) => p.id);
-  const snaps = attendanceIds.length
+  const punchInById = new Map(punches.map((p) => [p.id, p.punchInAt]));
+  const snapsRaw = attendanceIds.length
     ? await prisma.attendanceIntervalSnapshot.findMany({
         where: { attendanceId: { in: attendanceIds } },
-        select: { attendanceId: true, lat: true, lng: true },
+        select: { attendanceId: true, slot: true, lat: true, lng: true, recordedAt: true },
       })
     : [];
+  const snaps = filterValidIntervalSnapshots(
+    snapsRaw
+      .filter((snap) => punchInById.has(snap.attendanceId))
+      .map((snap) => ({
+        ...snap,
+        punchInAt: punchInById.get(snap.attendanceId)!,
+      }))
+  );
 
   const snapsByAttendance = new Map<string, { lat: number; lng: number }[]>();
   for (const snap of snaps) {

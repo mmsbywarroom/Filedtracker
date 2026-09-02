@@ -50,7 +50,8 @@ type SnapshotRow = {
   lat: number;
   lng: number;
   recordedAt: string;
-  sameGroup: boolean;
+  sameGroup?: boolean;
+  valid?: boolean;
 };
 
 type FlagDetail = {
@@ -650,7 +651,10 @@ export default function AttendanceModulePage() {
                 {flagDetail.name} · {flagDetail.phone} · {date}
               </p>
               <p className="mt-1 text-xs text-violet-800">
-                {flagDetail.sameCount} checks at the same lat/lng (thirty-minute intervals)
+                {flagDetail.sameCount} valid checks at the same lat/lng (thirty-minute intervals)
+              </p>
+              <p className="mt-1 text-xs text-navy/50">
+                Invalid / batch-uploaded rows (same GPS time) are ignored for flag count.
               </p>
               <label className="mt-3 flex items-center gap-2 text-xs font-medium text-navy/60">
                 <input
@@ -695,7 +699,13 @@ export default function AttendanceModulePage() {
                           {list.map((snap, i) => (
                             <tr
                               key={`${snap.slot}-${i}`}
-                              className={`border-t border-navy/5 ${snap.sameGroup || !flagShowAll ? "bg-violet-50/80" : ""}`}
+                              className={`border-t border-navy/5 ${
+                                snap.valid === false
+                                  ? "bg-red-50/60 opacity-70"
+                                  : snap.sameGroup || !flagShowAll
+                                    ? "bg-violet-50/80"
+                                    : ""
+                              }`}
                             >
                               <td className="px-2 py-2">{i + 1}</td>
                               <td className="px-2 py-2 text-xs whitespace-nowrap">

@@ -17,6 +17,21 @@ export function isSlotDueNow(punchInAt: Date, slot: number, now = Date.now()): b
   return now >= due - INTERVAL_SNAPSHOT_EARLY_MS && now <= due + INTERVAL_SNAPSHOT_LATE_MS;
 }
 
+/** True when GPS was captured near the scheduled 30-min mark (rejects batch backfill). */
+export function isValidIntervalSnapshot(punchInAt: Date, slot: number, recordedAt: Date): boolean {
+  const due = slotDueAtMs(punchInAt, slot);
+  const rec = recordedAt.getTime();
+  return rec >= due - INTERVAL_SNAPSHOT_EARLY_MS && rec <= due + INTERVAL_SNAPSHOT_LATE_MS;
+}
+
+export function filterValidIntervalSnapshots<
+  T extends { slot: number; lat: number; lng: number; recordedAt: Date | string; punchInAt: Date | string },
+>(snapshots: T[]): T[] {
+  return snapshots.filter((s) =>
+    isValidIntervalSnapshot(new Date(s.punchInAt), s.slot, new Date(s.recordedAt))
+  );
+}
+
 export function coordKey(lat: number, lng: number): string {
   return `${lat.toFixed(5)},${lng.toFixed(5)}`;
 }

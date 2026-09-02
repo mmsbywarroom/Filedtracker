@@ -148,6 +148,8 @@ model AttendanceIntervalSnapshot {
   slot         Int
   lat          Float
   lng          Float
+  /// When this check was scheduled (punch-in + slot × 30 min).
+  scheduledAt  DateTime?
   recordedAt   DateTime   @default(now())
 
   @@unique([attendanceId, slot])
