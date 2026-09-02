@@ -10,6 +10,10 @@ import { requireUserFaceMatch } from "@/lib/requireFaceMatch";
 import { findHolidayToday, holidayAppliesTo } from "@/lib/holidays";
 import { assertPanIndiaPunchLocation, isPanIndiaPunchPhone } from "@/lib/panIndiaPunch";
 import { enforceGpsAntiSpoofInstant, schedulePunchInGpsVerification } from "@/lib/gpsAntiSpoof";
+import {
+  buildRandomProbeSchedule,
+  ensureProbeSchedule,
+} from "@/lib/gpsRandomProbe";
 
 function istDayBounds(d = new Date()) {
   const ymd = d.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
@@ -37,6 +41,17 @@ export async function GET() {
     open && Date.now() - open.punchInAt.getTime() < 12 * 60 * 60 * 1000 ? open : null;
   if (open && !openFresh) {
     void autoPunchOutIfStale(s.sub).catch(() => {});
+  }
+
+  let gpsProbeSchedule: number[] = [];
+  let gpsProbesDone: number[] = [];
+  if (openFresh) {
+    gpsProbeSchedule = await ensureProbeSchedule(openFresh.id, openFresh.punchInAt);
+    const probes = await prisma.gpsRandomProbe.findMany({
+      where: { attendanceId: openFresh.id },
+      select: { slot: true },
+    });
+    gpsProbesDone = probes.map((p) => p.slot);
   }
 
   const history = await prisma.attendance.findMany({
@@ -110,7 +125,13 @@ export async function GET() {
 
   return NextResponse.json({
     open: openFresh
-      ? { ...openFresh, points: mapPoints, distanceMeters: openDistance }
+      ? {
+          ...openFresh,
+          points: mapPoints,
+          distanceMeters: openDistance,
+          gpsProbeSchedule,
+          gpsProbesDone,
+        }
       : null,
     todayDistanceMeters,
     history: history.map((h) => ({ ...h, points: h.id === mapId ? mapPoints : [] })),
@@ -246,6 +267,12 @@ export async function POST(req: Request) {
     select: { id: true, punchInAt: true },
   });
 
+  const gpsProbeSchedule = buildRandomProbeSchedule(attendance.id, attendance.punchInAt);
+  await prisma.attendance.update({
+    where: { id: attendance.id },
+    data: { gpsProbeSchedule },
+  });
+
   schedulePunchInGpsVerification({
     userId: s.sub,
     user: {
@@ -259,5 +286,5 @@ export async function POST(req: Request) {
     attendanceId: attendance.id,
   });
 
-  return NextResponse.json({ attendance, ok: true });
+  return NextResponse.json({ attendance: { ...attendance, gpsProbeSchedule, gpsProbesDone: [] }, ok: true });
 }

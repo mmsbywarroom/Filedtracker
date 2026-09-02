@@ -94,8 +94,13 @@ model Attendance {
   punchOutFace    String?
   punchOutReason  String?
   distanceMeters Float   @default(0)
+  /// Max spread (m) of raw map GPS probes — real phones jitter 2–20 m; spoof apps stay pinned.
+  gpsMapSpreadM  Float?
+  /// Ms offsets from punch-in for 5–6 surprise GPS checks (client + server).
+  gpsProbeSchedule Json?
   createdAt     DateTime @default(now())
   points        TrackPoint[]
+  gpsRandomProbes GpsRandomProbe[]
 
   @@index([userId, punchInAt])
   @@index([punchOutReason])
@@ -112,6 +117,20 @@ model TrackPoint {
   createdAt    DateTime   @default(now())
 
   @@index([attendanceId, recordedAt])
+}
+
+model GpsRandomProbe {
+  id           String     @id @default(cuid())
+  attendanceId String
+  attendance   Attendance @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
+  slot         Int
+  lat          Float
+  lng          Float
+  accuracy     Float?
+  recordedAt   DateTime   @default(now())
+
+  @@unique([attendanceId, slot])
+  @@index([attendanceId])
 }
 
 model LeaveRequest {

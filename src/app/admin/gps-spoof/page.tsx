@@ -161,7 +161,10 @@ export default function GpsSpoofLogsPage() {
       <p className="text-xs uppercase tracking-[0.2em] text-teal">Alerts</p>
       <h1 className="text-2xl font-semibold">Fake GPS / spoof logs</h1>
       <p className="mt-1 text-sm text-navy/55">
-        Users blocked or flagged for fake GPS apps, weak GPS, pinned locations, or almost zero movement after punch-in.
+        Punch allowed first. Map GPS is watched live (2–20 m jitter on the blue dot). If the
+        phone GPS moves naturally on the map, fake check stops. Only pinned spoof apps (&lt;2 m for
+        30 min) are blocked — one log per session. Six surprise random GPS checks in the first 90
+        min also block if all readings stay pinned.
       </p>
 
       <AdminReportToolbar
@@ -202,6 +205,18 @@ export default function GpsSpoofLogsPage() {
         onCsv={() => downloadCsv(`gps-spoof-${date || "all"}`, exportHeaders, exportRows)}
         onPdf={() => downloadPdf(`GPS spoof logs · ${date || "all"}`, exportHeaders, exportRows)}
       />
+
+      <div className="mb-4 flex flex-wrap gap-2">
+        <a
+          href="/api/admin/stationary-sessions?days=7"
+          className="inline-flex h-11 items-center rounded-xl border border-navy/15 bg-white px-4 text-sm font-semibold text-navy shadow-sm"
+        >
+          Download same-location sessions (7 days CSV)
+        </a>
+        <p className="self-center text-xs text-navy/50">
+          Punch in → punch out at one place (travel + map spread ≤ 80 m).
+        </p>
+      </div>
 
       <section className="admin-panel overflow-hidden">
         <div className="overflow-auto">

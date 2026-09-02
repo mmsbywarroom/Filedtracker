@@ -20,6 +20,7 @@ export async function POST(req: Request) {
 
   const body = await req.json().catch(() => null);
   const points = Array.isArray(body?.points) ? body.points : [];
+  const mapGpsSpreadM = Number(body?.mapGpsSpreadM);
   const open = await prisma.attendance.findFirst({
     where: { userId: s.sub, punchOutAt: null },
     include: { points: { orderBy: { recordedAt: "desc" }, take: 1 } },
@@ -54,7 +55,7 @@ export async function POST(req: Request) {
       accuracy: Number.isFinite(Number(p.accuracy)) ? Number(p.accuracy) : null,
     });
   }
-  if (!cleaned.length) return NextResponse.json({ ok: true });
+  if (!cleaned.length && !Number.isFinite(mapGpsSpreadM)) return NextResponse.json({ ok: true });
 
   const user = await prisma.user.findUnique({
     where: { id: s.sub },
@@ -88,24 +89,36 @@ export async function POST(req: Request) {
     }
   }
 
-  await prisma.trackPoint.createMany({
-    data: cleaned.map((p) => ({ ...p, attendanceId: open.id })),
-  });
+  if (cleaned.length) {
+    await prisma.trackPoint.createMany({
+      data: cleaned.map((p) => ({ ...p, attendanceId: open.id })),
+    });
+  }
 
-  const allPoints = await prisma.trackPoint.findMany({
-    where: { attendanceId: open.id },
-    orderBy: { recordedAt: "asc" },
-    select: { lat: true, lng: true, recordedAt: true, accuracy: true },
-  });
-  const distanceMeters = sessionTravelMeters({
-    punchIn: { lat: open.punchInLat, lng: open.punchInLng },
-    punchInAt: open.punchInAt,
-    points: allPoints,
-  });
-  await prisma.attendance.update({
-    where: { id: open.id },
-    data: { distanceMeters },
-  });
+  const spreadUpdate: { distanceMeters?: number; gpsMapSpreadM?: number } = {};
+  if (Number.isFinite(mapGpsSpreadM) && mapGpsSpreadM > (open.gpsMapSpreadM ?? 0)) {
+    spreadUpdate.gpsMapSpreadM = mapGpsSpreadM;
+  }
+
+  if (cleaned.length) {
+    const allPoints = await prisma.trackPoint.findMany({
+      where: { attendanceId: open.id },
+      orderBy: { recordedAt: "asc" },
+      select: { lat: true, lng: true, recordedAt: true, accuracy: true },
+    });
+    spreadUpdate.distanceMeters = sessionTravelMeters({
+      punchIn: { lat: open.punchInLat, lng: open.punchInLng },
+      punchInAt: open.punchInAt,
+      points: allPoints,
+    });
+  }
+
+  if (Object.keys(spreadUpdate).length) {
+    await prisma.attendance.update({
+      where: { id: open.id },
+      data: spreadUpdate,
+    });
+  }
 
   return NextResponse.json({ ok: true });
 }

@@ -12,7 +12,8 @@ export type GpsSpoofFlag =
   | "impossible_jump"
   | "duplicate_coordinates"
   | "suspicious_perfect_accuracy"
-  | "stationary_session";
+  | "stationary_session"
+  | "random_probe_pinned";
 
 export const GPS_SPOOF_FLAG_LABELS: Record<GpsSpoofFlag, string> = {
   few_samples: "Too few GPS readings",
@@ -23,6 +24,7 @@ export const GPS_SPOOF_FLAG_LABELS: Record<GpsSpoofFlag, string> = {
   duplicate_coordinates: "All readings identical (pinned fake location)",
   suspicious_perfect_accuracy: "Suspiciously perfect GPS (<3 m on all readings)",
   stationary_session: "Punched in but almost no movement all day",
+  random_probe_pinned: "Same pinned location on all random GPS checks",
 };
 
 const MIN_SAMPLES = Number(process.env.GPS_MIN_SAMPLES || 3);
@@ -34,8 +36,20 @@ const STATIONARY_SESSION_M = Number(process.env.GPS_STATIONARY_SESSION_M || 80);
 const STATIONARY_MIN_MS = Number(process.env.GPS_STATIONARY_MIN_MS || 2 * 60 * 60 * 1000);
 
 export const GPS_ANTI_SPOOF_ENABLED = process.env.GPS_ANTI_SPOOF_ENABLED !== "false";
-/** Wait for track points before background punch-in GPS check (default 90s). */
-export const PUNCH_GPS_VERIFY_DELAY_MS = Number(process.env.PUNCH_GPS_VERIFY_DELAY_MS || 90000);
+/** Observe track points after punch-in before deciding fake GPS (default 30 min). */
+export const GPS_OBSERVE_MS = Number(process.env.GPS_OBSERVE_MS || 30 * 60 * 1000);
+/** Real field movement — spread above this over observation = genuine user. */
+export const GPS_NATURAL_MOVEMENT_M = Number(process.env.GPS_NATURAL_MOVEMENT_M || 20);
+/** Below this spread with fake-perfect accuracy = pinned spoof app. */
+export const GPS_PINNED_SPREAD_M = Number(process.env.GPS_PINNED_SPREAD_M || 2);
+/** Minimum track points before observation can block. */
+export const GPS_MIN_OBSERVATION_POINTS = Number(process.env.GPS_MIN_OBSERVATION_POINTS || 8);
+/** @deprecated alias */
+export const PUNCH_GPS_VERIFY_DELAY_MS = GPS_OBSERVE_MS;
+/** How often to re-check live map GPS for natural jitter during observation (default 5 min). */
+export const GPS_JITTER_CHECK_INTERVAL_MS = Number(process.env.GPS_JITTER_CHECK_INTERVAL_MS || 5 * 60 * 1000);
+/** Min track points before an early jitter check can clear the session. */
+export const GPS_JITTER_MIN_POINTS = Number(process.env.GPS_JITTER_MIN_POINTS || 4);
 
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -165,6 +179,86 @@ export function analyzeGpsSamples(samples: GpsSample[]) {
   };
 }
 
+/**
+ * Real phone GPS wobbles on the map even when standing still (typically 2–20 m).
+ * Fake/spoof apps inject one fixed coordinate — spread stays below 2 m.
+ */
+export function gpsTrackSpreadM(samples: GpsSample[]): number {
+  return samples.length >= 2 ? maxSpreadMeters(samples) : 0;
+}
+
+export function hasNaturalGpsJitter(samples: GpsSample[], mapSpreadM = 0): boolean {
+  return Math.max(gpsTrackSpreadM(samples), mapSpreadM) >= GPS_PINNED_SPREAD_M;
+}
+
+/**
+ * After punch-in, watch live map track points (default 30 min).
+ * Step 1: check map GPS is jittering 2–20 m or moving 20 m+ → real user, never block.
+ * Step 2: only if still pinned (<2 m) with fake-perfect accuracy → block.
+ */
+export function analyzeObservationSession(samples: GpsSample[], mapSpreadM = 0) {
+  const spread = Math.max(gpsTrackSpreadM(samples), mapSpreadM);
+
+  if (samples.length < GPS_MIN_OBSERVATION_POINTS) {
+    return {
+      shouldBlock: false,
+      flags: [] as GpsSpoofFlag[],
+      detail: "Not enough live map GPS points during observation",
+      maxSpreadM: spread,
+    };
+  }
+
+  // First: live map GPS — idhar-udhar 2–20 m? Real phone → stop fake check (band karo).
+  if (hasNaturalGpsJitter(samples, mapSpreadM)) {
+    const detail =
+      spread >= GPS_NATURAL_MOVEMENT_M
+        ? `Map GPS moved ${Math.round(spread)} m during observation — real user`
+        : `Map GPS jitter ${Math.round(spread)} m (${GPS_PINNED_SPREAD_M}–${GPS_NATURAL_MOVEMENT_M} m) — real phone GPS`;
+    return {
+      shouldBlock: false,
+      flags: [] as GpsSpoofFlag[],
+      detail,
+      maxSpreadM: spread,
+    };
+  }
+
+  const analysis = analyzeGpsSamples(samples);
+  if (analysis.flags.includes("impossible_jump") || analysis.flags.includes("samples_too_far_apart")) {
+    return {
+      shouldBlock: true,
+      flags: analysis.flags,
+      detail: `${analysis.detail} · Detected on live map track`,
+      maxSpreadM: spread,
+    };
+  }
+
+  // Pinned on map (<2 m spread entire observation) + fake-perfect readings → spoof app
+  const accuracies = samples
+    .map((s) => s.accuracy)
+    .filter((a): a is number => a != null && Number.isFinite(a));
+  const withAccuracy = samples.filter((s) => s.accuracy != null).length;
+  const allPerfect =
+    accuracies.length >= GPS_MIN_OBSERVATION_POINTS &&
+    withAccuracy >= GPS_MIN_OBSERVATION_POINTS &&
+    accuracies.every((a) => a <= SUSPICIOUS_PERFECT_M);
+
+  if (allPerfect) {
+    return {
+      shouldBlock: true,
+      flags: ["duplicate_coordinates", "suspicious_perfect_accuracy"] as GpsSpoofFlag[],
+      detail: `Map GPS pinned (0–${GPS_PINNED_SPREAD_M} m jitter) with fake-perfect accuracy over ${Math.round(GPS_OBSERVE_MS / 60000)} min — spoof app`,
+      maxSpreadM: spread,
+    };
+  }
+
+  return {
+    shouldBlock: false,
+    flags: ["duplicate_coordinates"] as GpsSpoofFlag[],
+    detail: `Map GPS mostly still (${Math.round(spread)} m) but natural accuracy — no block`,
+    maxSpreadM: spread,
+  };
+}
+
 export function userFacingGpsError(flags: GpsSpoofFlag[]) {
   if (flags.includes("poor_accuracy")) {
     return "GPS signal is weak. Go outdoors, turn on high-accuracy location, wait a few seconds, then try again.";
@@ -177,7 +271,8 @@ export function userFacingGpsError(flags: GpsSpoofFlag[]) {
   }
   if (
     flags.includes("duplicate_coordinates") ||
-    flags.includes("suspicious_perfect_accuracy")
+    flags.includes("suspicious_perfect_accuracy") ||
+    flags.includes("random_probe_pinned")
   ) {
     return "Fake GPS detected. Turn off location spoofing apps and punch from your real field location.";
   }
@@ -208,7 +303,29 @@ export async function recordGpsSpoofLog(opts: {
   attendanceId?: string | null;
 }) {
   try {
-    await prisma.gpsSpoofLog.create({
+    if (opts.attendanceId && (opts.outcome === "blocked" || opts.outcome === "flagged")) {
+      const existing = await prisma.gpsSpoofLog.findFirst({
+        where: { attendanceId: opts.attendanceId, outcome: opts.outcome },
+      });
+      if (existing) return existing;
+    }
+
+    if (!opts.attendanceId && opts.outcome === "blocked") {
+      const ymd = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+      const dayStart = new Date(`${ymd}T00:00:00+05:30`);
+      const existing = await prisma.gpsSpoofLog.findFirst({
+        where: {
+          userId: opts.userId,
+          action: opts.action,
+          outcome: "blocked",
+          attendanceId: null,
+          createdAt: { gte: dayStart },
+        },
+      });
+      if (existing) return existing;
+    }
+
+    return await prisma.gpsSpoofLog.create({
       data: {
         userId: opts.userId,
         userName: opts.user.name,
@@ -317,32 +434,7 @@ export async function enforceGpsAntiSpoofInstant(opts: {
 
   const bypass = await activeGpsBypass(opts.userId);
   if (bypass) {
-    const samples = parseGpsSamples(opts.gpsSamples);
-    if (samples.length === 0) {
-      samples.push({
-        lat: opts.lat,
-        lng: opts.lng,
-        accuracy: opts.accuracy ?? null,
-        at: Date.now(),
-      });
-    }
-    const analysis = analyzeGpsSamples(samples);
-    if (analysis.flags.length) {
-      await recordGpsSpoofLog({
-        userId: opts.userId,
-        user: opts.user,
-        action: opts.action,
-        outcome: "bypassed",
-        flags: analysis.flags,
-        lat: opts.lat,
-        lng: opts.lng,
-        accuracy: opts.accuracy ?? null,
-        sampleCount: samples.length,
-        maxSpreadM: analysis.maxSpreadM,
-        detail: `${analysis.detail} · Admin bypass active`,
-      });
-    }
-    return { ok: true as const, flags: analysis.flags, bypassed: true as const };
+    return { ok: true as const, flags: [] as GpsSpoofFlag[], bypassed: true as const };
   }
 
   return { ok: true as const, flags: [] as GpsSpoofFlag[], deferred: true as const };
@@ -386,65 +478,84 @@ async function verifyPunchInGpsLater(opts: {
   user: LogUser;
   attendanceId: string;
 }) {
-  await sleep(PUNCH_GPS_VERIFY_DELAY_MS);
+  const started = Date.now();
+
+  while (Date.now() - started < GPS_OBSERVE_MS) {
+    const waitMs = Math.min(GPS_JITTER_CHECK_INTERVAL_MS, GPS_OBSERVE_MS - (Date.now() - started));
+    if (waitMs <= 0) break;
+    await sleep(waitMs);
+
+    if (await activeGpsBypass(opts.userId)) return;
+
+    const live = await prisma.attendance.findFirst({
+      where: { id: opts.attendanceId, userId: opts.userId, punchOutAt: null },
+      select: {
+        punchInLat: true,
+        punchInLng: true,
+        punchInAt: true,
+        gpsMapSpreadM: true,
+        points: { orderBy: { recordedAt: "asc" }, take: 200 },
+      },
+    });
+    if (!live) return;
+
+    if ((live.gpsMapSpreadM ?? 0) >= GPS_PINNED_SPREAD_M) return;
+
+    const liveSamples = trackPointsToSamples(
+      { lat: live.punchInLat, lng: live.punchInLng, at: live.punchInAt },
+      live.points
+    );
+
+    if (
+      liveSamples.length >= GPS_JITTER_MIN_POINTS &&
+      hasNaturalGpsJitter(liveSamples, live.gpsMapSpreadM ?? 0)
+    ) {
+      return;
+    }
+  }
+
   if (await activeGpsBypass(opts.userId)) return;
 
   const attendance = await prisma.attendance.findFirst({
     where: { id: opts.attendanceId, userId: opts.userId, punchOutAt: null },
-    include: { points: { orderBy: { recordedAt: "asc" }, take: 40 } },
+    include: { points: { orderBy: { recordedAt: "asc" }, take: 200 } },
   });
   if (!attendance) return;
+
+  if ((attendance.gpsMapSpreadM ?? 0) >= GPS_PINNED_SPREAD_M) return;
 
   const samples = trackPointsToSamples(
     { lat: attendance.punchInLat, lng: attendance.punchInLng, at: attendance.punchInAt },
     attendance.points
   );
-  if (samples.length < MIN_SAMPLES) return;
 
-  const analysis = analyzeGpsSamples(samples);
-  if (!analysis.flags.length) return;
+  const observation = analyzeObservationSession(samples, attendance.gpsMapSpreadM ?? 0);
+  if (!observation.shouldBlock) return;
 
   const last = attendance.points[attendance.points.length - 1];
   const lat = last?.lat ?? attendance.punchInLat;
   const lng = last?.lng ?? attendance.punchInLng;
 
-  if (analysis.blocked) {
-    await recordGpsSpoofLog({
-      userId: opts.userId,
-      user: opts.user,
-      action: "punch_in",
-      outcome: "blocked",
-      flags: analysis.flags,
-      lat,
-      lng,
-      sampleCount: samples.length,
-      maxSpreadM: analysis.maxSpreadM,
-      detail: `${analysis.detail} · Auto punch-out after background GPS check`,
-      attendanceId: attendance.id,
-    });
-    await closeOpenAttendance({
-      userId: opts.userId,
-      lat,
-      lng,
-      accuracy: last?.accuracy ?? null,
-      reason: "gps_spoof",
-      address: "Auto punch-out: fake or invalid GPS detected",
-    });
-    return;
-  }
-
   await recordGpsSpoofLog({
     userId: opts.userId,
     user: opts.user,
     action: "punch_in",
-    outcome: "flagged",
-    flags: analysis.flags,
+    outcome: "blocked",
+    flags: observation.flags,
     lat,
     lng,
     sampleCount: samples.length,
-    maxSpreadM: analysis.maxSpreadM,
-    detail: `${analysis.detail} · Background GPS check`,
+    maxSpreadM: observation.maxSpreadM,
+    detail: observation.detail,
     attendanceId: attendance.id,
+  });
+  await closeOpenAttendance({
+    userId: opts.userId,
+    lat,
+    lng,
+    accuracy: last?.accuracy ?? null,
+    reason: "gps_spoof",
+    address: "Auto punch-out: fake GPS detected after observation",
   });
 }
 
@@ -475,6 +586,9 @@ async function verifyPunchOutGpsLater(opts: {
   });
   if (!attendance) return;
 
+  if ((attendance.gpsMapSpreadM ?? 0) >= GPS_NATURAL_MOVEMENT_M) return;
+  if (attendance.distanceMeters >= GPS_NATURAL_MOVEMENT_M) return;
+
   const samples = trackPointsToSamples(
     { lat: attendance.punchInLat, lng: attendance.punchInLng, at: attendance.punchInAt },
     attendance.points,
@@ -485,21 +599,21 @@ async function verifyPunchOutGpsLater(opts: {
       at: attendance.punchOutAt?.getTime() ?? Date.now(),
     }
   );
-  const analysis = analyzeGpsSamples(samples);
-  if (!analysis.flags.length) return;
+  const observation = analyzeObservationSession(samples, attendance.gpsMapSpreadM ?? 0);
+  if (!observation.shouldBlock) return;
 
   await recordGpsSpoofLog({
     userId: opts.userId,
     user: opts.user,
     action: "punch_out",
-    outcome: analysis.blocked ? "blocked" : "flagged",
-    flags: analysis.flags,
+    outcome: "blocked",
+    flags: observation.flags,
     lat: opts.lat,
     lng: opts.lng,
     accuracy: opts.accuracy ?? null,
     sampleCount: samples.length,
-    maxSpreadM: analysis.maxSpreadM,
-    detail: `${analysis.detail} · Background GPS check after punch-out`,
+    maxSpreadM: observation.maxSpreadM,
+    detail: `${observation.detail} · Session review after punch-out`,
     attendanceId: attendance.id,
   });
 }
@@ -520,6 +634,11 @@ export async function flagStationarySession(opts: {
   if (opts.distanceMeters >= STATIONARY_SESSION_M) return;
 
   const flags: GpsSpoofFlag[] = ["stationary_session"];
+  const existing = await prisma.gpsSpoofLog.findFirst({
+    where: { attendanceId: opts.attendanceId, outcome: { in: ["blocked", "flagged"] } },
+  });
+  if (existing) return;
+
   await recordGpsSpoofLog({
     userId: opts.userId,
     user: opts.user,

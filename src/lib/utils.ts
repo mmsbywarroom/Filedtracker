@@ -27,6 +27,17 @@ export function haversineMeters(a: { lat: number; lng: number }, b: { lat: numbe
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
 }
 
+/** Max distance between any two map GPS fixes (detects 2–20 m phone jitter). */
+export function mapGpsSpreadFromFixes(fixes: { lat: number; lng: number }[]) {
+  let max = 0;
+  for (let i = 0; i < fixes.length; i++) {
+    for (let j = i + 1; j < fixes.length; j++) {
+      max = Math.max(max, haversineMeters(fixes[i], fixes[j]));
+    }
+  }
+  return max;
+}
+
 export function formatDuration(ms: number) {
   const m = Math.max(0, Math.round(ms / 60000));
   if (m < 60) return `${m} min`;
