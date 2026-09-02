@@ -21,7 +21,7 @@ import okhttp3.Response;
 public final class SecurityReporter {
     private static final String TAG = "FTSecurityReporter";
     private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
-    private static final long THROTTLE_MS = 15 * 60 * 1000;
+    private static final long THROTTLE_MS = 2 * 60 * 1000;
     private static final ExecutorService IO = Executors.newSingleThreadExecutor();
 
     private SecurityReporter() {}

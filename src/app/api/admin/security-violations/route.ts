@@ -5,9 +5,9 @@ import { prisma } from "@/lib/prisma";
 import { reviewScopeWhere } from "@/lib/hierarchy";
 
 const TYPE_LABELS: Record<string, string> = {
-  vpn: "VPN in use",
+  vpn: "VPN / VPN app",
   mock_gps: "Fake GPS (mock location)",
-  spoof_app: "Spoof app installed",
+  spoof_app: "Spoof / fake GPS app",
 };
 
 export async function GET(req: Request) {

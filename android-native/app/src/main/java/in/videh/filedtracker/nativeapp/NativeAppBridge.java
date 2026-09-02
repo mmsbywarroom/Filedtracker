@@ -72,19 +72,32 @@ public class NativeAppBridge {
         });
     }
 
-    /** JSON: { vpn, spoofApp, spoofPackage, mockLikely } */
+    /** JSON: { vpn, spoofApp, spoofPackage, vpnPackage, mockLikely, detail } */
     @JavascriptInterface
     public String getSecurityStatus() {
         try {
+            boolean vpnActive = SecurityHelper.isVpnActive(activity);
+            String spoofPkg = SecurityHelper.findMockGpsAppPackage(activity);
+            String vpnPkg = SecurityHelper.findKnownVpnAppPackage(activity);
+            boolean vpn = vpnActive || vpnPkg != null;
             JSONObject o = new JSONObject();
-            o.put("vpn", SecurityHelper.isVpnActive(activity));
-            String pkg = SecurityHelper.findMockGpsAppPackage(activity);
-            o.put("spoofApp", pkg != null);
-            o.put("spoofPackage", pkg != null ? pkg : "");
-            o.put("mockLikely", pkg != null);
+            o.put("vpn", vpn);
+            o.put("vpnActive", vpnActive);
+            o.put("spoofApp", spoofPkg != null);
+            o.put("spoofPackage", spoofPkg != null ? spoofPkg : "");
+            o.put("vpnPackage", vpnPkg != null ? vpnPkg : "");
+            o.put("mockLikely", spoofPkg != null);
+            String detail = "";
+            if (vpnActive && vpnPkg != null) detail = "VPN connected · app: " + vpnPkg;
+            else if (vpnActive) detail = "VPN connected on device";
+            else if (vpnPkg != null) detail = "VPN app installed: " + vpnPkg;
+            if (spoofPkg != null) {
+                detail = detail.isEmpty() ? ("Spoof app: " + spoofPkg) : (detail + " · Spoof: " + spoofPkg);
+            }
+            o.put("detail", detail);
             return o.toString();
         } catch (Exception e) {
-            return "{\"vpn\":false,\"spoofApp\":false,\"spoofPackage\":\"\",\"mockLikely\":false}";
+            return "{\"vpn\":false,\"vpnActive\":false,\"spoofApp\":false,\"spoofPackage\":\"\",\"vpnPackage\":\"\",\"mockLikely\":false,\"detail\":\"\"}";
         }
     }
 

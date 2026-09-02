@@ -34,9 +34,12 @@ export function pureNativeBridge() {
 
 export type NativeSecurityStatus = {
   vpn: boolean;
+  vpnActive?: boolean;
   spoofApp: boolean;
   spoofPackage: string;
+  vpnPackage?: string;
   mockLikely: boolean;
+  detail?: string;
 };
 
 export function readNativeSecurityStatus(): NativeSecurityStatus | null {
@@ -44,14 +47,43 @@ export function readNativeSecurityStatus(): NativeSecurityStatus | null {
   if (!bridge?.getSecurityStatus) return null;
   try {
     const o = JSON.parse(bridge.getSecurityStatus()) as NativeSecurityStatus;
+    const vpnPackage = String(o.vpnPackage || "");
+    const spoofPackage = String(o.spoofPackage || "");
     return {
-      vpn: Boolean(o.vpn),
-      spoofApp: Boolean(o.spoofApp),
-      spoofPackage: String(o.spoofPackage || ""),
+      vpn: Boolean(o.vpn) || Boolean(vpnPackage),
+      vpnActive: Boolean(o.vpnActive),
+      spoofApp: Boolean(o.spoofApp) || Boolean(spoofPackage),
+      spoofPackage,
+      vpnPackage,
       mockLikely: Boolean(o.mockLikely),
+      detail: String(o.detail || ""),
     };
   } catch {
     return null;
+  }
+}
+
+/** Dual report: native OkHttp + cookie-authenticated web API (admin log). */
+function reportSecurityViolation(type: "vpn" | "mock_gps" | "spoof_app", action: string, detail: string) {
+  const bridge = pureNativeBridge();
+  try {
+    bridge?.reportSecurityEvent?.(type, action, detail);
+  } catch {
+    /* ignore */
+  }
+  try {
+    void fetch("/api/attendance/security-event", {
+      method: "POST",
+      credentials: "include",
+      keepalive: true,
+      headers: {
+        "Content-Type": "application/json",
+        "X-Client-Source": "native",
+      },
+      body: JSON.stringify({ type, action, detail }),
+    });
+  } catch {
+    /* ignore */
   }
 }
 
@@ -62,17 +94,34 @@ export function assertNativeSecureForPunch(): void {
   const status = readNativeSecurityStatus();
   if (!status) return;
 
-  if (status.vpn) {
-    bridge.reportSecurityEvent?.("vpn", "blocked", "VPN active on punch attempt");
-    throw new Error("Turn off VPN before punch in/out.");
+  if (status.vpn || status.vpnPackage) {
+    const detail =
+      status.detail ||
+      (status.vpnPackage
+        ? `VPN app: ${status.vpnPackage}`
+        : status.vpnActive
+          ? "VPN connected on device"
+          : "VPN detected on punch attempt");
+    reportSecurityViolation("vpn", "blocked", detail);
+    if (status.vpnActive) {
+      throw new Error("Turn off VPN before punch in/out.");
+    }
+    throw new Error(
+      status.vpnPackage
+        ? `Remove VPN app from this phone before punch in/out (${status.vpnPackage}).`
+        : "Remove VPN app from this phone before punch in/out."
+    );
   }
   if (status.spoofApp) {
-    bridge.reportSecurityEvent?.(
-      "spoof_app",
-      "blocked",
-      status.spoofPackage || "Fake GPS / location changer app installed"
+    const detail = status.spoofPackage
+      ? `Spoof / fake GPS app: ${status.spoofPackage}`
+      : "Fake GPS / location changer app installed";
+    reportSecurityViolation("spoof_app", "blocked", detail);
+    throw new Error(
+      status.spoofPackage
+        ? `Remove fake GPS / spoof apps from this phone (${status.spoofPackage}).`
+        : "Remove fake GPS / spoof apps from this phone."
     );
-    throw new Error("Remove fake GPS / location changer apps from this phone.");
   }
 }
 

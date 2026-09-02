@@ -29,7 +29,7 @@ export async function POST(req: Request) {
   });
   if (!user) return NextResponse.json({ error: "User not found." }, { status: 404 });
 
-  const since = new Date(Date.now() - 15 * 60 * 1000);
+  const since = new Date(Date.now() - 2 * 60 * 1000);
   const dup = await prisma.securityViolationLog.findFirst({
     where: {
       userId: s.sub,

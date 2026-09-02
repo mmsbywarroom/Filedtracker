@@ -11,6 +11,29 @@
     <uses-permission android:name="android.permission.CAMERA" />
 
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Sideloaded APK: needed so we can reliably see VPN / fake-GPS packages on Android 11+ -->
+    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+
+    <!-- Package visibility so we can detect common VPN / fake-GPS apps on Android 11+ -->
+    <queries>
+        <intent>
+            <action android:name="android.net.VpnService" />
+        </intent>
+        <package android:name="free.vpn.unblock.proxy.turbovpn" />
+        <package android:name="free.vpn.proxy.unblock.turbovpn.pro" />
+        <package android:name="com.lexa.fakegps" />
+        <package android:name="com.incorporateapps.fakegps" />
+        <package android:name="com.blogspot.newapphorizons.fakegps" />
+        <package android:name="com.expressvpn.vpn" />
+        <package android:name="com.nordvpn.android" />
+        <package android:name="com.protonvpn.android" />
+        <package android:name="org.outline.android.client" />
+        <package android:name="com.v2ray.ang" />
+        <package android:name="de.blinkt.openvpn" />
+        <package android:name="com.github.shadowsocks" />
+        <package android:name="com.psiphon3" />
+        <package android:name="com.psiphon3.subscription" />
+    </queries>
 
     <application
         android:allowBackup="true"
