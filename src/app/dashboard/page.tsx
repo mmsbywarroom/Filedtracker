@@ -909,6 +909,20 @@ export default function DashboardPage() {
           )}
         </div>
 
+        {!isNativeApp() && (
+          <a
+            href="/aap-attendance.apk"
+            download="AAP-Attendance.apk"
+            className="mt-3 flex items-center justify-between rounded-2xl border border-navy/10 bg-navy px-4 py-3 text-white shadow-card"
+          >
+            <div>
+              <p className="font-semibold">{t("installApp")}</p>
+              <p className="text-sm text-white/75">{t("installAppHint")}</p>
+            </div>
+            <span className="shrink-0 rounded-xl bg-white/15 px-3 py-1.5 text-sm font-semibold">{t("downloadApk")}</span>
+          </a>
+        )}
+
         <Link
           href="/dashboard/leave"
           className="mt-3 flex items-center justify-between rounded-2xl bg-white px-4 py-3 shadow-card"

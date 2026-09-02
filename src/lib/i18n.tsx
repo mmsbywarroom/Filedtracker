@@ -139,6 +139,9 @@ const dict = {
     enableLocationHint: "Tap below and allow Location when asked, then punch in.",
     showMyLocation: "Show my location on map",
     findingLocation: "Finding location…",
+    installApp: "Install mobile app",
+    installAppHint: "Download the Android app for background GPS while punched in.",
+    downloadApk: "Download APK",
   },
   pa: {
     aap: "ਆਮ ਆਦਮੀ ਪਾਰਟੀ",
@@ -276,6 +279,9 @@ const dict = {
     enableLocationHint: "ਹੇਠਾਂ ਟੈਪ ਕਰੋ, Location Allow ਕਰੋ, ਫਿਰ ਪੰਚ ਇਨ ਕਰੋ।",
     showMyLocation: "ਨਕਸ਼ੇ ਤੇ ਮੇਰੀ ਥਾਂ ਦਿਖਾਓ",
     findingLocation: "ਥਾਂ ਲੱਭੀ ਜਾ ਰਹੀ ਹੈ…",
+    installApp: "ਮੋਬਾਈਲ ਐਪ ਇੰਸਟਾਲ ਕਰੋ",
+    installAppHint: "ਪੰਚ ਇਨ ਦੌਰਾਨ ਬੈਕਗ੍ਰਾਊਂਡ GPS ਲਈ Android ਐਪ ਡਾਊਨਲੋਡ ਕਰੋ।",
+    downloadApk: "APK ਡਾਊਨਲੋਡ ਕਰੋ",
   },
 } as const;
 

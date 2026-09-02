@@ -23,6 +23,10 @@ type Row = {
   hasPunchOutFace?: boolean;
   punchInAt: string;
   punchOutAt: string | null;
+  punchInLat: number;
+  punchInLng: number;
+  punchOutLat: number | null;
+  punchOutLng: number | null;
   punchInAddress: string | null;
   punchOutAddress: string | null;
   distanceMeters: number;
@@ -37,6 +41,10 @@ function todayIst() {
 
 function whenIst(iso: string | null) {
   return iso ? new Date(iso).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : "—";
+}
+
+function fmtCoord(n: number | null | undefined) {
+  return n != null && Number.isFinite(n) ? n.toFixed(6) : "—";
 }
 
 function rowReason(r: Row) {
@@ -126,7 +134,11 @@ export default function DailyRecordsPage() {
     "Assembly",
     "Sector",
     "Punch in",
+    "Punch in lat",
+    "Punch in lng",
     "Punch out",
+    "Punch out lat",
+    "Punch out lng",
     "Distance",
     "Marks",
     "Status",
@@ -141,7 +153,11 @@ export default function DailyRecordsPage() {
     r.assemblyName,
     r.sectorAllotted,
     whenIst(r.punchInAt),
+    fmtCoord(r.punchInLat),
+    fmtCoord(r.punchInLng),
     whenIst(r.punchOutAt),
+    fmtCoord(r.punchOutLat),
+    fmtCoord(r.punchOutLng),
     formatKm(r.distanceMeters || 0),
     r.marks,
     r.status,
@@ -201,8 +217,12 @@ export default function DailyRecordsPage() {
                 <th className="px-3 py-3">Sector</th>
                 <th className="px-3 py-3">Registered</th>
                 <th className="px-3 py-3">Punch in</th>
+                <th className="px-3 py-3">In lat</th>
+                <th className="px-3 py-3">In lng</th>
                 <th className="px-3 py-3">In face</th>
                 <th className="px-3 py-3">Punch out</th>
+                <th className="px-3 py-3">Out lat</th>
+                <th className="px-3 py-3">Out lng</th>
                 <th className="px-3 py-3">Out face</th>
                 <th className="px-3 py-3">Distance</th>
                 <th className="px-3 py-3">Marks</th>
@@ -232,6 +252,8 @@ export default function DailyRecordsPage() {
                     {new Date(r.punchInAt).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" })}
                     {r.punchInAddress ? <p className="max-w-[160px] text-xs text-navy/50">{r.punchInAddress}</p> : null}
                   </td>
+                  <td className="px-3 py-3 font-mono text-xs">{fmtCoord(r.punchInLat)}</td>
+                  <td className="px-3 py-3 font-mono text-xs">{fmtCoord(r.punchInLng)}</td>
                   <td className="px-3 py-3">
                     <LazyFacePhoto
                       attendanceId={r.id}
@@ -246,6 +268,8 @@ export default function DailyRecordsPage() {
                       : "—"}
                     {r.punchOutAddress ? <p className="max-w-[160px] text-xs text-navy/50">{r.punchOutAddress}</p> : null}
                   </td>
+                  <td className="px-3 py-3 font-mono text-xs">{fmtCoord(r.punchOutLat)}</td>
+                  <td className="px-3 py-3 font-mono text-xs">{fmtCoord(r.punchOutLng)}</td>
                   <td className="px-3 py-3">
                     <LazyFacePhoto
                       attendanceId={r.id}

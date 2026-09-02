@@ -99,6 +99,10 @@ export async function GET(req: Request) {
         hasPunchOutFace: flagMap.size ? Boolean(flags?.hasOut) : Boolean(r.punchOutAt),
         punchInAt: r.punchInAt,
         punchOutAt: r.punchOutAt,
+        punchInLat: r.punchInLat,
+        punchInLng: r.punchInLng,
+        punchOutLat: r.punchOutLat,
+        punchOutLng: r.punchOutLng,
         punchInAddress: r.punchInAddress,
         punchOutAddress: r.punchOutAddress,
         distanceMeters: sessionTravelMeters({
