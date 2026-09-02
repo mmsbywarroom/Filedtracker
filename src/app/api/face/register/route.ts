@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { sanitizeFaceImage } from "@/lib/faceImage";
 
 export async function POST(req: Request) {
-  const s = await requireUser();
+  const s = await requireUser(req);
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const body = await req.json().catch(() => null);
   const descriptor = body?.descriptor;

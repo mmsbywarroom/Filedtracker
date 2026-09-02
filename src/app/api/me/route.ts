@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { getUserSession } from "@/lib/auth";
+import { getUserSessionFromRequest } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    const s = await getUserSession();
+    const s = await getUserSessionFromRequest(req);
     if (!s) return NextResponse.json({ user: null });
     if (s.kind === "rally") {
       const rallyUser = await prisma.rallyUser.findUnique({

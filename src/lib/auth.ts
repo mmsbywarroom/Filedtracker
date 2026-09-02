@@ -131,14 +131,21 @@ export async function verifyUserBearerToken(token: string): Promise<SessionPaylo
   }
 }
 
+/** Cookie session (web) or Authorization: Bearer (native apps). */
+export async function getUserSessionFromRequest(req?: Request): Promise<SessionPayload | null> {
+  if (req) {
+    const auth = req.headers.get("authorization");
+    if (auth?.startsWith("Bearer ")) {
+      const s = await verifyUserBearerToken(auth.slice(7).trim());
+      if (s) return s;
+    }
+  }
+  return getUserSession();
+}
+
 /** Cookie session (web) or Authorization: Bearer (native background GPS). */
 export async function requireUser(req?: Request) {
-  const auth = req?.headers.get("authorization");
-  if (auth?.startsWith("Bearer ")) {
-    const s = await verifyUserBearerToken(auth.slice(7).trim());
-    if (s) return s;
-  }
-  const s = await getUserSession();
+  const s = await getUserSessionFromRequest(req);
   if (!s || s.role !== "user" || s.kind === "rally") return null;
   return s;
 }

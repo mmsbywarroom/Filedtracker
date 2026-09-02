@@ -14,7 +14,7 @@ function istDay(isoDate: string) {
 }
 
 export async function GET() {
-  const s = await requireUser();
+  const s = await requireUser(req);
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const leaves = await prisma.leaveRequest.findMany({
     where: { userId: s.sub },
@@ -25,7 +25,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const s = await requireUser();
+  const s = await requireUser(req);
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const parsed = schema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) {

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.AapNative" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">#0A1628</item>
+        <item name="colorPrimaryVariant">#0A1628</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorSecondary">#0D9488</item>
+        <item name="android:statusBarColor">#0A1628</item>
+        <item name="android:windowBackground">#F5F0E1</item>
+    </style>
+</resources>

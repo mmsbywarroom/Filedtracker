@@ -4,7 +4,7 @@ import { closeOpenAttendance } from "@/lib/punchOut";
 
 /** Auto punch-out when GPS is turned off. Uses last known location. No face / geofence. */
 export async function POST(req: Request) {
-  const s = await requireUser();
+  const s = await requireUser(req);
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const body = await req.json().catch(() => null);
   const lat = Number(body?.lat);

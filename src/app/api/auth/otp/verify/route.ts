@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { setUserSessionCookie } from "@/lib/auth";
+import { getUserSessionFromRequest, setUserSessionCookie, signSession } from "@/lib/auth";
 import { hashOtp, normalizePhone, OTP_LENGTH, rateLimit, safeEqual } from "@/lib/security";
 
 export async function POST(req: Request) {
@@ -56,5 +56,13 @@ export async function POST(req: Request) {
     name: account.name,
     kind: account.kind,
   });
-  return NextResponse.json({ ok: true, kind: account.kind });
+  const token = await signSession({
+    sub: account.id,
+    phone: account.phone,
+    name: account.name,
+    kind: account.kind,
+    role: "user",
+  });
+  const apiBaseUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") || "";
+  return NextResponse.json({ ok: true, kind: account.kind, token, apiBaseUrl });
 }

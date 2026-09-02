@@ -10,3 +10,11 @@ data/boundaries/*.shx
 data/boundaries/*.dbf
 data/boundaries/*.prj
 !data/boundaries/punjab-assemblies.geojson
+**/local.properties
+android-native/.gradle
+android-native/build
+android-native/app/build
+mobile/android/.gradle
+mobile/android/app/build
+mobile/android/build
+AAP-Attendance*.apk

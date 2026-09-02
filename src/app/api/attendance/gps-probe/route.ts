@@ -6,7 +6,7 @@ import { userFacingGpsError } from "@/lib/gpsAntiSpoof";
 import { GPS_RANDOM_PROBE_COUNT, submitRandomGpsProbe } from "@/lib/gpsRandomProbe";
 
 export async function POST(req: Request) {
-  const s = await requireUser();
+  const s = await requireUser(req);
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   await autoPunchOutIfStale(s.sub).catch(() => null);

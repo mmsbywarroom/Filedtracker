@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">AAP Attendance</string>
+    <string name="login_title">Aam Aadmi Party</string>
+    <string name="login_hint">Enter your registered mobile number</string>
+    <string name="send_otp">Send OTP</string>
+    <string name="verify_otp">Verify &amp; login</string>
+    <string name="punch_in">Punch in</string>
+    <string name="punch_out">Punch out</string>
+    <string name="register_face">Register face</string>
+    <string name="logout">Logout</string>
+    <string name="loading">Loading…</string>
+    <string name="not_punched_in">Not punched in</string>
+    <string name="punched_in">Punched in — route tracking active</string>
+</resources>

@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { sessionTravelMeters } from "@/lib/utils";
 
 export async function GET(req: Request) {
-  const s = await requireUser();
+  const s = await requireUser(req);
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { searchParams } = new URL(req.url);

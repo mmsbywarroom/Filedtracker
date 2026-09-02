@@ -1,0 +1,33 @@
+apply plugin: 'com.android.application'
+
+android {
+    namespace "in.videh.filedtracker.nativeapp"
+    compileSdk rootProject.ext.compileSdkVersion
+
+    defaultConfig {
+        applicationId "in.videh.filedtracker.native"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode 1
+        versionName "1.0.0"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "com.google.android.material:material:$materialVersion"
+    implementation "androidx.core:core:$androidxCoreVersion"
+    implementation "com.google.android.gms:play-services-location:$playServicesLocationVersion"
+    implementation "com.squareup.okhttp3:okhttp:$okhttpVersion"
+}

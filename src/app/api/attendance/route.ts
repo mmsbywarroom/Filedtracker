@@ -19,7 +19,7 @@ function istDayBounds(d = new Date()) {
 }
 
 export async function GET() {
-  const s = await requireUser();
+  const s = await requireUser(req);
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   // Don't block dashboard open on auto punch-out (can lock DB under load)
@@ -131,7 +131,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const s = await requireUser();
+  const s = await requireUser(req);
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   await autoPunchOutIfStale(s.sub);
   // If old session had no updates for 45+ min, close it so this punch-in can start fresh

@@ -3,8 +3,8 @@ import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { downsample } from "@/lib/utils";
 
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
-  const s = await requireUser();
+export async function GET(req: Request, { params }: { params: { id: string } }) {
+  const s = await requireUser(req);
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const row = await prisma.attendance.findFirst({
