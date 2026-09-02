@@ -238,8 +238,7 @@ export default function GpsSpoofLogsPage() {
           Download same-location users (7 days CSV)
         </a>
         <p className="text-xs text-navy/50">
-          Unique users who punched in → out at one place (≤ 80 m). Add{" "}
-          <code className="text-[11px]">?sessions=1</code> for every session row.
+          Unique users who punched in → out at one place (≤ 80 m). CSV includes proof dates column.
         </p>
         <button
           type="button"

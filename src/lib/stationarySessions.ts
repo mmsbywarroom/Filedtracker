@@ -42,6 +42,8 @@ export type UniqueStationaryUser = {
   maxHours: number;
   avgTravelM: number;
   maxMapSpreadM: number;
+  /** Sorted DD-MM-YYYY dates when user stayed at one location. */
+  sameLocationDates: string;
   lastDate: string;
   lastPunchIn: string;
   lastPunchOut: string;
@@ -70,6 +72,13 @@ export function isSameLocationSession(opts: {
   );
 }
 
+/** YYYY-MM-DD → DD-MM-YYYY for CSV readability. */
+function formatIstDateLabel(ymd: string) {
+  const [y, m, d] = ymd.split("-");
+  if (!y || !m || !d) return ymd;
+  return `${d}-${m}-${y}`;
+}
+
 /** One row per user — who had at least one same-location session in the period. */
 export function aggregateUniqueStationaryUsers(rows: StationarySessionRow[]): UniqueStationaryUser[] {
   const byUser = new Map<string, UniqueStationaryUser & { daySet: Set<string>; travelSum: number }>();
@@ -94,6 +103,7 @@ export function aggregateUniqueStationaryUsers(rows: StationarySessionRow[]): Un
         maxHours: 0,
         avgTravelM: 0,
         maxMapSpreadM: 0,
+        sameLocationDates: "",
         lastDate: r.date,
         lastPunchIn: r.punchIn,
         lastPunchOut: r.punchOut,
@@ -118,14 +128,18 @@ export function aggregateUniqueStationaryUsers(rows: StationarySessionRow[]): Un
   }
 
   return Array.from(byUser.values())
-    .map(({ daySet, travelSum, sessions, ...rest }) => ({
-      ...rest,
-      sessions,
-      days: daySet.size,
-      avgTravelM: sessions ? Math.round(travelSum / sessions) : 0,
-      totalHours: Math.round(rest.totalHours * 10) / 10,
-      maxHours: Math.round(rest.maxHours * 10) / 10,
-    }))
+    .map(({ daySet, travelSum, sessions, ...rest }) => {
+      const sortedDates = Array.from(daySet).sort();
+      return {
+        ...rest,
+        sessions,
+        days: daySet.size,
+        sameLocationDates: sortedDates.map(formatIstDateLabel).join("; "),
+        avgTravelM: sessions ? Math.round(travelSum / sessions) : 0,
+        totalHours: Math.round(rest.totalHours * 10) / 10,
+        maxHours: Math.round(rest.maxHours * 10) / 10,
+      };
+    })
     .sort((a, b) => b.sessions - a.sessions || a.name.localeCompare(b.name));
 }
 
