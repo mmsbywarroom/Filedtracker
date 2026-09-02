@@ -16,6 +16,7 @@
     "seed": "npx tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@capacitor/core": "^7.4.2",
     "@prisma/client": "^5.22.0",
     "@tensorflow-models/coco-ssd": "^2.2.3",
     "@tensorflow/tfjs": "^4.22.0",

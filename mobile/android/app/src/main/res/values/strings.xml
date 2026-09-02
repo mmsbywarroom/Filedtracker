@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Field Tracking</string>
+    <string name="title_activity_main">Field Tracking</string>
+    <string name="package_name">in.videh.filedtracker</string>
+    <string name="custom_url_scheme">in.videh.filedtracker</string>
+</resources>

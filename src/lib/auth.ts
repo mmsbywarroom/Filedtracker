@@ -119,7 +119,25 @@ export async function getSession(): Promise<SessionPayload | null> {
   return getUserSession();
 }
 
-export async function requireUser() {
+export async function verifyUserBearerToken(token: string): Promise<SessionPayload | null> {
+  if (!token) return null;
+  try {
+    const { payload } = await jwtVerify(token, secret());
+    const s = payload as SessionPayload;
+    if (s.role !== "user" || s.kind === "rally") return null;
+    return s;
+  } catch {
+    return null;
+  }
+}
+
+/** Cookie session (web) or Authorization: Bearer (native background GPS). */
+export async function requireUser(req?: Request) {
+  const auth = req?.headers.get("authorization");
+  if (auth?.startsWith("Bearer ")) {
+    const s = await verifyUserBearerToken(auth.slice(7).trim());
+    if (s) return s;
+  }
   const s = await getUserSession();
   if (!s || s.role !== "user" || s.kind === "rally") return null;
   return s;

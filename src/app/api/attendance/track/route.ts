@@ -8,7 +8,7 @@ import { mergeMapProbeLog } from "@/lib/gpsSpoofVerdict";
 import { isPanIndiaPunchPhone } from "@/lib/panIndiaPunch";
 
 export async function POST(req: Request) {
-  const s = await requireUser();
+  const s = await requireUser(req);
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const closed = await autoPunchOutIfStale(s.sub).catch(() => null);

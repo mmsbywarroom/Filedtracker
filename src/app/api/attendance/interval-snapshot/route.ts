@@ -13,7 +13,7 @@ import {
 const MIN_GAP_BETWEEN_SLOTS_MS = 8 * 60 * 1000;
 
 export async function POST(req: Request) {
-  const s = await requireUser();
+  const s = await requireUser(req);
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json().catch(() => null);

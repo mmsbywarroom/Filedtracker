@@ -7,8 +7,10 @@ import { BrandMark } from "@/components/BrandMark";
 import RouteMap from "@/components/RouteMapDynamic";
 import { formatDuration, formatKm, mapGpsSpreadFromFixes, shouldCreditTrackStep, sessionTravelMeters } from "@/lib/utils";
 import { isSlotDueNow, MAX_INTERVAL_SLOTS } from "@/lib/attendanceIntervalFlag";
+import { isNativeApp, syncNativeBackgroundTracking } from "@/lib/nativeBackgroundLocation";
 import {
   captureGpsFix,
+  getFreshPosition,
   isIosBrowser,
   locateDevice,
   withTimeout,
@@ -84,6 +86,7 @@ export default function DashboardPage() {
   const [registerTurban, setRegisterTurban] = useState(false);
   const geoWatchId = useRef<number | null>(null);
   const geoStarted = useRef(false);
+  const trackFixRef = useRef<((pos: GeolocationPosition) => void) | null>(null);
   const gpsOffLock = useRef(false);
   const gpsDenyStreak = useRef(0);
   const gpsDenyResetTimer = useRef<number | null>(null);
@@ -107,23 +110,6 @@ export default function DashboardPage() {
     setGpsError("");
   }, []);
 
-  const requestLiveLocation = useCallback(async () => {
-    if (!navigator.geolocation) {
-      setGpsError("Turn on Location in Settings → Privacy → Location Services.");
-      return;
-    }
-    setLocating(true);
-    setGpsError("");
-    try {
-      const pos = await locateDevice();
-      applyPosition(pos, true);
-    } catch (e) {
-      setGpsError(e instanceof Error ? e.message : "Could not get location.");
-    } finally {
-      setLocating(false);
-    }
-  }, [applyPosition]);
-
   const startGeoTracking = useCallback(() => {
     if (geoStarted.current || !navigator.geolocation) return;
     geoStarted.current = true;
@@ -135,11 +121,19 @@ export default function DashboardPage() {
       () => {},
       {
         enableHighAccuracy: true,
-        maximumAge: 15000,
+        maximumAge: 0,
         timeout: isIosBrowser() ? 30000 : 20000,
       }
     );
   }, [applyPosition]);
+
+  const stopGeoTracking = useCallback(() => {
+    if (geoWatchId.current != null) {
+      navigator.geolocation.clearWatch(geoWatchId.current);
+      geoWatchId.current = null;
+    }
+    geoStarted.current = false;
+  }, []);
 
   async function refresh() {
     setBootError("");
@@ -227,6 +221,10 @@ export default function DashboardPage() {
 
   /** While punched in: re-check server often so 12h auto punch-out applies even if GPS stops. */
   useEffect(() => {
+    void syncNativeBackgroundTracking(open?.punchInAt ?? null);
+  }, [open?.id, open?.punchInAt]);
+
+  useEffect(() => {
     if (!open) return;
     const poll = window.setInterval(() => {
       refresh();
@@ -248,9 +246,14 @@ export default function DashboardPage() {
     return () => {
       window.removeEventListener("touchstart", onGesture);
       window.removeEventListener("click", onGesture);
-      if (geoWatchId.current != null) navigator.geolocation.clearWatch(geoWatchId.current);
+      stopGeoTracking();
     };
-  }, [startGeoTracking]);
+  }, [startGeoTracking, stopGeoTracking]);
+
+  /** Idle map watch conflicts with session watch — use only one GPS pipeline. */
+  useEffect(() => {
+    if (open) stopGeoTracking();
+  }, [open?.id, stopGeoTracking]);
 
   async function autoPunchOutForGpsOff() {
     if (gpsOffLock.current || document.visibilityState !== "visible") return;
@@ -368,7 +371,9 @@ export default function DashboardPage() {
       return;
     }
     startIntervalSnapshotPoller(open);
-    lastFix.current = open.points[open.points.length - 1] || { lat: open.punchInLat, lng: open.punchInLng };
+    const seed = open.points[open.points.length - 1] || { lat: open.punchInLat, lng: open.punchInLng };
+    lastFix.current = seed;
+    setLivePos(seed);
     const lastPt = open.points[open.points.length - 1];
     lastRecorded.current = lastPt
       ? { lat: lastPt.lat, lng: lastPt.lng, at: new Date(lastPt.recordedAt).getTime() || Date.now() }
@@ -438,10 +443,19 @@ export default function DashboardPage() {
       buffer.current.push(point);
       setOpen((cur) => (cur ? { ...cur, points: [...cur.points, point] } : cur));
     };
+    trackFixRef.current = recordFix;
 
-    const watch = navigator.geolocation.watchPosition(
-      recordFix,
-      (err) => {
+    const trackOpts: PositionOptions = {
+      enableHighAccuracy: true,
+      maximumAge: 0,
+      timeout: isIosBrowser() ? 30000 : 25000,
+    };
+
+    getFreshPosition()
+      .then(recordFix)
+      .catch(() => {});
+
+    const watch = navigator.geolocation.watchPosition(recordFix, (err) => {
         if (err.code !== 1 || document.visibilityState !== "visible") return;
         gpsDenyStreak.current += 1;
         if (gpsDenyResetTimer.current != null) window.clearTimeout(gpsDenyResetTimer.current);
@@ -450,26 +464,26 @@ export default function DashboardPage() {
         }, 90_000);
         if (gpsDenyStreak.current >= 2) void autoPunchOutForGpsOff();
       },
-      { enableHighAccuracy: true, maximumAge: 15_000, timeout: 30_000 }
+      trackOpts
     );
     const t = setInterval(flush, 8000);
     const ping = window.setInterval(() => {
-      navigator.geolocation.getCurrentPosition(recordFix, () => {}, {
-        enableHighAccuracy: true,
-        maximumAge: 20_000,
-        timeout: 20_000,
-      });
-    }, 40_000);
+      getFreshPosition()
+        .then(recordFix)
+        .catch(() => {
+          navigator.geolocation.getCurrentPosition(recordFix, () => {}, trackOpts);
+        });
+    }, 15_000);
     const onHide = () => {
       if (document.visibilityState === "hidden") {
         flush();
         return;
       }
-      navigator.geolocation.getCurrentPosition(recordFix, () => {}, {
-        enableHighAccuracy: true,
-        maximumAge: 0,
-        timeout: 20_000,
-      });
+      getFreshPosition()
+        .then(recordFix)
+        .catch(() => {
+          navigator.geolocation.getCurrentPosition(recordFix, () => {}, trackOpts);
+        });
       flush();
     };
     document.addEventListener("visibilitychange", onHide);
@@ -488,6 +502,7 @@ export default function DashboardPage() {
       .catch(() => {});
 
     return () => {
+      trackFixRef.current = null;
       navigator.geolocation.clearWatch(watch);
       clearInterval(t);
       window.clearInterval(ping);
@@ -619,8 +634,21 @@ export default function DashboardPage() {
   }
 
   async function enableLocation() {
-    startGeoTracking();
-    await requestLiveLocation();
+    setLocating(true);
+    setGpsError("");
+    try {
+      const pos = open ? await getFreshPosition() : await locateDevice();
+      if (open) {
+        trackFixRef.current?.(pos);
+      } else {
+        startGeoTracking();
+        applyPosition(pos, true);
+      }
+    } catch (e) {
+      setGpsError(e instanceof Error ? e.message : "Could not get location.");
+    } finally {
+      setLocating(false);
+    }
   }
 
   async function beginPunchIn() {
@@ -816,8 +844,9 @@ export default function DashboardPage() {
                   {t("live")} · {formatDuration(live?.durationMs || 0)} · {formatKm(live?.travelMeters || 0)}
                 </span>
                 <p className="text-xs text-amber-800">
-                  Har 30 minute GPS check — app open rakhein. Screen band / doosra app = check miss ho sakta hai (phone
-                  limit).
+                  {isNativeApp()
+                    ? "Background GPS active — allow Always location. Notification dikhegi jab punched in ho."
+                    : "Har 30 minute GPS check — app open rakhein. Screen band / doosra app = check miss ho sakta hai (browser limit). Install Field Tracking app for background GPS."}
                 </p>
               </div>
             ) : (

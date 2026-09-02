@@ -76,6 +76,21 @@ export async function locateDevice(): Promise<GeolocationPosition> {
   }
 }
 
+/** Fresh fix for live map / active session — never use cached network location. */
+export function getFreshPosition(): Promise<GeolocationPosition> {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) {
+      reject(new Error("Location is off. Turn on Location in phone Settings."));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(resolve, (e) => reject(geoFail(e)), {
+      enableHighAccuracy: true,
+      maximumAge: 0,
+      timeout: isIosBrowser() ? 25000 : 20000,
+    });
+  });
+}
+
 export type GpsFix = { lat: number; lng: number; accuracy: number | null; at: number };
 
 export type GpsSample = GpsFix;

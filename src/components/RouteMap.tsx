@@ -186,7 +186,7 @@ export default function RouteMap({
       });
       infoRef.current.open(map);
     }
-  }, [ready, points, punchIn?.lat, punchIn?.lng, punchOut?.lat, punchOut?.lng, startLabel, endLabel, durationMs, distanceMeters]);
+  }, [ready, points, punchIn?.lat, punchIn?.lng, punchOut?.lat, punchOut?.lng, startLabel, endLabel, durationMs, distanceMeters, liveLocation?.lat, liveLocation?.lng]);
 
   // Live "you are here" marker — update without redrawing the whole track
   useEffect(() => {
@@ -243,6 +243,16 @@ export default function RouteMap({
       <div ref={el} className="absolute inset-0 h-full w-full" />
       {error && (
         <div className="absolute inset-0 z-10 grid place-items-center bg-white/90 p-6 text-center text-sm text-navy/70">{error}</div>
+      )}
+      {!error && onLocateMe && (valid(liveLocation) || valid(punchIn) || points.length > 0) && (
+        <button
+          type="button"
+          onClick={() => onLocateMe()}
+          disabled={locating}
+          className="absolute right-3 top-3 z-10 rounded-full bg-white/95 px-3 py-1.5 text-[11px] font-semibold text-navy/70 shadow ring-1 ring-navy/10 active:scale-[0.98] disabled:opacity-70 touch-manipulation"
+        >
+          {locating ? "Updating…" : "↻ Refresh GPS"}
+        </button>
       )}
       {!error && !liveLocation && !points.length && !punchIn && (
         <div className="absolute inset-x-0 bottom-3 z-10 flex flex-col items-center gap-1 px-3">

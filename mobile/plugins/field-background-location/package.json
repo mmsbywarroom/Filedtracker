@@ -1,0 +1,28 @@
+{
+  "name": "field-background-location",
+  "version": "1.0.0",
+  "description": "Background GPS for Field Tracking — 30-min interval snapshots while punched in",
+  "main": "dist/plugin.cjs.js",
+  "module": "dist/esm/index.js",
+  "types": "dist/esm/index.d.ts",
+  "files": ["dist/", "android/", "ios/"],
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch"
+  },
+  "peerDependencies": {
+    "@capacitor/core": ">=7.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/core": "^7.4.2",
+    "typescript": "^5.6.2"
+  },
+  "capacitor": {
+    "ios": {
+      "src": "ios"
+    },
+    "android": {
+      "src": "android"
+    }
+  }
+}
