@@ -1,8 +1,12 @@
 # Native iOS → TestFlight (not React Native)
 # Bundle: in.videh.filedtracker.aap | Team: 33AW34RHHQ
 #
-# Required Codemagic env group "code-signing" with secret:
-#   CERTIFICATE_PRIVATE_KEY = full contents of ios-native/signing/cert_key.pem
+# Codemagic → Application settings → Environment variables:
+#   Variable name: CERTIFICATE_PRIVATE_KEY
+#   Group: code-signing  (create if missing)
+#   Secret: ON
+#   Value: full PEM from ios-native/signing/cert_key.pem (BEGIN/END lines included)
+# App Store Connect integration name must be: Codemagic
 
 workflows:
   ios-testflight:
@@ -23,6 +27,11 @@ workflows:
       - name: Init keychain + create/fetch App Store signing
         script: |
           set -e
+          if [ -z "${CERTIFICATE_PRIVATE_KEY:-}" ]; then
+            echo "Missing CERTIFICATE_PRIVATE_KEY."
+            echo "Codemagic → Environment variables → add secret CERTIFICATE_PRIVATE_KEY in group code-signing"
+            exit 1
+          fi
           keychain initialize
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --type IOS_APP_STORE \
