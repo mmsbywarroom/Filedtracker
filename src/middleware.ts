@@ -52,9 +52,12 @@ export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const ua = req.headers.get("user-agent") || "";
   const nativeWebView = ua.includes("AAPNative/");
-  const staffWeb = req.nextUrl.searchParams.get("staff") === "1";
-  // Temporary: iPhone Safari web until TestFlight external is live. Android stays APK-only.
+  const androidBrowser = /Android/i.test(ua) && !nativeWebView;
   const iosBrowser = /iPhone|iPad|iPod/i.test(ua) && !nativeWebView;
+  // staff=1 is desktop-only escape — never unlock Android Chrome web punch.
+  const staffWeb =
+    req.nextUrl.searchParams.get("staff") === "1" && !androidBrowser;
+  // Temporary: iPhone Safari web until TestFlight external is live. Android stays APK-only.
   const fieldWebOk = nativeWebView || staffWeb || iosBrowser;
 
   if (pathname.startsWith("/dashboard")) {

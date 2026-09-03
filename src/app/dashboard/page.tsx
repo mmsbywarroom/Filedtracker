@@ -22,6 +22,7 @@ import { LATEST_NATIVE_APK } from "@/lib/apkDownload";
 import { ApkDownloadLanding } from "@/components/ApkDownloadLanding";
 import { useClientNativeApp } from "@/hooks/useClientNativeApp";
 import { apiFetch } from "@/lib/clientHeaders";
+import { isAndroidBrowser } from "@/lib/clientDevice";
 import { assertNativeSecureForPunch, isPureNativeApp, saveNativeSession } from "@/lib/pureNativeApp";
 import { LangToggle, useLang } from "@/lib/i18n";
 
@@ -233,8 +234,9 @@ export default function DashboardPage() {
   useEffect(() => {
     const staff = new URLSearchParams(window.location.search).get("staff") === "1";
     // Temporary: allow iPhone Safari web until TestFlight external is approved.
-    // Android browser stays APK-only. Never location.replace("/") — refresh-loop risk.
-    const allowWeb = isPureNativeApp() || staff || isIosBrowser();
+    // Android browser: never web punch (ignore ?staff=1). Native APK WebView OK.
+    const allowWeb =
+      isPureNativeApp() || isIosBrowser() || (staff && !isAndroidBrowser());
     if (!allowWeb) {
       setFieldWebBlocked(true);
       setBooting(false);
