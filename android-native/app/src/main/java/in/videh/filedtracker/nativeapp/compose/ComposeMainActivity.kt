@@ -1,5 +1,6 @@
 package `in`.videh.filedtracker.nativeapp.compose
 
+import android.content.Context
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.compose.setContent
@@ -35,8 +36,11 @@ import `in`.videh.filedtracker.nativeapp.SessionStore
 /** Single Compose host for the whole field app — no WebView anywhere in this graph. */
 class ComposeMainActivity : AppCompatActivity() {
 
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(LocaleHelper.wrap(newBase))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
-        LocaleHelper.apply(this)
         super.onCreate(savedInstanceState)
 
         val startDestination = if (SessionStore.isLoggedIn(this)) Routes.HOME else Routes.LOGIN

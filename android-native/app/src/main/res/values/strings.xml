@@ -2,9 +2,17 @@
 <resources>
     <string name="app_name">AAP Attendance</string>
     <string name="login_title">Aam Aadmi Party</string>
+    <string name="login_subtitle">Field Attendance</string>
     <string name="login_hint">Enter your registered mobile number</string>
+    <string name="login_with_mobile">Login with your mobile number</string>
+    <string name="login_otp_title">Enter the OTP we sent you</string>
+    <string name="login_otp_hint">6-digit code, valid for a few minutes.</string>
+    <string name="login_number_hint">Use the number registered with your assembly office.</string>
+    <string name="mobile_number">Mobile number (+91)</string>
+    <string name="otp_label">6-digit OTP</string>
     <string name="send_otp">Send OTP</string>
     <string name="verify_otp">Verify &amp; login</string>
+    <string name="change_number">Change number</string>
     <string name="punch_in">Punch in</string>
     <string name="punch_out">Punch out</string>
     <string name="register_face">Register face</string>
@@ -12,9 +20,25 @@
     <string name="loading">Loading…</string>
     <string name="not_punched_in">Not punched in</string>
     <string name="punched_in">Punched in — route tracking active</string>
-    <string name="leave_request">Leave request</string>
-    <string name="footprints">Recent footprints</string>
+    <string name="leave_request">Leave</string>
+    <string name="footprints">Footprints</string>
     <string name="live_map">Live map</string>
+    <string name="quick_actions">QUICK ACTIONS</string>
+    <string name="today_distance">Today distance</string>
+    <string name="hours_worked">Hours worked</string>
+    <string name="face_check">Face check</string>
+    <string name="route_today">Your route today</string>
+    <string name="past_sessions">Past sessions</string>
+    <string name="apply_leave">Apply &amp; track</string>
+    <string name="camera_self_test">Camera self-test</string>
+    <string name="face_verified_cta">Face + GPS verified</string>
+    <string name="register_face_title">Register your face</string>
+    <string name="register_face_hint">One-time setup. You need this before your first punch in.</string>
+    <string name="hold_still">Face locked — hold still</string>
+    <string name="face_detecting">Looking for your face…</string>
+    <string name="face_auto_hint">Green frame = match ready. Punch happens automatically.</string>
+    <string name="language">Language</string>
+    <string name="secure_footer">Secure • GPS verified • Face verified</string>
     <string name="vpn_blocked">Turn off VPN before punch in/out.</string>
     <string name="mock_gps_blocked">Fake GPS detected. Uninstall location spoof apps.</string>
     <string name="punch_in_window_blocked">Punch in is only allowed between 5:00 AM and 1:00 PM (IST).</string>

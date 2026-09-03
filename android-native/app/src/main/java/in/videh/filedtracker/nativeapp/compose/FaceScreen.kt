@@ -18,6 +18,7 @@ import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -43,6 +44,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -51,6 +53,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -61,6 +64,7 @@ import com.google.mlkit.vision.face.FaceDetection
 import com.google.mlkit.vision.face.FaceDetectorOptions
 import `in`.videh.filedtracker.nativeapp.ApiClient
 import `in`.videh.filedtracker.nativeapp.DashboardActivity
+import `in`.videh.filedtracker.nativeapp.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -90,9 +94,8 @@ object FaceResultBus {
 }
 
 /**
- * CameraX + ML Kit face capture. The JPEG goes to `POST /api/face/describe`, which returns
- * the same face-api 128-d descriptor the web app produces — no WebView involved.
- * `check` mode stops after the capture and only reports whether the camera works.
+ * CameraX + ML Kit. Like the web app: hold still → green frame → auto capture / punch.
+ * JPEG goes to `POST /api/face/describe` for the same 128-d face-api descriptor.
  */
 @ExperimentalGetImage
 @Composable
@@ -105,6 +108,8 @@ fun FaceScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
     val selfTest = mode == FACE_MODE_CHECK
+    val autoPunch = !selfTest
+    val needHits = if (mode == DashboardActivity.MODE_REGISTER) 4 else 2
 
     var hasCamera by remember {
         mutableStateOf(
@@ -112,10 +117,12 @@ fun FaceScreen(
                 PackageManager.PERMISSION_GRANTED
         )
     }
-    var faceCount by remember { mutableStateOf(0) }
+    var faceCount by remember { mutableIntStateOf(0) }
+    var goodHits by remember { mutableIntStateOf(0) }
     var status by remember { mutableStateOf("Point the front camera at your face.") }
-    var capturedBytes by remember { mutableStateOf(0) }
+    var capturedBytes by remember { mutableIntStateOf(0) }
     var busy by remember { mutableStateOf(false) }
+    var autoFired by remember { mutableStateOf(false) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -150,7 +157,6 @@ fun FaceScreen(
         }
     }
 
-    /** Sends the JPEG to the server and hands the descriptor back to the caller. */
     fun describeAndFinish(dataUrl: String) {
         busy = true
         status = "Matching face…"
@@ -169,6 +175,8 @@ fun FaceScreen(
                 onFinished(payload, dataUrl, mode)
             } catch (e: Exception) {
                 status = errorText(e, "Could not read your face. Try again.")
+                autoFired = false
+                goodHits = 0
             } finally {
                 busy = false
             }
@@ -180,6 +188,7 @@ fun FaceScreen(
             status = "Get exactly one face in the frame first."
             return
         }
+        if (busy) return
         busy = true
         status = "Capturing…"
         imageCapture.takePicture(
@@ -191,6 +200,7 @@ fun FaceScreen(
                     } catch (e: Exception) {
                         status = errorText(e, "Could not read the captured photo")
                         busy = false
+                        autoFired = false
                         null
                     } finally {
                         image.close()
@@ -201,6 +211,7 @@ fun FaceScreen(
                         busy = false
                         status = "Camera and face detection are working " +
                             "(${dataUrl.length} chars encoded)."
+                        autoFired = false
                     } else {
                         describeAndFinish(dataUrl)
                     }
@@ -208,10 +219,28 @@ fun FaceScreen(
 
                 override fun onError(exception: ImageCaptureException) {
                     busy = false
+                    autoFired = false
+                    goodHits = 0
                     status = errorText(exception, "Capture failed")
                 }
             }
         )
+    }
+
+    // Web-style auto punch: enough consecutive single-face frames → capture once.
+    LaunchedEffect(goodHits, busy, autoFired, hasCamera) {
+        if (!autoPunch || !hasCamera || busy || autoFired) return@LaunchedEffect
+        if (goodHits >= needHits) {
+            autoFired = true
+            capture()
+        }
+    }
+
+    val locked = faceCount == 1
+    val frameColor = when {
+        busy -> AapColors.Yellow
+        locked -> AapColors.Success
+        else -> AapColors.Outline
     }
 
     AapScreenScaffold(
@@ -229,7 +258,8 @@ fun FaceScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .clip(RoundedCornerShape(28.dp)),
+                    .clip(RoundedCornerShape(28.dp))
+                    .border(4.dp, frameColor, RoundedCornerShape(28.dp)),
                 color = AapColors.NavyCard
             ) {
                 if (!hasCamera) {
@@ -245,51 +275,74 @@ fun FaceScreen(
                         }
                     }
                 } else {
-                    AndroidView(
-                        modifier = Modifier.fillMaxSize(),
-                        factory = { ctx ->
-                            val previewView = PreviewView(ctx).apply {
-                                scaleType = PreviewView.ScaleType.FILL_CENTER
-                            }
-                            val providerFuture = ProcessCameraProvider.getInstance(ctx)
-                            providerFuture.addListener({
-                                try {
-                                    val provider = providerFuture.get()
-                                    val preview = Preview.Builder().build().also {
-                                        it.setSurfaceProvider(previewView.surfaceProvider)
-                                    }
-                                    val analysis = ImageAnalysis.Builder()
-                                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                                        .build()
-                                    analysis.setAnalyzer(analysisExecutor) { proxy: ImageProxy ->
-                                        val media = proxy.image
-                                        if (media == null) {
-                                            proxy.close()
-                                        } else {
-                                            val input = InputImage.fromMediaImage(
-                                                media,
-                                                proxy.imageInfo.rotationDegrees
-                                            )
-                                            detector.process(input)
-                                                .addOnSuccessListener { faces -> faceCount = faces.size }
-                                                .addOnCompleteListener { proxy.close() }
-                                        }
-                                    }
-                                    provider.unbindAll()
-                                    provider.bindToLifecycle(
-                                        lifecycleOwner,
-                                        CameraSelector.DEFAULT_FRONT_CAMERA,
-                                        preview,
-                                        analysis,
-                                        imageCapture
-                                    )
-                                } catch (e: Exception) {
-                                    status = errorText(e, "Could not start the camera")
+                    Box(Modifier.fillMaxSize()) {
+                        AndroidView(
+                            modifier = Modifier.fillMaxSize(),
+                            factory = { ctx ->
+                                val previewView = PreviewView(ctx).apply {
+                                    scaleType = PreviewView.ScaleType.FILL_CENTER
                                 }
-                            }, ContextCompat.getMainExecutor(ctx))
-                            previewView
-                        }
-                    )
+                                val mainExecutor = ContextCompat.getMainExecutor(ctx)
+                                val providerFuture = ProcessCameraProvider.getInstance(ctx)
+                                providerFuture.addListener({
+                                    try {
+                                        val provider = providerFuture.get()
+                                        val preview = Preview.Builder().build().also {
+                                            it.setSurfaceProvider(previewView.surfaceProvider)
+                                        }
+                                        val analysis = ImageAnalysis.Builder()
+                                            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                                            .build()
+                                        analysis.setAnalyzer(analysisExecutor) { proxy: ImageProxy ->
+                                            val media = proxy.image
+                                            if (media == null) {
+                                                proxy.close()
+                                            } else {
+                                                val input = InputImage.fromMediaImage(
+                                                    media,
+                                                    proxy.imageInfo.rotationDegrees
+                                                )
+                                                detector.process(input)
+                                                    .addOnSuccessListener(mainExecutor) { faces ->
+                                                        val count = faces.size
+                                                        faceCount = count
+                                                        if (count == 1) {
+                                                            goodHits += 1
+                                                        } else {
+                                                            goodHits = 0
+                                                        }
+                                                    }
+                                                    .addOnCompleteListener { proxy.close() }
+                                            }
+                                        }
+                                        provider.unbindAll()
+                                        provider.bindToLifecycle(
+                                            lifecycleOwner,
+                                            CameraSelector.DEFAULT_FRONT_CAMERA,
+                                            preview,
+                                            analysis,
+                                            imageCapture
+                                        )
+                                    } catch (e: Exception) {
+                                        status = errorText(e, "Could not start the camera")
+                                    }
+                                }, mainExecutor)
+                                previewView
+                            }
+                        )
+
+                        // Green square overlay — same cue as the web app when face locks.
+                        Box(
+                            Modifier
+                                .align(Alignment.Center)
+                                .size(220.dp)
+                                .border(
+                                    width = if (locked) 4.dp else 2.dp,
+                                    color = if (locked) AapColors.Success else AapColors.TextMuted.copy(alpha = 0.45f),
+                                    shape = RoundedCornerShape(16.dp)
+                                )
+                        )
+                    }
                 }
             }
 
@@ -300,23 +353,29 @@ fun FaceScreen(
                     Modifier
                         .size(10.dp)
                         .clip(RoundedCornerShape(50))
-                        .background(if (faceCount > 0) AapColors.Success else AapColors.TextMuted)
+                        .background(if (locked) AapColors.Success else AapColors.TextMuted)
                 )
                 Spacer(Modifier.size(10.dp))
                 Text(
                     when {
                         !hasCamera -> "Camera off"
-                        faceCount == 1 -> "Face detected — hold still"
+                        busy -> status
+                        locked && autoPunch -> stringResource(R.string.hold_still)
+                        locked -> "Face detected — hold still"
                         faceCount > 1 -> "More than one face in frame"
-                        else -> "No face detected"
+                        else -> stringResource(R.string.face_detecting)
                     },
                     style = MaterialTheme.typography.titleMedium,
-                    color = if (faceCount == 1) AapColors.Success else AapColors.TextMuted
+                    color = if (locked) AapColors.Success else AapColors.TextMuted
                 )
             }
 
             Spacer(Modifier.height(6.dp))
-            Text(status, style = MaterialTheme.typography.bodyMedium, color = AapColors.TextMuted)
+            Text(
+                if (autoPunch) stringResource(R.string.face_auto_hint) else status,
+                style = MaterialTheme.typography.bodyMedium,
+                color = AapColors.TextMuted
+            )
             if (selfTest && capturedBytes > 0) {
                 Text(
                     "Captured ~${capturedBytes / 1024} KB of base64 JPEG",
@@ -327,31 +386,38 @@ fun FaceScreen(
 
             Spacer(Modifier.height(14.dp))
 
-            Button(
-                onClick = { capture() },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(58.dp),
-                enabled = hasCamera && !busy,
-                shape = RoundedCornerShape(18.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = AapColors.Yellow,
-                    contentColor = AapColors.Navy,
-                    disabledContainerColor = AapColors.Yellow.copy(alpha = 0.5f),
-                    disabledContentColor = AapColors.Navy.copy(alpha = 0.6f)
-                ),
-                elevation = ButtonDefaults.buttonElevation(defaultElevation = 10.dp)
-            ) {
-                if (busy) {
-                    CircularProgressIndicator(
-                        Modifier.size(22.dp),
-                        color = AapColors.Navy,
-                        strokeWidth = 3.dp
-                    )
-                } else {
-                    Icon(Icons.Filled.CameraAlt, null, Modifier.size(22.dp))
-                    Spacer(Modifier.size(10.dp))
-                    Text(faceButtonText(mode), fontWeight = FontWeight.Bold)
+            // Punch / register: no button — auto fires. Self-test keeps a Capture button.
+            if (selfTest) {
+                Button(
+                    onClick = { capture() },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(58.dp),
+                    enabled = hasCamera && !busy,
+                    shape = RoundedCornerShape(18.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = AapColors.Yellow,
+                        contentColor = AapColors.Navy,
+                        disabledContainerColor = AapColors.Yellow.copy(alpha = 0.5f),
+                        disabledContentColor = AapColors.Navy.copy(alpha = 0.6f)
+                    ),
+                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 10.dp)
+                ) {
+                    if (busy) {
+                        CircularProgressIndicator(
+                            Modifier.size(22.dp),
+                            color = AapColors.Navy,
+                            strokeWidth = 3.dp
+                        )
+                    } else {
+                        Icon(Icons.Filled.CameraAlt, null, Modifier.size(22.dp))
+                        Spacer(Modifier.size(10.dp))
+                        Text("Capture", fontWeight = FontWeight.Bold)
+                    }
+                }
+            } else if (busy) {
+                Box(Modifier.fillMaxWidth().height(58.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = AapColors.Yellow, strokeWidth = 3.dp)
                 }
             }
 
@@ -369,14 +435,8 @@ private fun faceTitle(mode: String): String = when (mode) {
 
 private fun faceSubtitle(mode: String): String = when (mode) {
     DashboardActivity.MODE_REGISTER -> "One-time face setup"
-    DashboardActivity.MODE_PUNCH_IN, DashboardActivity.MODE_PUNCH_OUT -> "Verify it is you"
+    DashboardActivity.MODE_PUNCH_IN, DashboardActivity.MODE_PUNCH_OUT -> "Hold still — auto punch"
     else -> "Camera + face detection self-test"
-}
-
-private fun faceButtonText(mode: String): String = when (mode) {
-    DashboardActivity.MODE_REGISTER -> "Register"
-    DashboardActivity.MODE_PUNCH_IN, DashboardActivity.MODE_PUNCH_OUT -> "Confirm punch"
-    else -> "Capture"
 }
 
 /**

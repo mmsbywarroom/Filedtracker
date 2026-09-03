@@ -64,6 +64,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -75,6 +76,7 @@ import `in`.videh.filedtracker.nativeapp.ApiClient
 import `in`.videh.filedtracker.nativeapp.DashboardActivity
 import `in`.videh.filedtracker.nativeapp.LocaleHelper
 import `in`.videh.filedtracker.nativeapp.LocationHelper
+import `in`.videh.filedtracker.nativeapp.R
 import `in`.videh.filedtracker.nativeapp.SecurityHelper
 import `in`.videh.filedtracker.nativeapp.SecurityReporter
 import `in`.videh.filedtracker.nativeapp.SessionStore
@@ -297,7 +299,7 @@ fun HomeScreen(
         Spacer(Modifier.height(14.dp))
 
         ProfileHeader(
-            name = user?.stringOrNull("name") ?: if (loading) "Loading…" else "Field member",
+            name = user?.stringOrNull("name") ?: if (loading) stringResource(R.string.loading) else "Field member",
             meta = listOfNotNull(
                 user?.stringOrNull("sectorAllotted"),
                 user?.stringOrNull("assemblyName")
@@ -323,8 +325,12 @@ fun HomeScreen(
             AapCard(Modifier.fillMaxWidth()) {
                 Column {
                     Row(Modifier.fillMaxWidth()) {
-                        StatBlock("Today distance", prettyDistance(todayDistance), Modifier.weight(1f))
-                        StatBlock("Hours worked", String.format(java.util.Locale.US, "%.1f h", todayHours), Modifier.weight(1f))
+                        StatBlock(stringResource(R.string.today_distance), prettyDistance(todayDistance), Modifier.weight(1f))
+                        StatBlock(
+                            stringResource(R.string.hours_worked),
+                            String.format(java.util.Locale.US, "%.1f h", todayHours),
+                            Modifier.weight(1f)
+                        )
                     }
                     if (punchedIn) {
                         Spacer(Modifier.height(12.dp))
@@ -392,7 +398,7 @@ fun HomeScreen(
         Spacer(Modifier.height(24.dp))
 
         Text(
-            "QUICK ACTIONS",
+            stringResource(R.string.quick_actions),
             style = MaterialTheme.typography.labelMedium,
             color = AapColors.TextMuted,
             letterSpacing = 2.sp
@@ -401,15 +407,15 @@ fun HomeScreen(
 
         Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             ActionCard(
-                title = "Live map",
-                subtitle = "Your route today",
+                title = stringResource(R.string.live_map),
+                subtitle = stringResource(R.string.route_today),
                 icon = { Icon(Icons.Filled.Map, null, tint = AapColors.Navy) },
                 modifier = Modifier.weight(1f),
                 onClick = { onOpen(Routes.MAP) }
             )
             ActionCard(
-                title = "Footprints",
-                subtitle = "Past sessions",
+                title = stringResource(R.string.footprints),
+                subtitle = stringResource(R.string.past_sessions),
                 icon = { Icon(Icons.Filled.Timeline, null, tint = AapColors.Navy) },
                 modifier = Modifier.weight(1f),
                 onClick = { onOpen(Routes.FOOTPRINTS) }
@@ -418,15 +424,15 @@ fun HomeScreen(
         Spacer(Modifier.height(14.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             ActionCard(
-                title = "Leave",
-                subtitle = "Apply & track",
+                title = stringResource(R.string.leave_request),
+                subtitle = stringResource(R.string.apply_leave),
                 icon = { Icon(Icons.Filled.EventAvailable, null, tint = AapColors.Navy) },
                 modifier = Modifier.weight(1f),
                 onClick = { onOpen(Routes.LEAVE) }
             )
             ActionCard(
-                title = "Face check",
-                subtitle = "Camera self-test",
+                title = stringResource(R.string.face_check),
+                subtitle = stringResource(R.string.camera_self_test),
                 icon = { Icon(Icons.Filled.Face, null, tint = AapColors.Navy) },
                 modifier = Modifier.weight(1f),
                 onClick = { onOpen(Routes.face(FACE_MODE_CHECK)) }
@@ -447,7 +453,7 @@ fun HomeScreen(
         ) {
             Icon(Icons.AutoMirrored.Filled.Logout, null, Modifier.size(18.dp))
             Spacer(Modifier.size(8.dp))
-            Text("Logout")
+            Text(stringResource(R.string.logout))
         }
 
         Spacer(Modifier.height(18.dp))
@@ -534,7 +540,7 @@ private fun StatusPill(punchedIn: Boolean) {
             )
             Spacer(Modifier.size(9.dp))
             Text(
-                if (punchedIn) "Punched in — route tracking active" else "Not punched in",
+                if (punchedIn) stringResource(R.string.punched_in) else stringResource(R.string.not_punched_in),
                 style = MaterialTheme.typography.labelLarge,
                 color = tint
             )
@@ -583,13 +589,14 @@ private fun PunchButton(punchedIn: Boolean, busy: Boolean, onClick: () -> Unit) 
             Spacer(Modifier.size(14.dp))
             Column {
                 Text(
-                    if (punchedIn) "PUNCH OUT" else "PUNCH IN",
+                    if (punchedIn) stringResource(R.string.punch_out).uppercase()
+                    else stringResource(R.string.punch_in).uppercase(),
                     fontWeight = FontWeight.Black,
                     fontSize = 22.sp,
                     letterSpacing = 1.sp
                 )
                 Text(
-                    "Face + GPS verified",
+                    stringResource(R.string.face_verified_cta),
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium
                 )
@@ -602,10 +609,14 @@ private fun PunchButton(punchedIn: Boolean, busy: Boolean, onClick: () -> Unit) 
 private fun RegisterFaceCard(busy: Boolean, onRegister: () -> Unit) {
     AapCard(Modifier.fillMaxWidth()) {
         Column {
-            Text("Register your face", style = MaterialTheme.typography.titleLarge, color = AapColors.TextPrimary)
+            Text(
+                stringResource(R.string.register_face_title),
+                style = MaterialTheme.typography.titleLarge,
+                color = AapColors.TextPrimary
+            )
             Spacer(Modifier.size(6.dp))
             Text(
-                "One-time setup. You need this before your first punch in.",
+                stringResource(R.string.register_face_hint),
                 style = MaterialTheme.typography.bodyMedium,
                 color = AapColors.TextMuted
             )
@@ -622,7 +633,7 @@ private fun RegisterFaceCard(busy: Boolean, onRegister: () -> Unit) {
             ) {
                 Icon(Icons.Filled.Face, null, Modifier.size(20.dp))
                 Spacer(Modifier.size(10.dp))
-                Text("Register face", fontWeight = FontWeight.Bold)
+                Text(stringResource(R.string.register_face), fontWeight = FontWeight.Bold)
             }
         }
     }

@@ -1,6 +1,17 @@
 FROM node:20-alpine
 WORKDIR /app
-RUN apk add --no-cache openssl
+# openssl: Prisma. python/make/g++ + cairo/pango: node-canvas (face describe) on musl/alpine.
+RUN apk add --no-cache \
+    openssl \
+    python3 \
+    make \
+    g++ \
+    pkgconf \
+    cairo-dev \
+    pango-dev \
+    jpeg-dev \
+    giflib-dev \
+    pixman-dev
 COPY package.json package-lock.json ./
 COPY prisma ./prisma
 RUN npm ci

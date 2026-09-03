@@ -30,13 +30,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.LockOpen
 import androidx.compose.material.icons.filled.Phone
-import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -54,14 +56,17 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.platform.LocalContext
 import `in`.videh.filedtracker.nativeapp.ApiClient
 import `in`.videh.filedtracker.nativeapp.AppConfig
+import `in`.videh.filedtracker.nativeapp.LocaleHelper
+import `in`.videh.filedtracker.nativeapp.R
 import `in`.videh.filedtracker.nativeapp.SessionStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -70,6 +75,7 @@ import kotlinx.coroutines.withContext
 @Composable
 fun LoginScreen(onLoggedIn: () -> Unit) {
     val context = LocalContext.current
+    val activity = context.findActivity()
     val scope = rememberCoroutineScope()
 
     var phone by remember { mutableStateOf("") }
@@ -99,7 +105,20 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
             .padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Spacer(Modifier.height(48.dp))
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End
+        ) {
+            IconButton(onClick = {
+                val next = if (LocaleHelper.currentLang(context) == "pa") "en" else "pa"
+                LocaleHelper.setLanguage(context, next)
+                activity?.recreate()
+            }) {
+                Icon(Icons.Filled.Translate, stringResource(R.string.language), tint = AapColors.TextMuted)
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
 
         Box(contentAlignment = Alignment.Center) {
             Box(
@@ -118,13 +137,13 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
 
         Spacer(Modifier.height(20.dp))
         Text(
-            "Aam Aadmi Party",
+            stringResource(R.string.login_title),
             style = MaterialTheme.typography.displaySmall,
             color = AapColors.TextPrimary,
             textAlign = TextAlign.Center
         )
         Text(
-            "Field Attendance",
+            stringResource(R.string.login_subtitle),
             style = MaterialTheme.typography.titleMedium,
             color = AapColors.Yellow,
             letterSpacing = 3.sp
@@ -141,14 +160,15 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
             AapCard(Modifier.fillMaxWidth()) {
                 Column {
                     Text(
-                        if (otpSent) "Enter the OTP we sent you" else "Login with your mobile number",
+                        if (otpSent) stringResource(R.string.login_otp_title)
+                        else stringResource(R.string.login_with_mobile),
                         style = MaterialTheme.typography.titleLarge,
                         color = AapColors.TextPrimary
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        if (otpSent) "6-digit code, valid for a few minutes."
-                        else "Use the number registered with your assembly office.",
+                        if (otpSent) stringResource(R.string.login_otp_hint)
+                        else stringResource(R.string.login_number_hint),
                         style = MaterialTheme.typography.bodyMedium,
                         color = AapColors.TextMuted
                     )
@@ -160,7 +180,7 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
                         modifier = Modifier.fillMaxWidth(),
                         enabled = !otpSent && !busy,
                         singleLine = true,
-                        label = { Text("Mobile number (+91)") },
+                        label = { Text(stringResource(R.string.mobile_number)) },
                         leadingIcon = { Icon(Icons.Filled.Phone, null, tint = AapColors.Yellow) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                         shape = RoundedCornerShape(16.dp),
@@ -180,7 +200,7 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
                                 modifier = Modifier.fillMaxWidth(),
                                 enabled = !busy,
                                 singleLine = true,
-                                label = { Text("6-digit OTP") },
+                                label = { Text(stringResource(R.string.otp_label)) },
                                 leadingIcon = { Icon(Icons.Filled.LockOpen, null, tint = AapColors.Yellow) },
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                                 shape = RoundedCornerShape(16.dp),
@@ -265,7 +285,7 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
                             Spacer(Modifier.size(10.dp))
                         }
                         Text(
-                            if (otpSent) "Verify & login" else "Send OTP",
+                            if (otpSent) stringResource(R.string.verify_otp) else stringResource(R.string.send_otp),
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp
                         )
@@ -281,7 +301,7 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
                                 otp = ""
                                 message = ""
                             }) {
-                                Text("Change number", color = AapColors.BlueSoft)
+                                Text(stringResource(R.string.change_number), color = AapColors.BlueSoft)
                             }
                         }
                     }
@@ -305,7 +325,7 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
 
         Spacer(Modifier.height(28.dp))
         Text(
-            "Secure • GPS verified • Face verified",
+            stringResource(R.string.secure_footer),
             style = MaterialTheme.typography.labelMedium,
             color = AapColors.TextMuted.copy(alpha = 0.7f)
         )

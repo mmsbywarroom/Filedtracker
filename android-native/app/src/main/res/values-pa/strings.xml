@@ -2,9 +2,17 @@
 <resources>
     <string name="app_name">AAP Attendance</string>
     <string name="login_title">ਆਮ ਆਦਮੀ ਪਾਰਟੀ</string>
+    <string name="login_subtitle">ਫੀਲਡ ਹਾਜ਼ਰੀ</string>
     <string name="login_hint">ਐਡਮਿਨ ਵੱਲੋਂ ਰਜਿਸਟਰ ਮੋਬਾਈਲ ਨੰਬਰ ਦਿਓ</string>
+    <string name="login_with_mobile">ਮੋਬਾਈਲ ਨੰਬਰ ਨਾਲ ਲਾਗਇਨ</string>
+    <string name="login_otp_title">ਭੇਜਿਆ OTP ਦਰਜ ਕਰੋ</string>
+    <string name="login_otp_hint">6-ਅੰਕਾਂ ਦਾ ਕੋਡ, ਕੁਝ ਮਿੰਟ ਲਈ ਵੈਧ।</string>
+    <string name="login_number_hint">ਅਸੈਂਬਲੀ ਆਫਿਸ ਵਿਖੇ ਰਜਿਸਟਰ ਨੰਬਰ ਵਰਤੋ।</string>
+    <string name="mobile_number">ਮੋਬਾਈਲ ਨੰਬਰ (+91)</string>
+    <string name="otp_label">6-ਅੰਕ OTP</string>
     <string name="send_otp">OTP ਭੇਜੋ</string>
     <string name="verify_otp">ਤਸਦੀਕ ਕਰੋ</string>
+    <string name="change_number">ਨੰਬਰ ਬਦਲੋ</string>
     <string name="punch_in">ਪੰਚ ਇਨ</string>
     <string name="punch_out">ਪੰਚ ਆਉਟ</string>
     <string name="register_face">ਚਿਹਰਾ ਰਜਿਸਟਰ ਕਰੋ</string>
@@ -12,9 +20,25 @@
     <string name="loading">ਲੋਡ ਹੋ ਰਿਹਾ…</string>
     <string name="not_punched_in">ਪੰਚ ਇਨ ਨਹੀਂ</string>
     <string name="punched_in">ਪੰਚ ਇਨ — ਰਸਤਾ ਟਰੈਕ ਹੋ ਰਿਹਾ</string>
-    <string name="leave_request">ਛੁੱਟੀ ਦੀ ਬੇਨਤੀ</string>
-    <string name="footprints">ਪਿਛਲੇ ਰਸਤੇ</string>
+    <string name="leave_request">ਛੁੱਟੀ</string>
+    <string name="footprints">ਰਸਤੇ</string>
     <string name="live_map">ਲਾਈਵ ਨਕਸ਼ਾ</string>
+    <string name="quick_actions">ਤੇਜ਼ ਕਾਰਵਾਈਆਂ</string>
+    <string name="today_distance">ਅੱਜ ਦੀ ਦੂਰੀ</string>
+    <string name="hours_worked">ਕੰਮ ਦੇ ਘੰਟੇ</string>
+    <string name="face_check">ਚਿਹਰਾ ਜਾਂਚ</string>
+    <string name="route_today">ਅੱਜ ਦਾ ਰਸਤਾ</string>
+    <string name="past_sessions">ਪਿਛਲੀਆਂ ਸੈਸ਼ਨ</string>
+    <string name="apply_leave">ਬੇਨਤੀ ਤੇ ਸਥਿਤੀ</string>
+    <string name="camera_self_test">ਕੈਮਰਾ ਟੈਸਟ</string>
+    <string name="face_verified_cta">ਚਿਹਰਾ + GPS ਪ੍ਰਮਾਣਿਤ</string>
+    <string name="register_face_title">ਆਪਣਾ ਚਿਹਰਾ ਰਜਿਸਟਰ ਕਰੋ</string>
+    <string name="register_face_hint">ਇੱਕ ਵਾਰੀ ਸੈਟਅੱਪ। ਪਹਿਲੇ ਪੰਚ ਤੋਂ ਪਹਿਲਾਂ ਲੋੜੀਂਦਾ।</string>
+    <string name="hold_still">ਚਿਹਰਾ ਲਾਕ — ਰੁਕੋ</string>
+    <string name="face_detecting">ਚਿਹਰਾ ਲੱਭ ਰਿਹਾ…</string>
+    <string name="face_auto_hint">ਹਰਾ ਫਰੇਮ = ਤਿਆਰ। ਮੈਚ ਹੋਣ ਤੇ ਆਪ ਪੰਚ ਹੋਵੇਗਾ।</string>
+    <string name="language">ਭਾਸ਼ਾ</string>
+    <string name="secure_footer">ਸੁਰੱਖਿਅਤ • GPS • ਚਿਹਰਾ</string>
     <string name="vpn_blocked">ਪੰਚ ਕਰਨ ਤੋਂ ਪਹਿਲਾਂ VPN ਬੰਦ ਕਰੋ।</string>
     <string name="mock_gps_blocked">ਫੇਕ GPS ਮਿਲਿਆ। Location spoofing ਐਪ ਹਟਾਓ।</string>
     <string name="punch_in_window_blocked">ਪੰਚ ਇਨ ਸਿਰਫ਼ ਸਵੇਰੇ 5:00 ਤੋਂ ਦੁਪਹਿਰ 1:00 ਵਜੇ ਤੱਕ (IST) ਕੀਤਾ ਜਾ ਸਕਦਾ ਹੈ।</string>

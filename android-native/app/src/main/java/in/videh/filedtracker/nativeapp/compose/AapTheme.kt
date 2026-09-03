@@ -1,17 +1,19 @@
 package `in`.videh.filedtracker.nativeapp.compose
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
@@ -21,10 +23,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import `in`.videh.filedtracker.nativeapp.R
 
 /** AAP brand palette — navy base, yellow call-to-action, blue accents. */
 object AapColors {
@@ -141,26 +146,19 @@ fun AapBackground(
     }
 }
 
-/** Small "AAP" brand mark used in headers. */
+/** Official AAP broom logo (drawable/aap_logo.png). Wide mark — not a square tile. */
 @Composable
 fun AapBrandMark(modifier: Modifier = Modifier, size: Int = 56) {
-    Box(
+    val width = (size * 2.35f).dp
+    val height = size.dp
+    Image(
+        painter = painterResource(id = R.drawable.aap_logo),
+        contentDescription = "Aam Aadmi Party",
         modifier = modifier
-            .size(size.dp)
-            .clip(RoundedCornerShape((size / 3).dp))
-            .background(
-                Brush.linearGradient(listOf(AapColors.Yellow, AapColors.YellowDim))
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = "AAP",
-            color = AapColors.Navy,
-            fontWeight = FontWeight.Black,
-            fontSize = (size / 3.6f).sp,
-            letterSpacing = 0.5.sp
-        )
-    }
+            .width(width)
+            .height(height),
+        contentScale = ContentScale.Fit
+    )
 }
 
 /** Yellow / blue / navy tri-bar used as a subtle brand accent. */

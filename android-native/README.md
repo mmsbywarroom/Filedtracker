@@ -30,12 +30,22 @@ APK: `android-native/app/build/outputs/apk/debug/app-debug.apk`
 
 ### Google Maps key
 
-The live map needs a Maps SDK for Android key. Add it to `android-native/local.properties`
-(or export `MAPS_API_KEY`) and rebuild:
+Website Maps JS keys (Application restriction = **Websites**, e.g. `https://filed.videh.co.in/*`)
+**do not work** inside the Android Maps SDK.
+
+1. Google Cloud Console → Credentials → **Create API key** (or a second key)
+2. Application restrictions → **Android apps**
+3. Add package `in.videh.filedtracker.native` + your debug/release **SHA-1**
+4. API restrictions → enable **Maps SDK for Android**
+5. Put the key in `android-native/local.properties` and rebuild:
 
 ```
 MAPS_API_KEY=AIza...
 ```
+
+Keep the existing website-restricted key for the web app. When you ship **iOS**, create a
+**separate** key with Application restrictions = **iOS apps** (bundle id) — do not reuse the
+Android or website key.
 
 Without a key everything else still works; the map screen shows a "map key not configured" message.
 
