@@ -2,6 +2,7 @@ package `in`.videh.filedtracker.nativeapp.compose
 
 import android.Manifest
 import android.location.Location
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -241,14 +242,41 @@ fun HomeScreen(
     }
 
     var pendingMode by remember { mutableStateOf<String?>(null) }
+
+    fun continueAfterLocation(mode: String?) {
+        if (mode != null) startPunch(mode)
+    }
+
+    val backgroundPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) {
+        val mode = pendingMode
+        pendingMode = null
+        continueAfterLocation(mode)
+    }
+
+    fun promptAlwaysAllowThen(mode: String?) {
+        val act = activity ?: return
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || LocationHelper.hasBackgroundLocation(act)) {
+            continueAfterLocation(mode)
+            return
+        }
+        pendingMode = mode
+        say(act.getString(R.string.allow_always_hint))
+        backgroundPermissionLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+    }
+
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { grants ->
         val granted = grants[Manifest.permission.ACCESS_FINE_LOCATION] == true
         val mode = pendingMode
-        pendingMode = null
-        if (granted && mode != null) startPunch(mode)
-        else if (!granted) say("Location permission is required to punch.", true)
+        if (!granted) {
+            pendingMode = null
+            say("Location permission is required to punch.", true)
+            return@rememberLauncherForActivityResult
+        }
+        promptAlwaysAllowThen(mode)
     }
 
     fun requestPunch(mode: String) {
@@ -260,11 +288,15 @@ fun HomeScreen(
             )
             return
         }
-        startPunch(mode)
+        promptAlwaysAllowThen(mode)
     }
 
     LaunchedEffect(Unit) {
         activity?.let { LocationHelper.requestNotifications(it) }
+    }
+
+    LaunchedEffect(punchedIn) {
+        if (punchedIn) FieldLocationService.startExisting(context)
     }
 
     LaunchedEffect(reloadKey) {

@@ -19,10 +19,10 @@ import {
   type GpsFix,
 } from "@/lib/deviceGeo";
 import { LATEST_NATIVE_APK } from "@/lib/apkDownload";
+import { ApkDownloadLanding } from "@/components/ApkDownloadLanding";
 import { useClientNativeApp } from "@/hooks/useClientNativeApp";
 import { apiFetch } from "@/lib/clientHeaders";
 import { assertNativeSecureForPunch, isPureNativeApp, saveNativeSession } from "@/lib/pureNativeApp";
-import { isAndroidBrowser } from "@/lib/clientDevice";
 import { LangToggle, useLang } from "@/lib/i18n";
 
 const AUTO_12H_MS = 12 * 60 * 60 * 1000;
@@ -108,6 +108,7 @@ export default function DashboardPage() {
   const [punchInAllowed, setPunchInAllowed] = useState(true);
   const [punchInHint, setPunchInHint] = useState("");
   const [todayPriorClosedMs, setTodayPriorClosedMs] = useState(0);
+  const [fieldWebBlocked, setFieldWebBlocked] = useState(false);
 
   const applyPosition = useCallback((pos: GeolocationPosition, force = false) => {
     const acc = pos.coords.accuracy || 9999;
@@ -230,9 +231,11 @@ export default function DashboardPage() {
   }
 
   useEffect(() => {
-    // Field web punch closed on Android browser — force APK download landing.
-    if (!isPureNativeApp() && isAndroidBrowser()) {
-      window.location.replace("/");
+    const staff = new URLSearchParams(window.location.search).get("staff") === "1";
+    // Never location.replace("/") here — that bounced with middleware into a refresh loop.
+    if (!isPureNativeApp() && !staff) {
+      setFieldWebBlocked(true);
+      setBooting(false);
       return;
     }
     void refresh();
@@ -766,6 +769,10 @@ export default function DashboardPage() {
 
   async function logout() {
     await logoutUser();
+  }
+
+  if (fieldWebBlocked) {
+    return <ApkDownloadLanding />;
   }
 
   if (!user) {

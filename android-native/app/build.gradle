@@ -21,8 +21,8 @@ android {
         applicationId "in.videh.filedtracker.native"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 13
-        versionName "1.2.1"
+        versionCode 15
+        versionName "1.2.3"
         manifestPlaceholders = [MAPS_API_KEY: mapsApiKey]
     }
 
@@ -59,6 +59,7 @@ dependencies {
     implementation "com.google.android.material:material:$materialVersion"
     implementation "androidx.core:core-ktx:$coreKtxVersion"
     implementation "com.google.android.gms:play-services-location:$playServicesLocationVersion"
+    implementation "com.google.android.gms:play-services-auth-api-phone:18.1.0"
     implementation "com.squareup.okhttp3:okhttp:$okhttpVersion"
 
     implementation "androidx.activity:activity-compose:$activityComposeVersion"

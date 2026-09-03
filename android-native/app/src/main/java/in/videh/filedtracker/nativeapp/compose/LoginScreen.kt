@@ -44,7 +44,10 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -63,6 +66,15 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.app.Activity
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import androidx.core.content.ContextCompat
+import com.google.android.gms.auth.api.phone.SmsRetriever
+import com.google.android.gms.common.api.CommonStatusCodes
+import com.google.android.gms.common.api.Status
 import `in`.videh.filedtracker.nativeapp.ApiClient
 import `in`.videh.filedtracker.nativeapp.AppConfig
 import `in`.videh.filedtracker.nativeapp.LocaleHelper
@@ -84,6 +96,51 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("") }
     var isError by remember { mutableStateOf(false) }
+
+    val smsConsentLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode != Activity.RESULT_OK) return@rememberLauncherForActivityResult
+        val body = result.data?.getStringExtra(SmsRetriever.EXTRA_SMS_MESSAGE).orEmpty()
+        val code = Regex("\\b(\\d{6})\\b").find(body)?.groupValues?.get(1)
+        if (!code.isNullOrBlank()) otp = code
+    }
+
+    DisposableEffect(otpSent) {
+        if (!otpSent) return@DisposableEffect onDispose { }
+        SmsRetriever.getClient(context).startSmsUserConsent(null)
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context?, intent: Intent?) {
+                if (intent?.action != SmsRetriever.SMS_RETRIEVED_ACTION) return
+                val extras = intent.extras ?: return
+                val status = extras.get(SmsRetriever.EXTRA_STATUS) as? Status ?: return
+                if (status.statusCode != CommonStatusCodes.SUCCESS) return
+                @Suppress("DEPRECATION")
+                val consent = extras.getParcelable<Intent>(SmsRetriever.EXTRA_CONSENT_INTENT)
+                if (consent != null) {
+                    try {
+                        smsConsentLauncher.launch(consent)
+                    } catch (_: Exception) {
+                    }
+                }
+            }
+        }
+        val filter = IntentFilter(SmsRetriever.SMS_RETRIEVED_ACTION)
+        ContextCompat.registerReceiver(
+            context,
+            receiver,
+            filter,
+            SmsRetriever.SEND_PERMISSION,
+            null,
+            ContextCompat.RECEIVER_EXPORTED
+        )
+        onDispose {
+            try {
+                context.unregisterReceiver(receiver)
+            } catch (_: Exception) {
+            }
+        }
+    }
 
     val glow = rememberInfiniteTransition(label = "glow")
     val glowScale by glow.animateFloat(
@@ -202,7 +259,7 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
                                 singleLine = true,
                                 label = { Text(stringResource(R.string.otp_label)) },
                                 leadingIcon = { Icon(Icons.Filled.LockOpen, null, tint = AapColors.Yellow) },
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 shape = RoundedCornerShape(16.dp),
                                 colors = aapFieldColors()
                             )
@@ -227,7 +284,7 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
                                     try {
                                         withContext(Dispatchers.IO) { ApiClient.requestOtp(phone) }
                                         otpSent = true
-                                        message = "OTP sent to +91 $phone"
+                                        message = context.getString(R.string.otp_sms_hint)
                                     } catch (e: Exception) {
                                         isError = true
                                         message = errorText(e, "Could not send OTP")

@@ -47,6 +47,8 @@ import `in`.videh.filedtracker.nativeapp.ApiClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+private val PUNJAB_CENTER = LatLng(30.7333, 76.7794)
+
 private data class RouteData(
     val points: List<LatLng>,
     val start: LatLng?,
@@ -65,6 +67,10 @@ fun MapScreen(onBack: () -> Unit) {
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf("") }
 
+    val cameraPositionState = rememberCameraPositionState {
+        position = CameraPosition.fromLatLngZoom(PUNJAB_CENTER, 11f)
+    }
+
     LaunchedEffect(Unit) {
         try {
             val att = withContext(Dispatchers.IO) { ApiClient(context).getAttendance() }
@@ -73,11 +79,12 @@ fun MapScreen(onBack: () -> Unit) {
             if (session == null) {
                 route = null
             } else {
-                val pts = session.optJSONArray("points")?.objects().orEmpty().mapNotNull { p ->
+                val raw = session.optJSONArray("points")?.objects().orEmpty().mapNotNull { p ->
                     val lat = p.doubleOrNull("lat")
                     val lng = p.doubleOrNull("lng")
                     if (lat != null && lng != null) LatLng(lat, lng) else null
                 }
+                val pts = downsampleRoute(raw, 120)
                 val startLat = session.doubleOrNull("punchInLat")
                 val startLng = session.doubleOrNull("punchInLng")
                 val endLat = session.doubleOrNull("punchOutLat")
@@ -99,12 +106,35 @@ fun MapScreen(onBack: () -> Unit) {
         }
     }
 
+    val data = route
+    LaunchedEffect(data) {
+        val all = buildList {
+            data?.points?.let { addAll(it) }
+            data?.start?.let { add(it) }
+            data?.end?.let { add(it) }
+        }
+        if (all.isEmpty()) return@LaunchedEffect
+        try {
+            if (all.size == 1) {
+                cameraPositionState.animate(CameraUpdateFactory.newLatLngZoom(all.first(), 15f))
+            } else {
+                val b = LatLngBounds.builder()
+                all.forEach { b.include(it) }
+                cameraPositionState.animate(CameraUpdateFactory.newLatLngBounds(b.build(), 90))
+            }
+        } catch (_: Exception) {
+            cameraPositionState.move(
+                CameraUpdateFactory.newLatLngZoom(all.first(), 14f)
+            )
+        }
+    }
+
     AapScreenScaffold(
         title = "Live map",
-        subtitle = route?.let {
+        subtitle = data?.let {
             if (it.live) "Current session · ${prettyDistance(it.distanceMeters)}"
             else "Last session · ${prettyDate(it.punchInAt)}"
-        } ?: "Your field route",
+        } ?: if (loading) "Opening map…" else "Your field route",
         onBack = onBack
     ) {
         Column(
@@ -114,8 +144,6 @@ fun MapScreen(onBack: () -> Unit) {
                 .padding(horizontal = 20.dp, vertical = 4.dp)
         ) {
             when {
-                loading -> CenterBox { CircularProgressIndicator(color = AapColors.Yellow) }
-
                 apiKey.isBlank() -> InfoCard(
                     title = "Map key not configured",
                     body = "This build has no Google Maps key. Add MAPS_API_KEY=<your key> to " +
@@ -123,20 +151,9 @@ fun MapScreen(onBack: () -> Unit) {
                         "Punch in / out and tracking keep working without it."
                 )
 
-                error.isNotBlank() -> InfoCard(title = "Could not load map", body = error)
-
-                route == null || (route!!.points.isEmpty() && route!!.start == null) -> InfoCard(
-                    title = "No route yet",
-                    body = "Punch in and your movement for the day will be drawn here automatically."
-                )
+                error.isNotBlank() && data == null -> InfoCard(title = "Could not load map", body = error)
 
                 else -> {
-                    val data = route!!
-                    val anchor = data.start ?: data.points.first()
-                    val cameraPositionState = rememberCameraPositionState {
-                        position = CameraPosition.fromLatLngZoom(anchor, 15f)
-                    }
-
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -144,43 +161,55 @@ fun MapScreen(onBack: () -> Unit) {
                             .clip(RoundedCornerShape(24.dp)),
                         color = AapColors.NavyCard
                     ) {
-                        GoogleMap(
-                            modifier = Modifier.fillMaxSize(),
-                            cameraPositionState = cameraPositionState,
-                            properties = MapProperties(mapType = MapType.NORMAL),
-                            uiSettings = MapUiSettings(zoomControlsEnabled = false, mapToolbarEnabled = false),
-                            onMapLoaded = {
-                                val all = buildList {
-                                    addAll(data.points)
-                                    data.start?.let { add(it) }
-                                    data.end?.let { add(it) }
-                                }
-                                if (all.size > 1) {
-                                    try {
-                                        val b = LatLngBounds.builder()
-                                        all.forEach { b.include(it) }
-                                        cameraPositionState.move(
-                                            CameraUpdateFactory.newLatLngBounds(b.build(), 90)
-                                        )
-                                    } catch (ignored: Exception) {
-                                    }
-                                }
-                            }
-                        ) {
-                            if (data.points.size > 1) {
-                                Polyline(
-                                    points = data.points,
-                                    color = AapColors.Blue,
-                                    width = 12f
+                        Box(Modifier.fillMaxSize()) {
+                            GoogleMap(
+                                modifier = Modifier.fillMaxSize(),
+                                cameraPositionState = cameraPositionState,
+                                properties = MapProperties(mapType = MapType.NORMAL, isMyLocationEnabled = false),
+                                uiSettings = MapUiSettings(
+                                    zoomControlsEnabled = true,
+                                    mapToolbarEnabled = false,
+                                    myLocationButtonEnabled = false
                                 )
+                            ) {
+                                if (data != null && data.points.size > 1) {
+                                    Polyline(
+                                        points = data.points,
+                                        color = AapColors.Blue,
+                                        width = 12f
+                                    )
+                                }
+                                data?.start?.let {
+                                    Marker(state = MarkerState(position = it), title = "Punch in")
+                                }
+                                data?.end?.let {
+                                    Marker(
+                                        state = MarkerState(position = it),
+                                        title = if (data.live) "Latest position" else "Punch out"
+                                    )
+                                }
                             }
-                            data.start?.let {
-                                Marker(state = MarkerState(position = it), title = "Punch in")
+                            if (loading) {
+                                Box(
+                                    Modifier
+                                        .align(Alignment.TopCenter)
+                                        .padding(12.dp)
+                                ) {
+                                    CircularProgressIndicator(
+                                        Modifier.size(28.dp),
+                                        color = AapColors.Yellow,
+                                        strokeWidth = 3.dp
+                                    )
+                                }
                             }
-                            data.end?.let {
-                                Marker(
-                                    state = MarkerState(position = it),
-                                    title = if (data.live) "Latest position" else "Punch out"
+                            if (!loading && data == null) {
+                                Text(
+                                    "Punch in and your route will appear here.",
+                                    modifier = Modifier
+                                        .align(Alignment.BottomCenter)
+                                        .padding(16.dp),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = AapColors.TextPrimary
                                 )
                             }
                         }
@@ -188,15 +217,38 @@ fun MapScreen(onBack: () -> Unit) {
 
                     Spacer(Modifier.height(14.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                        MapStat("Distance", prettyDistance(data.distanceMeters), Modifier.weight(1f))
-                        MapStat("Track points", data.points.size.toString(), Modifier.weight(1f))
-                        MapStat("Status", if (data.live) "Live" else "Closed", Modifier.weight(1f))
+                        MapStat("Distance", prettyDistance(data?.distanceMeters ?: 0.0), Modifier.weight(1f))
+                        MapStat("Track points", (data?.points?.size ?: 0).toString(), Modifier.weight(1f))
+                        MapStat(
+                            "Status",
+                            when {
+                                loading -> "…"
+                                data?.live == true -> "Live"
+                                data != null -> "Closed"
+                                else -> "—"
+                            },
+                            Modifier.weight(1f)
+                        )
                     }
                     Spacer(Modifier.height(18.dp))
                 }
             }
         }
     }
+}
+
+/** Keep the line readable and Maps fast on long field days. */
+private fun downsampleRoute(points: List<LatLng>, maxPoints: Int): List<LatLng> {
+    if (points.size <= maxPoints) return points
+    val step = (points.size - 1).toFloat() / (maxPoints - 1).toFloat()
+    val out = ArrayList<LatLng>(maxPoints)
+    var i = 0
+    while (i < maxPoints) {
+        out.add(points[minOf(points.lastIndex, (i * step).toInt())])
+        i++
+    }
+    if (out.last() != points.last()) out[out.lastIndex] = points.last()
+    return out
 }
 
 @Composable

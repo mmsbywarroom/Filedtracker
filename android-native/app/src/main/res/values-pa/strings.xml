@@ -42,4 +42,6 @@
     <string name="vpn_blocked">ਪੰਚ ਕਰਨ ਤੋਂ ਪਹਿਲਾਂ VPN ਬੰਦ ਕਰੋ।</string>
     <string name="mock_gps_blocked">ਫੇਕ GPS ਮਿਲਿਆ। Location spoofing ਐਪ ਹਟਾਓ।</string>
     <string name="punch_in_window_blocked">ਪੰਚ ਇਨ ਸਿਰਫ਼ ਸਵੇਰੇ 5:00 ਤੋਂ ਦੁਪਹਿਰ 1:00 ਵਜੇ ਤੱਕ (IST) ਕੀਤਾ ਜਾ ਸਕਦਾ ਹੈ।</string>
+    <string name="allow_always_hint">“Allow all the time” ਚੁਣੋ, ਫਿਰ Back ਦਬਾਓ।</string>
+    <string name="otp_sms_hint">SMS ਆਉਣ ਤੇ Allow ਦਬਾਓ — OTP ਆਪ ਭਰ ਜਾਵੇਗਾ।</string>
 </resources>

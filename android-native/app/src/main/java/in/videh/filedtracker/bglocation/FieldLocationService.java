@@ -87,6 +87,16 @@ public class FieldLocationService extends Service {
     public static void start(Context ctx, String apiBase, String token, String punchInAt) {
         try {
             TrackingPrefs.saveSession(ctx, apiBase, token, punchInAt);
+            startExisting(ctx);
+        } catch (Exception e) {
+            Log.e(TAG, "FieldLocationService.start failed", e);
+        }
+    }
+
+    /** Resume the foreground service without resetting punch-in time or 30-min slots. */
+    public static void startExisting(Context ctx) {
+        try {
+            if (!TrackingPrefs.isActive(ctx)) return;
             Intent intent = new Intent(ctx, FieldLocationService.class);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 ctx.startForegroundService(intent);
@@ -94,7 +104,7 @@ public class FieldLocationService extends Service {
                 ctx.startService(intent);
             }
         } catch (Exception e) {
-            Log.e(TAG, "FieldLocationService.start failed", e);
+            Log.e(TAG, "FieldLocationService.startExisting failed", e);
         }
     }
 

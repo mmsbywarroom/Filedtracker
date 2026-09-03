@@ -43,7 +43,12 @@ public final class LocationHelper {
         );
     }
 
+    /**
+     * After "While using the app", Android 11+ opens the same Location permission screen
+     * (Allow all the time). User picks it and presses Back to return to the app.
+     */
     public static void requestBackgroundLocation(Activity activity) {
+        if (hasBackgroundLocation(activity)) return;
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
             ActivityCompat.requestPermissions(
                     activity,

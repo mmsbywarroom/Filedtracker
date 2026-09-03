@@ -50,9 +50,15 @@ export async function middleware(req: NextRequest) {
   const userTok = await userTokFrom(req);
   const adminRole = await adminRoleFrom(req);
   const { pathname } = req.nextUrl;
-  const home = userTok?.kind === "rally" ? "/rally" : "/dashboard";
+  const ua = req.headers.get("user-agent") || "";
+  const nativeWebView = ua.includes("AAPNative/");
+  const staffWeb = req.nextUrl.searchParams.get("staff") === "1";
 
   if (pathname.startsWith("/dashboard")) {
+    // Field web is APK-only. Cookie + Android used to bounce /dashboard ↔ / forever.
+    if (!nativeWebView && !staffWeb) {
+      return NextResponse.redirect(new URL("/", req.url));
+    }
     if (userTok?.role !== "user") return NextResponse.redirect(new URL("/", req.url));
     if (userTok.kind === "rally") return NextResponse.redirect(new URL("/rally", req.url));
     return NextResponse.next();
@@ -60,7 +66,7 @@ export async function middleware(req: NextRequest) {
 
   if (pathname.startsWith("/rally")) {
     if (userTok?.role !== "user") return NextResponse.redirect(new URL("/", req.url));
-    if (userTok.kind !== "rally") return NextResponse.redirect(new URL("/dashboard", req.url));
+    if (userTok.kind !== "rally") return NextResponse.redirect(new URL("/", req.url));
     return NextResponse.next();
   }
 
@@ -70,8 +76,9 @@ export async function middleware(req: NextRequest) {
   }
 
   if (pathname === "/") {
-    if (userTok?.role === "user" && !req.nextUrl.searchParams.has("relogin")) {
-      return NextResponse.redirect(new URL(home, req.url));
+    // Rally users still go to the rally app. Field cookies stay on APK download.
+    if (userTok?.role === "user" && userTok.kind === "rally" && !req.nextUrl.searchParams.has("relogin")) {
+      return NextResponse.redirect(new URL("/rally", req.url));
     }
     return NextResponse.next();
   }

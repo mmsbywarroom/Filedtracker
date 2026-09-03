@@ -11,6 +11,7 @@
     <uses-permission android:name="android.permission.CAMERA" />
 
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- Sideloaded APK: needed so we can reliably see VPN / fake-GPS packages on Android 11+ -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
 
@@ -84,5 +85,14 @@
             android:name="in.videh.filedtracker.bglocation.FieldLocationService"
             android:exported="false"
             android:foregroundServiceType="location" />
+
+        <receiver
+            android:name="in.videh.filedtracker.bglocation.BootCompletedReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>
