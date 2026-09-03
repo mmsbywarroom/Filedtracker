@@ -5,18 +5,15 @@ import android.os.Bundle;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import in.videh.filedtracker.nativeapp.compose.ComposeMainActivity;
+
 public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         LocaleHelper.apply(this);
         super.onCreate(savedInstanceState);
-        if (SessionStore.isLoggedIn(this)) {
-            startActivity(new Intent(this, WebShellActivity.class)
-                    .putExtra(WebShellActivity.EXTRA_PATH, "/dashboard"));
-        } else {
-            startActivity(new Intent(this, WebShellActivity.class)
-                    .putExtra(WebShellActivity.EXTRA_PATH, "/"));
-        }
+        // Jetpack Compose owns login, dashboard, map, leave and footprints — no WebView.
+        startActivity(new Intent(this, ComposeMainActivity.class));
         finish();
     }
 }

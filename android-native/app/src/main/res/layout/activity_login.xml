@@ -2,21 +2,33 @@
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#F5F0E1"
+    android:background="#0A1628"
     android:fillViewport="true">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="24dp">
+        android:padding="28dp">
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginTop="36dp"
+            android:letterSpacing="0.18"
+            android:text="AAM AADMI PARTY"
+            android:textAllCaps="true"
+            android:textColor="#FFD100"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
             android:text="@string/login_title"
-            android:textColor="#0A1628"
-            android:textSize="22sp"
+            android:textColor="#FFFFFF"
+            android:textSize="28sp"
             android:textStyle="bold" />
 
         <TextView
@@ -24,62 +36,77 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:text="@string/login_hint"
-            android:textColor="#667788"
+            android:textColor="#A8B8D0"
             android:textSize="14sp" />
 
-        <com.google.android.material.textfield.TextInputLayout
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="24dp">
+            android:layout_marginTop="32dp"
+            android:background="@drawable/bg_native_card"
+            android:orientation="vertical"
+            android:padding="20dp">
 
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/phoneInput"
+            <com.google.android.material.textfield.TextInputLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:hint="Mobile number"
-                android:inputType="phone"
-                android:maxLength="10" />
-        </com.google.android.material.textfield.TextInputLayout>
+                android:textColorHint="#667788">
 
-        <Button
-            android:id="@+id/sendOtpBtn"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:backgroundTint="#0D9488"
-            android:text="@string/send_otp" />
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/phoneInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="phone"
+                    android:maxLength="10"
+                    android:textColor="#0A1628" />
+            </com.google.android.material.textfield.TextInputLayout>
 
-        <com.google.android.material.textfield.TextInputLayout
-            android:id="@+id/otpLayout"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:visibility="gone">
+            <Button
+                android:id="@+id/sendOtpBtn"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:layout_marginTop="16dp"
+                android:backgroundTint="#FFD100"
+                android:text="@string/send_otp"
+                android:textColor="#0A1628"
+                android:textStyle="bold" />
 
-            <com.google.android.material.textfield.TextInputEditText
-                android:id="@+id/otpInput"
+            <com.google.android.material.textfield.TextInputLayout
+                android:id="@+id/otpLayout"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
                 android:hint="6-digit OTP"
-                android:inputType="number"
-                android:maxLength="6" />
-        </com.google.android.material.textfield.TextInputLayout>
+                android:visibility="gone">
 
-        <Button
-            android:id="@+id/verifyBtn"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:backgroundTint="#0A1628"
-            android:text="@string/verify_otp"
-            android:visibility="gone" />
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/otpInput"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:inputType="number"
+                    android:maxLength="6"
+                    android:textColor="#0A1628" />
+            </com.google.android.material.textfield.TextInputLayout>
 
-        <TextView
-            android:id="@+id/statusText"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:textColor="#B45309"
-            android:textSize="13sp" />
+            <Button
+                android:id="@+id/verifyBtn"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:layout_marginTop="12dp"
+                android:backgroundTint="#1A56C4"
+                android:text="@string/verify_otp"
+                android:textColor="#FFFFFF"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/statusText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:textColor="#B45309"
+                android:textSize="13sp" />
+        </LinearLayout>
     </LinearLayout>
 </ScrollView>

@@ -22,6 +22,7 @@ import { LATEST_NATIVE_APK } from "@/lib/apkDownload";
 import { useClientNativeApp } from "@/hooks/useClientNativeApp";
 import { apiFetch } from "@/lib/clientHeaders";
 import { assertNativeSecureForPunch, isPureNativeApp, saveNativeSession } from "@/lib/pureNativeApp";
+import { isAndroidBrowser } from "@/lib/clientDevice";
 import { LangToggle, useLang } from "@/lib/i18n";
 
 const AUTO_12H_MS = 12 * 60 * 60 * 1000;
@@ -229,6 +230,11 @@ export default function DashboardPage() {
   }
 
   useEffect(() => {
+    // Field web punch closed on Android browser — force APK download landing.
+    if (!isPureNativeApp() && isAndroidBrowser()) {
+      window.location.replace("/");
+      return;
+    }
     void refresh();
     // Load face models in the background — never block dashboard open
     void import("@/lib/face")

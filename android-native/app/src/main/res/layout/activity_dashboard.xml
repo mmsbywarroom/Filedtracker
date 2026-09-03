@@ -2,7 +2,7 @@
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#F5F0E1"
+    android:background="#0A1628"
     android:fillViewport="true">
 
     <LinearLayout
@@ -14,9 +14,9 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="@android:color/white"
+            android:background="@drawable/bg_native_card"
             android:orientation="vertical"
-            android:padding="16dp">
+            android:padding="18dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -34,7 +34,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:textColor="#0A1628"
-                        android:textSize="20sp"
+                        android:textSize="22sp"
                         android:textStyle="bold" />
 
                     <TextView
@@ -52,7 +52,7 @@
                     android:layout_height="wrap_content"
                     android:padding="8dp"
                     android:text="EN"
-                    android:textColor="#0D9488"
+                    android:textColor="#1A56C4"
                     android:textStyle="bold" />
 
                 <TextView
@@ -69,9 +69,9 @@
             android:id="@+id/sessionStatus"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:textColor="#0D9488"
-            android:textSize="14sp"
+            android:layout_marginTop="18dp"
+            android:textColor="#FFD100"
+            android:textSize="15sp"
             android:textStyle="bold" />
 
         <TextView
@@ -79,34 +79,39 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"
-            android:textColor="#667788"
+            android:textColor="#A8B8D0"
             android:textSize="12sp" />
 
         <Button
             android:id="@+id/registerFaceBtn"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:backgroundTint="#0A1628"
+            android:layout_height="56dp"
+            android:layout_marginTop="18dp"
+            android:backgroundTint="#1A56C4"
             android:text="@string/register_face"
+            android:textColor="#FFFFFF"
             android:visibility="gone" />
 
         <Button
             android:id="@+id/punchInBtn"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="56dp"
             android:layout_marginTop="16dp"
-            android:backgroundTint="#0D9488"
+            android:backgroundTint="#FFD100"
             android:text="@string/punch_in"
+            android:textColor="#0A1628"
+            android:textStyle="bold"
             android:visibility="gone" />
 
         <Button
             android:id="@+id/punchOutBtn"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="56dp"
             android:layout_marginTop="16dp"
-            android:backgroundTint="#0A1628"
+            android:backgroundTint="#1A56C4"
             android:text="@string/punch_out"
+            android:textColor="#FFFFFF"
+            android:textStyle="bold"
             android:visibility="gone" />
 
         <TextView
@@ -114,14 +119,14 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="12dp"
-            android:textColor="#B45309"
+            android:textColor="#FBBF24"
             android:textSize="13sp" />
 
         <Button
             android:id="@+id/mapBtn"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_height="48dp"
+            android:layout_marginTop="20dp"
             android:backgroundTint="#FFFFFF"
             android:text="@string/live_map"
             android:textColor="#0A1628" />
@@ -129,7 +134,7 @@
         <Button
             android:id="@+id/footprintsBtn"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="48dp"
             android:layout_marginTop="8dp"
             android:backgroundTint="#FFFFFF"
             android:text="@string/footprints"
@@ -138,7 +143,7 @@
         <Button
             android:id="@+id/leaveBtn"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="48dp"
             android:layout_marginTop="8dp"
             android:backgroundTint="#FFFFFF"
             android:text="@string/leave_request"

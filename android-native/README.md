@@ -1,6 +1,6 @@
 # AAP Attendance — Native Android App
 
-Pure **native Android** app (Java) for field workers. Uses the **same server and database** as the web app.
+Pure **native Android** app (Java helpers + **Jetpack Compose** UI) for field workers. Uses the **same server and database** as the web app.
 
 | App | Package | Folder |
 |-----|---------|--------|
@@ -11,9 +11,10 @@ Pure **native Android** app (Java) for field workers. Uses the **same server and
 
 ## Features
 
-- OTP login (same web login page in WebView)
-- **Same dashboard UI as web** — full `/dashboard` in WebView
-- Inline map, face capture, footprints, leave
+- **Compose UI, no WebView** for login, home, live map, leave and footprints
+- OTP login, punch in / out, profile + status header
+- Google Map route (maps-compose), leave requests, session footprints
+- CameraX + ML Kit face check screen
 - Background GPS foreground service (`FieldLocationService`)
 - 30-min interval snapshots + route tracking
 - VPN / fake GPS / spoof-app detection + admin logs
@@ -26,6 +27,17 @@ cd android-native
 ```
 
 APK: `android-native/app/build/outputs/apk/debug/app-debug.apk`
+
+### Google Maps key
+
+The live map needs a Maps SDK for Android key. Add it to `android-native/local.properties`
+(or export `MAPS_API_KEY`) and rebuild:
+
+```
+MAPS_API_KEY=AIza...
+```
+
+Without a key everything else still works; the map screen shows a "map key not configured" message.
 
 Also copied to `public/aap-attendance-native.apk` for download from the server.
 
@@ -49,8 +61,13 @@ NEXT_PUBLIC_APP_URL=https://filed.videh.co.in
 ```
 android-native/
   app/src/main/java/in/videh/filedtracker/
-    nativeapp/     Login, WebShell, NativeAppBridge, API client
-    bglocation/    FieldLocationService
+    nativeapp/          ApiClient, SessionStore, SecurityHelper, LocationHelper, AppConfig
+    nativeapp/compose/  ComposeMainActivity (NavHost) + Login/Home/Map/Leave/Footprints/Face screens
+    bglocation/         FieldLocationService
 ```
+
+`MainActivity` is the launcher entry point and immediately hands off to `ComposeMainActivity`.
+`FaceCaptureActivity` is still used for the face descriptor the server matches against; the legacy
+XML `LoginActivity` / `DashboardActivity` and `WebShellActivity` are no longer on the launcher path.
 
 API base URL: `AppConfig.API_BASE` (default: `https://filed.videh.co.in`).

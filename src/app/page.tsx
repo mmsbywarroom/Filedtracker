@@ -1,17 +1,40 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
+import { ApkDownloadLanding } from "@/components/ApkDownloadLanding";
 import { BrandMark } from "@/components/BrandMark";
 import { LangToggle, useLang } from "@/lib/i18n";
+import { isAndroidBrowser } from "@/lib/clientDevice";
 import { isPureNativeApp, saveNativeSession } from "@/lib/pureNativeApp";
 
+/**
+ * - Pure native WebView: OTP login (app shell still loads web UI until Compose ships)
+ * - Android Chrome / browser: APK download only (no web punch)
+ * - Desktop / iOS browser: APK / TestFlight landing (no field web punch)
+ */
 export default function HomePage() {
   const { t } = useLang();
+  const [mode, setMode] = useState<"loading" | "native-login" | "download">("loading");
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
   const [step, setStep] = useState<"phone" | "otp">("phone");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (isPureNativeApp()) {
+      setMode("native-login");
+      return;
+    }
+    // All browsers (Android + others): download landing — field web punch closed.
+    // Keep a tiny escape for ?staff=1 desktop testing if needed.
+    const staff = new URLSearchParams(window.location.search).get("staff") === "1";
+    if (staff && !isAndroidBrowser()) {
+      setMode("native-login");
+      return;
+    }
+    setMode("download");
+  }, []);
 
   async function requestOtp(e: FormEvent) {
     e.preventDefault();
@@ -56,6 +79,18 @@ export default function HomePage() {
     window.location.href = data.kind === "rally" ? "/rally" : "/dashboard";
   }
 
+  if (mode === "loading") {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-ink text-white/50">
+        <BrandMark size={64} tone="onDark" />
+      </main>
+    );
+  }
+
+  if (mode === "download") {
+    return <ApkDownloadLanding />;
+  }
+
   return (
     <main className="native-safe-bottom flex min-h-screen flex-col bg-sand">
       <header className="app-header-safe bg-ink text-white">
@@ -91,13 +126,18 @@ export default function HomePage() {
                 className="w-full rounded-2xl border border-navy/10 bg-sand/50 px-4 py-3 text-base outline-none focus:border-teal"
               />
               {error && <p className="text-sm text-red-600">{error}</p>}
-              <button disabled={busy || phone.length !== 10} className="w-full rounded-2xl bg-teal py-3 font-semibold text-white disabled:opacity-40">
+              <button
+                disabled={busy || phone.length !== 10}
+                className="w-full rounded-2xl bg-teal py-3 font-semibold text-white disabled:opacity-40"
+              >
                 {busy ? t("sending") : t("sendOtp")}
               </button>
             </form>
           ) : (
             <form onSubmit={verify} className="mt-6 space-y-4">
-              <p className="text-sm text-navy/60">{t("otpSent")} {phone}</p>
+              <p className="text-sm text-navy/60">
+                {t("otpSent")} {phone}
+              </p>
               <input
                 inputMode="numeric"
                 maxLength={6}
@@ -107,7 +147,10 @@ export default function HomePage() {
                 className="w-full rounded-2xl border border-navy/10 bg-sand/50 px-4 py-3 text-center text-2xl tracking-[0.6em] outline-none focus:border-teal"
               />
               {error && <p className="text-sm text-red-600">{error}</p>}
-              <button disabled={busy || otp.length !== 6} className="w-full rounded-2xl bg-teal py-3 font-semibold text-white disabled:opacity-40">
+              <button
+                disabled={busy || otp.length !== 6}
+                className="w-full rounded-2xl bg-teal py-3 font-semibold text-white disabled:opacity-40"
+              >
                 {busy ? t("verifying") : t("verify")}
               </button>
               <button type="button" onClick={() => setStep("phone")} className="w-full text-sm text-navy/60">

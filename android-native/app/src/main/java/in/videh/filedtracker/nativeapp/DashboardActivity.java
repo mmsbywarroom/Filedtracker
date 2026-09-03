@@ -133,7 +133,7 @@ public class DashboardActivity extends AppCompatActivity {
         scanSecurityOnDashboard();
 
         registerFaceBtn.setVisibility(faceRegistered ? View.GONE : View.VISIBLE);
-        boolean punchInAllowed = PunchInWindow.isAllowedForPhone(SessionStore.phone(this));
+        // Server enforces punch window + re-entry; show button when face ready and not already in.
         if (open != null) {
             sessionStatus.setText(R.string.punched_in);
             punchInBtn.setVisibility(View.GONE);
@@ -141,13 +141,9 @@ public class DashboardActivity extends AppCompatActivity {
             gpsText.setText("Background GPS active — allow Always location for 30-min tracking.");
         } else {
             sessionStatus.setText(R.string.not_punched_in);
-            punchInBtn.setVisibility(faceRegistered && punchInAllowed ? View.VISIBLE : View.GONE);
+            punchInBtn.setVisibility(faceRegistered ? View.VISIBLE : View.GONE);
             punchOutBtn.setVisibility(View.GONE);
-            if (faceRegistered && !punchInAllowed) {
-                gpsText.setText(R.string.punch_in_window_blocked);
-            } else {
-                gpsText.setText("");
-            }
+            gpsText.setText("");
         }
     }
 
@@ -163,21 +159,7 @@ public class DashboardActivity extends AppCompatActivity {
     }
 
     private void ensureLocationThenFace(String mode) {
-        if (MODE_PUNCH_IN.equals(mode) && !PunchInWindow.isAllowedForPhone(SessionStore.phone(this))) {
-            messageText.setText(R.string.punch_in_window_blocked);
-            return;
-        }
-        if (SecurityHelper.isVpnActive(this)) {
-            SecurityReporter.report(this, "vpn", "blocked", "VPN active on device", null, null);
-            messageText.setText(R.string.vpn_blocked);
-            return;
-        }
-        if (SecurityHelper.hasKnownMockGpsApp(this)) {
-            String pkg = SecurityHelper.findMockGpsAppPackage(this);
-            SecurityReporter.report(this, "spoof_app", "blocked", pkg != null ? pkg : "spoof app", null, null);
-            messageText.setText(R.string.mock_gps_blocked);
-            return;
-        }
+        // Report VPN / spoof evidence — do not block punch (server + Attendance FLAG handle abuse).
         if (!LocationHelper.hasFineLocation(this)) {
             LocationHelper.requestLocationPermissions(this);
             pendingMode = mode;
@@ -194,7 +176,12 @@ public class DashboardActivity extends AppCompatActivity {
                     messageText.setText(e.getMessage());
                     return;
                 }
-                gpsText.setText(String.format("GPS: %.6f, %.6f (±%.0fm)", loc.getLatitude(), loc.getLongitude(), loc.getAccuracy()));
+                gpsText.setText(String.format(
+                        "GPS: %.6f, %.6f (±%.0fm)",
+                        loc.getLatitude(),
+                        loc.getLongitude(),
+                        loc.getAccuracy()
+                ));
                 openFace(mode);
             }
 

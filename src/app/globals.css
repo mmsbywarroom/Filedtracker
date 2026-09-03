@@ -259,3 +259,141 @@ button {
 .admin-actions {
   @apply flex flex-wrap items-center justify-end gap-1.5;
 }
+
+/* ─── APK download landing ─────────────────────────────────────── */
+.apk-landing {
+  background:
+    radial-gradient(ellipse 80% 50% at 20% -10%, rgba(26, 86, 196, 0.35), transparent 55%),
+    radial-gradient(ellipse 60% 40% at 90% 20%, rgba(255, 209, 0, 0.12), transparent 50%),
+    linear-gradient(165deg, #0A1628 0%, #12305A 48%, #0A1628 100%);
+}
+
+.apk-landing__glow {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(80px);
+  pointer-events: none;
+}
+
+.apk-landing__glow--a {
+  top: 10%;
+  left: -10%;
+  width: 55vw;
+  height: 55vw;
+  max-width: 480px;
+  max-height: 480px;
+  background: rgba(26, 86, 196, 0.28);
+  animation: apk-pulse 8s ease-in-out infinite;
+}
+
+.apk-landing__glow--b {
+  bottom: 5%;
+  right: -5%;
+  width: 40vw;
+  height: 40vw;
+  max-width: 360px;
+  max-height: 360px;
+  background: rgba(255, 209, 0, 0.1);
+  animation: apk-pulse 10s ease-in-out infinite reverse;
+}
+
+.apk-landing__grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black, transparent);
+  pointer-events: none;
+}
+
+@keyframes apk-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.85;
+  }
+  50% {
+    transform: scale(1.12);
+    opacity: 1;
+  }
+}
+
+@keyframes apk-rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes apk-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-12px);
+  }
+}
+
+@keyframes apk-shine {
+  0% {
+    transform: translateX(-120%) skewX(-12deg);
+  }
+  100% {
+    transform: translateX(220%) skewX(-12deg);
+  }
+}
+
+.apk-anim-in {
+  animation: apk-rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.apk-anim-delay-1 {
+  animation-delay: 0.08s;
+}
+.apk-anim-delay-2 {
+  animation-delay: 0.16s;
+}
+.apk-anim-delay-3 {
+  animation-delay: 0.24s;
+}
+.apk-anim-delay-4 {
+  animation-delay: 0.32s;
+}
+.apk-anim-delay-5 {
+  animation-delay: 0.4s;
+}
+
+.apk-float {
+  animation: apk-float 6s ease-in-out infinite;
+}
+
+.apk-cta {
+  position: relative;
+  overflow: hidden;
+  animation: apk-cta-glow 2.4s ease-in-out infinite;
+}
+
+.apk-cta__shine {
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+  animation: apk-shine 2.8s ease-in-out infinite;
+}
+
+@keyframes apk-cta-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 209, 0, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 28px 4px rgba(255, 209, 0, 0.28);
+  }
+}

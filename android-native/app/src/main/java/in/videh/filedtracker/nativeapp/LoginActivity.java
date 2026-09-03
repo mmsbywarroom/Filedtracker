@@ -76,8 +76,7 @@ public class LoginActivity extends AppCompatActivity {
                     if (token.isEmpty()) throw new ApiClient.ApiError(401, "No session token returned.");
                     SessionStore.save(LoginActivity.this, token, apiBase, pendingPhone, "");
                     runOnUiThread(() -> {
-                        startActivity(new Intent(this, WebShellActivity.class)
-                                .putExtra(WebShellActivity.EXTRA_PATH, "/dashboard"));
+                        startActivity(new Intent(this, DashboardActivity.class));
                         finish();
                     });
                 } catch (Exception e) {

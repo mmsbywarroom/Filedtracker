@@ -181,6 +181,51 @@ public final class ApiClient {
         }
     }
 
+    /** GET /api/leave → { leaves: [...] } */
+    public JSONObject getLeave() throws IOException, ApiError {
+        Request req = authReq("/api/leave").get().build();
+        try (Response res = http.newCall(req).execute()) {
+            return readJson(res);
+        } catch (ApiError e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IOException(e);
+        }
+    }
+
+    /** POST /api/leave with yyyy-MM-dd dates → { leave, ok } */
+    public JSONObject createLeave(String fromDate, String toDate, String reason)
+            throws IOException, ApiError {
+        JSONObject body = new JSONObject();
+        try {
+            body.put("fromDate", fromDate);
+            body.put("toDate", toDate);
+            body.put("reason", reason);
+        } catch (Exception e) {
+            throw new IOException(e);
+        }
+        Request req = authReq("/api/leave").post(RequestBody.create(body.toString(), JSON)).build();
+        try (Response res = http.newCall(req).execute()) {
+            return readJson(res);
+        } catch (ApiError e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IOException(e);
+        }
+    }
+
+    /** GET /api/attendance/history → { records: [...] } */
+    public JSONObject getHistory() throws IOException, ApiError {
+        Request req = authReq("/api/attendance/history").get().build();
+        try (Response res = http.newCall(req).execute()) {
+            return readJson(res);
+        } catch (ApiError e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IOException(e);
+        }
+    }
+
     public JSONObject registerFace(JSONArray descriptor, JSONArray samples, String image, boolean turban)
             throws IOException, ApiError {
         JSONObject body = new JSONObject();
@@ -193,6 +238,24 @@ public final class ApiClient {
             throw new IOException(e);
         }
         Request req = authReq("/api/face/register").post(RequestBody.create(body.toString(), JSON)).build();
+        try (Response res = http.newCall(req).execute()) {
+            return readJson(res);
+        } catch (ApiError e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IOException(e);
+        }
+    }
+
+    /** POST /api/face/describe — server extracts face-api 128-d from JPEG (no WebView). */
+    public JSONObject describeFace(String imageDataUrl) throws IOException, ApiError {
+        JSONObject body = new JSONObject();
+        try {
+            body.put("image", imageDataUrl);
+        } catch (Exception e) {
+            throw new IOException(e);
+        }
+        Request req = authReq("/api/face/describe").post(RequestBody.create(body.toString(), JSON)).build();
         try (Response res = http.newCall(req).execute()) {
             return readJson(res);
         } catch (ApiError e) {
