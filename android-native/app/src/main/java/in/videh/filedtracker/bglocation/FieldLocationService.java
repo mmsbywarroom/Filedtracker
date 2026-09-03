@@ -39,12 +39,14 @@ public class FieldLocationService extends Service {
     private static final long TRACK_MS = 15_000L;
     private static final long HEARTBEAT_MS = 120_000L;
     private static final long LOC_INTERVAL_MS = 20_000L;
+    private static final long HOURLY_SECURITY_MS = 60 * 60 * 1000L;
 
     private Handler handler;
     private FusedLocationProviderClient fused;
     private LocationCallback locationCallback;
     private volatile Location lastLoc;
     private long lastHeartbeatAt = 0L;
+    private long lastHourlySecurityAt = 0L;
     private int gpsFailStreak = 0;
     private PowerManager.WakeLock wakeLock;
     private final JSONArray mapProbes = new JSONArray();
@@ -207,10 +209,6 @@ public class FieldLocationService extends Service {
         String token = TrackingPrefs.token(this);
         if (apiBase == null || token == null || token.isEmpty()) return;
 
-        if (SecurityHelper.isVpnActive(this)) {
-            SecurityReporter.report(this, "vpn", "detected", "VPN active during background GPS", null, null);
-            // Still record GPS — do not stop tracking
-        }
         if (SecurityHelper.isGpsDisabled(this)) {
             gpsFailStreak++;
             if (gpsFailStreak >= 5) {
@@ -227,11 +225,15 @@ public class FieldLocationService extends Service {
             }
             gpsFailStreak = 0;
             if (SecurityHelper.isMockLocation(loc)) {
+                String spoof = SecurityHelper.findMockGpsAppPackage(this);
+                String detail = spoof != null
+                        ? "Fake GPS / spoof app: " + SecurityHelper.appDisplayName(this, spoof)
+                        : "Mock location flag on GPS fix";
                 SecurityReporter.report(
                         this,
-                        "mock_gps",
+                        spoof != null ? "spoof_app" : "mock_gps",
                         "blocked",
-                        "Mock location during background GPS",
+                        detail,
                         loc.getLatitude(),
                         loc.getLongitude()
                 );
@@ -239,6 +241,7 @@ public class FieldLocationService extends Service {
                 stop(this);
                 return;
             }
+            maybeHourlySecurityCheck(loc);
             try {
                 JSONObject probe = new JSONObject();
                 probe.put("lat", loc.getLatitude());
@@ -287,10 +290,7 @@ public class FieldLocationService extends Service {
             return;
         }
 
-        if (SecurityHelper.isVpnActive(this)) {
-            SecurityReporter.report(this, "vpn", "detected", "VPN during 30-min snapshot window", null, null);
-        }
-
+        // Hourly snapshots feed attendance FLAG only — VPN logs are a separate 1-hour security check.
         long now = System.currentTimeMillis();
         int dueSlot = IntervalScheduler.findDueSlot(
                 punchInMs,
@@ -301,11 +301,15 @@ public class FieldLocationService extends Service {
         withLocation(loc -> {
             if (loc == null) return;
             if (SecurityHelper.isMockLocation(loc)) {
+                String spoof = SecurityHelper.findMockGpsAppPackage(this);
+                String detail = spoof != null
+                        ? "Fake GPS / spoof app: " + SecurityHelper.appDisplayName(this, spoof)
+                        : "Mock location flag on GPS fix";
                 SecurityReporter.report(
                         this,
-                        "mock_gps",
+                        spoof != null ? "spoof_app" : "mock_gps",
                         "blocked",
-                        "Mock location during 30-min snapshot",
+                        detail,
                         loc.getLatitude(),
                         loc.getLongitude()
                 );
@@ -314,6 +318,7 @@ public class FieldLocationService extends Service {
                 return;
             }
             long ts = System.currentTimeMillis();
+            maybeHourlySecurityCheck(loc);
             if (ts - lastHeartbeatAt >= HEARTBEAT_MS) {
                 lastHeartbeatAt = ts;
                 TrackingApi.postHeartbeat(apiBase, token, loc.getLatitude(), loc.getLongitude());
@@ -326,6 +331,14 @@ public class FieldLocationService extends Service {
                 }
             }
         });
+    }
+
+    /** Once per hour while punched in: log VPN / fake-GPS app names for admin. */
+    private void maybeHourlySecurityCheck(Location loc) {
+        long now = System.currentTimeMillis();
+        if (now - lastHourlySecurityAt < HOURLY_SECURITY_MS) return;
+        lastHourlySecurityAt = now;
+        SecurityHelper.reportViolations(this, loc, "detected");
     }
 
     private interface LocationCallbackFn {
@@ -430,7 +443,7 @@ public class FieldLocationService extends Service {
         }
         NotificationCompat.Builder b = new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle("AAP Attendance active")
-                .setContentText("Recording route and 30-min GPS checks")
+                .setContentText("Recording route and hourly GPS checks")
                 .setSmallIcon(android.R.drawable.ic_menu_mylocation)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)

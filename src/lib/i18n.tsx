@@ -123,7 +123,7 @@ const dict = {
     rallyLive: "Rally live",
     rallySummary: "Rally summary",
     nativeBgGpsOn: "Background GPS is on",
-    nativeBgGpsOnHint: "Your location is recorded every 30 minutes, even when the screen is off or you use other apps.",
+    nativeBgGpsOnHint: "Your location is recorded every 1 hour, even when the screen is off or you use other apps.",
     nativeLocStepTitle: "Location permission (2 steps)",
     nativeLocStep1Hint:
       "On Android the first popup shows 3 options. Tap While using the app — then you can choose Allow all the time in Settings.",
@@ -134,7 +134,7 @@ const dict = {
     nativeLocRetryBtn: "After changing Settings, tap here to retry",
     nativeGpsActive: "Background GPS active — allow Always location. A notification shows while you are punched in.",
     nativeGpsBrowserHint:
-      "GPS is checked every 30 minutes — keep the app open. If the screen is off or you switch apps, checks may be missed in the browser. Install the mobile app for background GPS.",
+      "GPS is checked every 1 hour — keep the app open. If the screen is off or you switch apps, checks may be missed in the browser. Install the mobile app for background GPS.",
     pleaseWait: "Please wait…",
     refreshGps: "Refresh GPS",
     enableLocationTitle: "Step 1 — Enable location (required)",
@@ -264,7 +264,7 @@ const dict = {
     rallySummary: "ਰੈਲੀ ਸੰਖੇਪ",
     nativeBgGpsOn: "ਬੈਕਗ੍ਰਾਊਂਡ GPS ਚਾਲੂ ਹੈ",
     nativeBgGpsOnHint:
-      "ਤੁਹਾਡੀ ਥਾਂ ਹਰ 30 ਮਿੰਟ ਤੇ ਰਿਕਾਰਡ ਹੁੰਦੀ ਹੈ — ਸਕਰੀਨ ਬੰਦ ਜਾਂ ਹੋਰ ਐਪ ਵਰਤਦੇ ਸਮੇਂ ਵੀ।",
+      "ਤੁਹਾਡੀ ਥਾਂ ਹਰ 1 ਘੰਟੇ ਤੇ ਰਿਕਾਰਡ ਹੁੰਦੀ ਹੈ — ਸਕਰੀਨ ਬੰਦ ਜਾਂ ਹੋਰ ਐਪ ਵਰਤਦੇ ਸਮੇਂ ਵੀ।",
     nativeLocStepTitle: "Location permission (2 ਕਦਮ)",
     nativeLocStep1Hint:
       "Android ਤੇ ਪਹਿਲੇ popup ਵਿੱਚ 3 ਵਿਕਲਪ ਹੁੰਦੇ ਹਨ। While using the app ਚੁਣੋ — ਫਿਰ Settings ਵਿੱਚ Allow all the time ਮਿਲੇਗਾ।",
@@ -276,7 +276,7 @@ const dict = {
     nativeGpsActive:
       "ਬੈਕਗ੍ਰਾਊਂਡ GPS ਚਾਲੂ — Always location Allow ਕਰੋ। ਪੰਚ ਇਨ ਦੌਰਾਨ notification ਦਿਖੇਗੀ।",
     nativeGpsBrowserHint:
-      "GPS ਹਰ 30 ਮਿੰਟ ਤੇ ਚੈੱਕ ਹੁੰਦਾ ਹੈ — ਐਪ ਖੁੱਲੀ ਰੱਖੋ। ਬ੍ਰਾਊਜ਼ਰ ਵਿੱਚ ਸਕਰੀਨ ਬੰਦ ਜਾਂ ਹੋਰ ਐਪ ਤੇ ਚੈੱਕ miss ਹੋ ਸਕਦੇ ਹਨ। ਬੈਕਗ੍ਰਾਊਂਡ GPS ਲਈ ਮੋਬਾਈਲ ਐਪ ਇੰਸਟਾਲ ਕਰੋ।",
+      "GPS ਹਰ 1 ਘੰਟੇ ਤੇ ਚੈੱਕ ਹੁੰਦਾ ਹੈ — ਐਪ ਖੁੱਲੀ ਰੱਖੋ। ਬ੍ਰਾਊਜ਼ਰ ਵਿੱਚ ਸਕਰੀਨ ਬੰਦ ਜਾਂ ਹੋਰ ਐਪ ਤੇ ਚੈੱਕ miss ਹੋ ਸਕਦੇ ਹਨ। ਬੈਕਗ੍ਰਾਊਂਡ GPS ਲਈ ਮੋਬਾਈਲ ਐਪ ਇੰਸਟਾਲ ਕਰੋ।",
     pleaseWait: "ਕਿਰਪਾ ਕਰਕੇ ਉਡੀਕ ਕਰੋ…",
     refreshGps: "GPS ਰਿਫਰੈੱਸ਼ ਕਰੋ",
     enableLocationTitle: "ਕਦਮ 1 — Location ਚਾਲੂ ਕਰੋ (ਲਾਜ਼ਮੀ)",

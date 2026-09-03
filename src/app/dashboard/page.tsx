@@ -21,7 +21,7 @@ import {
 import { LATEST_NATIVE_APK } from "@/lib/apkDownload";
 import { useClientNativeApp } from "@/hooks/useClientNativeApp";
 import { apiFetch } from "@/lib/clientHeaders";
-import { assertNativeSecureForPunch, saveNativeSession } from "@/lib/pureNativeApp";
+import { assertNativeSecureForPunch, isPureNativeApp, saveNativeSession } from "@/lib/pureNativeApp";
 import { LangToggle, useLang } from "@/lib/i18n";
 
 const AUTO_12H_MS = 12 * 60 * 60 * 1000;
@@ -379,7 +379,11 @@ export default function DashboardPage() {
       intervalSnapshotsSent.current.clear();
       return;
     }
-    startIntervalSnapshotPoller(open);
+    // Hourly interval snapshots (attendance FLAG) only for native punch-in sessions.
+    // FieldLocationService also records them in background; this poller is a backup while the UI is open.
+    if (isPureNativeApp()) {
+      startIntervalSnapshotPoller(open);
+    }
     const seed = open.points[open.points.length - 1] || { lat: open.punchInLat, lng: open.punchInLng };
     lastFix.current = seed;
     setLivePos(seed);

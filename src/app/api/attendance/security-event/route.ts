@@ -29,11 +29,14 @@ export async function POST(req: Request) {
   });
   if (!user) return NextResponse.json({ error: "User not found." }, { status: 404 });
 
-  const since = new Date(Date.now() - 2 * 60 * 1000);
+  const action = typeof body?.action === "string" ? body.action.slice(0, 80) : "blocked";
+  const windowMs = action === "blocked" ? 2 * 60 * 1000 : 60 * 60 * 1000;
+  const since = new Date(Date.now() - windowMs);
   const dup = await prisma.securityViolationLog.findFirst({
     where: {
       userId: s.sub,
       violationType,
+      action,
       createdAt: { gte: since },
     },
     select: { id: true },
@@ -43,7 +46,6 @@ export async function POST(req: Request) {
   const lat = Number(body?.lat);
   const lng = Number(body?.lng);
   const clientSource = parseClientSource(req);
-  const action = typeof body?.action === "string" ? body.action.slice(0, 80) : "blocked";
   const detail = typeof body?.detail === "string" ? body.detail.slice(0, 500) : "";
 
   await prisma.securityViolationLog.create({

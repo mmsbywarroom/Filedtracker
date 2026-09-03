@@ -41,12 +41,13 @@ export async function GET(req: Request) {
 
   const { start, end } = istDayBounds(date);
   const sessions = await prisma.attendance.findMany({
-    where: { userId, punchInAt: { gte: start, lte: end } },
+    where: { userId, punchInAt: { gte: start, lte: end }, punchInClient: "native" },
     orderBy: { punchInAt: "asc" },
     select: {
       id: true,
       punchInAt: true,
       punchOutAt: true,
+      punchInClient: true,
       intervalSnapshots: {
         orderBy: { slot: "asc" },
         select: { slot: true, lat: true, lng: true, recordedAt: true, scheduledAt: true },

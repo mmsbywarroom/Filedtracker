@@ -184,6 +184,21 @@ public final class SecurityHelper {
         );
     }
 
+    /** Human-readable "App Name (package)" for admin security logs. */
+    public static String appDisplayName(Context ctx, String packageName) {
+        if (packageName == null || packageName.isEmpty()) return "";
+        try {
+            PackageManager pm = ctx.getPackageManager();
+            ApplicationInfo ai = pm.getApplicationInfo(packageName, 0);
+            CharSequence label = pm.getApplicationLabel(ai);
+            if (label != null && label.length() > 0) {
+                return label + " (" + packageName + ")";
+            }
+        } catch (Exception ignored) {
+        }
+        return packageName;
+    }
+
     private static String findVpnAppViaVpnService(Context ctx) {
         try {
             PackageManager pm = ctx.getPackageManager();
@@ -237,21 +252,35 @@ public final class SecurityHelper {
         String vpnPkg = findKnownVpnAppPackage(ctx);
         if (vpnActive || vpnPkg != null) {
             String detail;
-            if (vpnActive && vpnPkg != null) {
-                detail = "VPN connected · app: " + vpnPkg;
-            } else if (vpnActive) {
-                detail = "VPN connected on device";
+            if (vpnPkg != null) {
+                String named = appDisplayName(ctx, vpnPkg);
+                detail = vpnActive ? ("VPN connected · app: " + named) : ("VPN app installed: " + named);
             } else {
-                detail = "VPN app installed: " + vpnPkg;
+                detail = "VPN connected on device";
             }
             SecurityReporter.report(ctx, "vpn", action, detail, locLat(loc), locLng(loc));
         }
         String spoofPkg = findMockGpsAppPackage(ctx);
         if (spoofPkg != null) {
-            SecurityReporter.report(ctx, "spoof_app", action, "Spoof / fake GPS app: " + spoofPkg, locLat(loc), locLng(loc));
+            SecurityReporter.report(
+                    ctx,
+                    "spoof_app",
+                    action,
+                    "Spoof / fake GPS app: " + appDisplayName(ctx, spoofPkg),
+                    locLat(loc),
+                    locLng(loc)
+            );
         }
         if (loc != null && isMockLocation(loc)) {
-            SecurityReporter.report(ctx, "mock_gps", action, "Mock location flag on GPS fix", loc.getLatitude(), loc.getLongitude());
+            String extra = spoofPkg != null ? (" · " + appDisplayName(ctx, spoofPkg)) : "";
+            SecurityReporter.report(
+                    ctx,
+                    "mock_gps",
+                    action,
+                    "Mock location flag on GPS fix" + extra,
+                    loc.getLatitude(),
+                    loc.getLongitude()
+            );
         }
     }
 

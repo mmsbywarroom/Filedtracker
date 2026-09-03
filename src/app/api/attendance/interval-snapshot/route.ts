@@ -10,7 +10,7 @@ import {
   slotDueAtMs,
 } from "@/lib/attendanceIntervalFlag";
 
-const MIN_GAP_BETWEEN_SLOTS_MS = 8 * 60 * 1000;
+const MIN_GAP_BETWEEN_SLOTS_MS = 40 * 60 * 1000;
 
 export async function POST(req: Request) {
   const s = await requireUser(req);
@@ -29,9 +29,17 @@ export async function POST(req: Request) {
 
   const open = await prisma.attendance.findFirst({
     where: { userId: s.sub, punchOutAt: null },
-    select: { id: true, punchInAt: true },
+    select: { id: true, punchInAt: true, punchInClient: true },
   });
   if (!open) return NextResponse.json({ error: "No active session." }, { status: 400 });
+
+  // Attendance FLAG intervals are only for native-app punch-in sessions.
+  if (open.punchInClient !== "native") {
+    return NextResponse.json(
+      { error: "Interval checks only apply to native app punch-in.", code: "NATIVE_ONLY" },
+      { status: 400 }
+    );
+  }
 
   const now = Date.now();
   const due = slotDueAtMs(open.punchInAt, slot);
@@ -64,7 +72,7 @@ export async function POST(req: Request) {
   if (recentOther) {
     return NextResponse.json(
       {
-        error: "Another interval was just recorded. Wait for the next 30-minute check.",
+        error: "Another interval was just recorded. Wait for the next hourly check.",
         code: "BATCH_THROTTLE",
       },
       { status: 429 }

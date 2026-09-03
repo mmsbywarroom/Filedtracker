@@ -7,6 +7,7 @@ import AdminUsersMap, { type LiveMapUser } from "@/components/AdminUsersMapDynam
 import { hierarchyDesignations } from "@/lib/hierarchy";
 import { downloadAssemblyAttendancePdfZip } from "@/lib/assemblyAttendancePdf";
 import { downloadCsv } from "@/lib/reportExport";
+import { clientSourceLabel } from "@/lib/clientSource";
 
 type AttStatus = "present" | "half_day" | "absent" | "leave";
 type RowStatus = AttStatus | "pending";
@@ -27,6 +28,8 @@ type Row = {
   hoursWorked: number;
   punchInAt: string | null;
   punchOutAt: string | null;
+  punchInClient?: string | null;
+  punchInClients?: string[];
   sessionCount?: number;
   flagged?: boolean;
   flagReason?: string;
@@ -108,6 +111,7 @@ export default function AttendanceModulePage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [flagFilter, setFlagFilter] = useState("");
   const [sameCoordsFilter, setSameCoordsFilter] = useState("");
+  const [clientFilter, setClientFilter] = useState("");
   const [zone, setZone] = useState("");
   const [district, setDistrict] = useState("");
   const [assembly, setAssembly] = useState("");
@@ -187,6 +191,11 @@ export default function AttendanceModulePage() {
       if (flagFilter === "not_flagged" && r.flagged) return false;
       if (sameCoordsFilter === "yes" && !r.hasSameInOutSession) return false;
       if (sameCoordsFilter === "no" && r.hasSameInOutSession) return false;
+      if (clientFilter === "none" && r.punchInClient) return false;
+      if (clientFilter && clientFilter !== "none") {
+        const clients = r.punchInClients?.length ? r.punchInClients : r.punchInClient ? [r.punchInClient] : [];
+        if (!clients.includes(clientFilter)) return false;
+      }
       if (textQ) {
         const text = [r.name, r.phone, r.assemblyName, r.designation, r.zone, r.district, r.sectorAllotted]
           .join(" ")
@@ -195,7 +204,7 @@ export default function AttendanceModulePage() {
       }
       return true;
     });
-  }, [allRows, zone, district, assembly, designation, sector, statusFilter, flagFilter, sameCoordsFilter, q]);
+  }, [allRows, zone, district, assembly, designation, sector, statusFilter, flagFilter, sameCoordsFilter, clientFilter, q]);
 
   const summary = useMemo(() => {
     const s: Summary = { present: 0, halfDay: 0, absent: 0, leave: 0, pending: 0, flagged: 0, total: rows.length };
@@ -212,7 +221,7 @@ export default function AttendanceModulePage() {
 
   useEffect(() => {
     setPage(1);
-  }, [zone, district, assembly, designation, sector, statusFilter, flagFilter, sameCoordsFilter, q, pageSize]);
+  }, [zone, district, assembly, designation, sector, statusFilter, flagFilter, sameCoordsFilter, clientFilter, q, pageSize]);
 
   async function applyStatus() {
     if (!pending) return;
@@ -263,6 +272,7 @@ export default function AttendanceModulePage() {
     "Zone",
     "District",
     "Punch In",
+    "Punch via",
     "Punch Out",
     "Hours",
     "Status",
@@ -285,6 +295,7 @@ export default function AttendanceModulePage() {
         r.zone,
         r.district,
         fmtDateTime(r.punchInAt),
+        r.punchInClient ? clientSourceLabel(r.punchInClient) : "",
         fmtDateTime(r.punchOutAt),
         r.hoursWorked > 0 ? r.hoursWorked : "",
         r.statusLabel,
@@ -343,7 +354,8 @@ export default function AttendanceModulePage() {
       <p className="mt-1 text-sm text-navy/55">
         Auto: punch by 10:30 + 6–12h = Present · after 10:30 to 1:00 = Half-day · after 1:00 PM no punch = Absent ·
         until 1:00 PM, no punch stays Pending. Leave mark / approved leave / holiday (that designation) = Leave. Multiple punch-ins
-        the same day (e.g. after GPS/phone off) are added together for hours. Manual change requires a reason. Flag: 8+ thirty-minute
+        the same day (e.g. after GPS/phone off) are added together for hours. Manual change requires a reason. Flag (native punch-in
+        only): 8+ hourly
         location checks at the same lat/lng during a session (no block — admin review only).
       </p>
 
@@ -408,6 +420,16 @@ export default function AttendanceModulePage() {
             <option value="pending">Pending punch-in</option>
             <option value="absent">Absent</option>
             <option value="leave">Leave</option>
+          </select>
+        </label>
+        <label className="text-xs font-medium text-navy/55">
+          Punch via
+          <select value={clientFilter} onChange={(e) => setClientFilter(e.target.value)} className={`${selectClass} mt-1`}>
+            <option value="">All (web + native)</option>
+            <option value="web">Web</option>
+            <option value="native">Native app</option>
+            <option value="capacitor">Old mobile app</option>
+            <option value="none">No punch-in</option>
           </select>
         </label>
         <label className="text-xs font-medium text-navy/55">
@@ -574,6 +596,7 @@ export default function AttendanceModulePage() {
                 <th className="px-4 py-3">Assembly / Sector</th>
                 <th className="px-4 py-3">Zone / District</th>
                 <th className="px-4 py-3">Punch in</th>
+                <th className="px-4 py-3">Punch via</th>
                 <th className="px-4 py-3">Punch out</th>
                 <th className="px-4 py-3">Hours</th>
                 <th className="px-4 py-3">Status</th>
@@ -598,6 +621,26 @@ export default function AttendanceModulePage() {
                     <p className="text-xs text-navy/50">{r.district || "—"}</p>
                   </td>
                   <td className="px-4 py-3">{fmtTime(r.punchInAt)}</td>
+                  <td className="px-4 py-3">
+                    {r.punchInClient ? (
+                      <span
+                        className={`inline-flex rounded-lg px-2 py-1 text-xs font-semibold ${
+                          r.punchInClient === "native"
+                            ? "bg-teal/15 text-teal"
+                            : r.punchInClient === "capacitor"
+                              ? "bg-amber-50 text-amber-800"
+                              : "bg-navy/10 text-navy/70"
+                        }`}
+                      >
+                        {clientSourceLabel(r.punchInClient)}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-navy/35">—</span>
+                    )}
+                    {(r.punchInClients || []).length > 1 ? (
+                      <p className="mt-1 text-[10px] text-navy/45">{r.punchInClients!.map(clientSourceLabel).join(" + ")}</p>
+                    ) : null}
+                  </td>
                   <td className="px-4 py-3">{fmtTime(r.punchOutAt)}</td>
                   <td className="px-4 py-3 font-medium">
                     {r.hoursWorked > 0 ? `${r.hoursWorked}h` : "—"}
@@ -667,7 +710,7 @@ export default function AttendanceModulePage() {
                 {flagDetail.name} · {flagDetail.phone} · {date}
               </p>
               <p className="mt-1 text-xs text-violet-800">
-                {flagDetail.sameCount} valid checks at the same lat/lng (thirty-minute intervals)
+                {flagDetail.sameCount} valid checks at the same lat/lng (hourly intervals)
               </p>
               <p className="mt-1 text-xs text-navy/50">
                 Invalid / batch-uploaded rows (same GPS time) are ignored for flag count.

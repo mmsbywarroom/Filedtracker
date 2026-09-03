@@ -59,7 +59,17 @@ export async function GET(req: Request) {
   const [punches, leaves, marks, holiday] = await Promise.all([
     prisma.attendance.findMany({
       where: { userId: { in: ids }, punchInAt: { gte: start, lte: end } },
-      select: { id: true, userId: true, punchInAt: true, punchOutAt: true, punchInLat: true, punchInLng: true, punchOutLat: true, punchOutLng: true },
+      select: {
+        id: true,
+        userId: true,
+        punchInAt: true,
+        punchOutAt: true,
+        punchInLat: true,
+        punchInLng: true,
+        punchOutLat: true,
+        punchOutLng: true,
+        punchInClient: true,
+      },
     }),
     prisma.leaveRequest.findMany({
       where: {
@@ -110,6 +120,7 @@ export async function GET(req: Request) {
       punchInLng: number;
       punchOutLat: number | null;
       punchOutLng: number | null;
+      punchInClient: string | null;
     }[]
   >();
   for (const p of punches) {
@@ -122,6 +133,7 @@ export async function GET(req: Request) {
       punchInLng: p.punchInLng,
       punchOutLat: p.punchOutLat,
       punchOutLng: p.punchOutLng,
+      punchInClient: p.punchInClient,
     });
     punchesByUser.set(p.userId, list);
   }
@@ -155,10 +167,13 @@ export async function GET(req: Request) {
       });
       const { status, source, reason, hours, firstIn, sessionCount } = resolved;
 
+      // FLAG only from native-app punch-in sessions (≥8 identical hourly lat/lng checks).
       const pinFlag = userPinnedFlagFromSessions(
-        sessions.map((sess) => ({
-          snapshots: snapsByAttendance.get(sess.id) || [],
-        }))
+        sessions
+          .filter((sess) => sess.punchInClient === "native")
+          .map((sess) => ({
+            snapshots: snapsByAttendance.get(sess.id) || [],
+          }))
       );
 
       const lastOut = sessions.length
@@ -175,6 +190,28 @@ export async function GET(req: Request) {
           punchOutLat: sess.punchOutLat,
           punchOutLng: sess.punchOutLng,
         })
+      );
+
+      const firstSess = sessions.length
+        ? [...sessions].sort((a, b) => a.punchInAt.getTime() - b.punchInAt.getTime())[0]
+        : null;
+      const punchInClient = firstSess
+        ? firstSess.punchInClient === "native"
+          ? "native"
+          : firstSess.punchInClient === "capacitor"
+            ? "capacitor"
+            : "web"
+        : null;
+      const punchInClients = Array.from(
+        new Set(
+          sessions.map((sess) =>
+            sess.punchInClient === "native"
+              ? "native"
+              : sess.punchInClient === "capacitor"
+                ? "capacitor"
+                : "web"
+          )
+        )
       );
 
       return {
@@ -194,6 +231,8 @@ export async function GET(req: Request) {
         sessionCount,
         punchInAt: firstIn,
         punchOutAt: lastOut,
+        punchInClient,
+        punchInClients,
         markId: manual?.id || null,
         flagged: pinFlag.flagged,
         flagReason: pinFlag.reason,

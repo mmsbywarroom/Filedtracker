@@ -1,10 +1,10 @@
 package in.videh.filedtracker.bglocation;
 
 public final class IntervalScheduler {
-    private static final long INTERVAL_MS = 30L * 60L * 1000L;
+    private static final long INTERVAL_MS = 60L * 60L * 1000L;
     private static final long EARLY_MS = 2L * 60L * 1000L;
-    private static final long LATE_MS = 15L * 60L * 1000L;
-    public static final int MAX_SLOTS = 24;
+    private static final long LATE_MS = 20L * 60L * 1000L;
+    public static final int MAX_SLOTS = 12;
 
     private IntervalScheduler() {}
 

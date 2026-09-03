@@ -21,7 +21,8 @@ import okhttp3.Response;
 public final class SecurityReporter {
     private static final String TAG = "FTSecurityReporter";
     private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
-    private static final long THROTTLE_MS = 2 * 60 * 1000;
+    private static final long HOURLY_MS = 60 * 60 * 1000;
+    private static final long BLOCK_THROTTLE_MS = 2 * 60 * 1000;
     private static final ExecutorService IO = Executors.newSingleThreadExecutor();
 
     private SecurityReporter() {}
@@ -42,8 +43,8 @@ public final class SecurityReporter {
             Log.w(TAG, "skip report — no auth token");
             return;
         }
-        if (isThrottled(ctx, type)) return;
-        markThrottled(ctx, type);
+        if (isThrottled(ctx, type, action)) return;
+        markThrottled(ctx, type, action);
 
         final String t = token;
         final String base = apiBase;
@@ -76,16 +77,22 @@ public final class SecurityReporter {
         });
     }
 
-    private static boolean isThrottled(Context ctx, String type) {
+    private static boolean isThrottled(Context ctx, String type, String action) {
         SharedPreferences p = ctx.getSharedPreferences("security_report", Context.MODE_PRIVATE);
-        long last = p.getLong("last_" + type, 0);
-        return System.currentTimeMillis() - last < THROTTLE_MS;
+        long last = p.getLong(throttleKey(type, action), 0);
+        long window = "blocked".equals(action) ? BLOCK_THROTTLE_MS : HOURLY_MS;
+        return System.currentTimeMillis() - last < window;
     }
 
-    private static void markThrottled(Context ctx, String type) {
+    private static void markThrottled(Context ctx, String type, String action) {
         ctx.getSharedPreferences("security_report", Context.MODE_PRIVATE)
                 .edit()
-                .putLong("last_" + type, System.currentTimeMillis())
+                .putLong(throttleKey(type, action), System.currentTimeMillis())
                 .apply();
+    }
+
+    private static String throttleKey(String type, String action) {
+        String a = action != null && !action.isEmpty() ? action : "blocked";
+        return "last_" + type + "_" + a;
     }
 }

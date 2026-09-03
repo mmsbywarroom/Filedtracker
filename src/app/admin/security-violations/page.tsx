@@ -129,8 +129,8 @@ export default function SecurityViolationsPage() {
       <p className="text-xs uppercase tracking-[0.2em] text-teal">Security</p>
       <h1 className="text-2xl font-semibold">VPN / Fake GPS / Spoof apps</h1>
       <p className="mt-1 text-sm text-navy/55">
-        Device-level detections from the native app: VPN in use, mock GPS location, or installed spoof / fake GPS
-        apps. Same hierarchy scope as other admin logs.
+        Device-level detections from the native app (once per hour while punched in, and on punch block):
+        which VPN / fake GPS / spoof app is on the phone (app name + package).
       </p>
 
       <div className="mt-4 flex flex-wrap items-end gap-3">

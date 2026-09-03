@@ -88,11 +88,16 @@ public class NativeAppBridge {
             o.put("vpnPackage", vpnPkg != null ? vpnPkg : "");
             o.put("mockLikely", spoofPkg != null);
             String detail = "";
-            if (vpnActive && vpnPkg != null) detail = "VPN connected · app: " + vpnPkg;
-            else if (vpnActive) detail = "VPN connected on device";
-            else if (vpnPkg != null) detail = "VPN app installed: " + vpnPkg;
+            if (vpnActive && vpnPkg != null) {
+                detail = "VPN connected · app: " + SecurityHelper.appDisplayName(activity, vpnPkg);
+            } else if (vpnActive) {
+                detail = "VPN connected on device";
+            } else if (vpnPkg != null) {
+                detail = "VPN app installed: " + SecurityHelper.appDisplayName(activity, vpnPkg);
+            }
             if (spoofPkg != null) {
-                detail = detail.isEmpty() ? ("Spoof app: " + spoofPkg) : (detail + " · Spoof: " + spoofPkg);
+                String spoofDetail = "Spoof / fake GPS app: " + SecurityHelper.appDisplayName(activity, spoofPkg);
+                detail = detail.isEmpty() ? spoofDetail : (detail + " · " + spoofDetail);
             }
             o.put("detail", detail);
             return o.toString();
