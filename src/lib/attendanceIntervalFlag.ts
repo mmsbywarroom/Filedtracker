@@ -1,11 +1,11 @@
-/** Every 1 hour between punch-in and punch-out, record lat/lng. Flag if ≥8 match. */
-export const INTERVAL_SNAPSHOT_MS = 60 * 60 * 1000;
+/** Every 30 minutes between punch-in and punch-out, record lat/lng (native/iOS only). Flag if ≥8 match. */
+export const INTERVAL_SNAPSHOT_MS = 30 * 60 * 1000;
 export const PINNED_FLAG_MIN_COUNT = 8;
-export const MAX_INTERVAL_SLOTS = 12; // 12 h session cap
+export const MAX_INTERVAL_SLOTS = 24; // 12 h session cap
 /** Accept snapshot from 2 min before scheduled time. */
 export const INTERVAL_SNAPSHOT_EARLY_MS = 2 * 60 * 1000;
 /** Grace after scheduled time (timer drift / slow GPS). */
-export const INTERVAL_SNAPSHOT_LATE_MS = 20 * 60 * 1000;
+export const INTERVAL_SNAPSHOT_LATE_MS = 15 * 60 * 1000;
 
 export function slotDueAtMs(punchInAt: Date | number, slot: number): number {
   const t = typeof punchInAt === "number" ? punchInAt : punchInAt.getTime();
@@ -17,7 +17,7 @@ export function isSlotDueNow(punchInAt: Date, slot: number, now = Date.now()): b
   return now >= due - INTERVAL_SNAPSHOT_EARLY_MS && now <= due + INTERVAL_SNAPSHOT_LATE_MS;
 }
 
-/** True when GPS was captured near the scheduled hourly mark (rejects batch backfill). */
+/** True when GPS was captured near the scheduled 30-min mark (rejects batch backfill). */
 export function isValidIntervalSnapshot(punchInAt: Date, slot: number, recordedAt: Date): boolean {
   const due = slotDueAtMs(punchInAt, slot);
   const rec = recordedAt.getTime();
@@ -63,7 +63,7 @@ export function isSessionPinnedByIntervals(
 }
 
 export function pinnedFlagReason(sameCount: number): string {
-  return `${sameCount} native-app hourly location checks at the same lat/lng — review for possible fake GPS.`;
+  return `${sameCount} native-app thirty-minute location checks at the same lat/lng — review for possible fake GPS.`;
 }
 
 export function userPinnedFlagFromSessions(
@@ -103,7 +103,7 @@ export function dominantCoordGroup<T extends { lat: number; lng: number }>(
 }
 
 export function slotLabel(slot: number): string {
-  const mins = slot * 60;
+  const mins = slot * 30;
   const h = Math.floor(mins / 60);
   const m = mins % 60;
   if (h && m) return `${h}h ${m}m after punch-in`;

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { BrandMark } from "@/components/BrandMark";
 import { cleanScope } from "@/lib/hierarchy";
 import { downloadCsv, downloadPdf } from "@/lib/reportExport";
+import { absentOrInProgressHint, absentOrInProgressLabel } from "@/lib/dailyAttendance";
 
 type Group = {
   name: string;
@@ -99,6 +100,11 @@ const METRIC_LABELS: Record<Metric, string> = {
   pendingLive: "Pending live",
 };
 
+function metricLabel(metric: Metric, date: string) {
+  if (metric === "absent") return absentOrInProgressLabel(date);
+  return METRIC_LABELS[metric];
+}
+
 const GROUP_BY_LABELS: Record<GroupBy, string> = {
   designation: "Designation",
   zone: "Zone",
@@ -138,7 +144,7 @@ function buildDetailExport(
   rows: DetailRow[],
   variant: "field" | "callCenter" = "field"
 ) {
-  const titleParts = [METRIC_LABELS[metric], date];
+  const titleParts = [metricLabel(metric, date), date];
   if (groupFilter) {
     titleParts.push(`${GROUP_BY_LABELS[groupFilter.groupBy]}: ${groupFilter.groupValue}`);
   }
@@ -183,7 +189,7 @@ function buildDetailExport(
     } else if (metric === "leave") {
       row.push(r.leaveRemark || "Marked leave on Attendance");
     } else if (metric === "present" || metric === "halfDay" || metric === "absent") {
-      row.push(formatKolkata(r.punchInAt), r.dayStatusLabel || METRIC_LABELS[metric]);
+      row.push(formatKolkata(r.punchInAt), r.dayStatusLabel || metricLabel(metric, date));
     } else if (metric === "pendingPunchIn") {
       row.push(formatKolkata(r.punchInAt));
     } else if (metric === "live" || metric === "punched" || metric === "pendingLive") {
@@ -614,9 +620,9 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
         />
         <Stat
           className="bg-red-600"
-          label="Absent"
+          label={absentOrInProgressLabel(date)}
           value={data?.absentOnDate || 0}
-          hint="After 1:00 PM: no punch, late punch, or under 6h"
+          hint={absentOrInProgressHint(date)}
           active={metric === "absent" && !groupFilter}
           onClick={() => loadMetric("absent")}
         />
@@ -722,7 +728,7 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
         <section ref={detailRef} id="dashboard-detail" className="mt-6 admin-panel overflow-hidden">
           <div className="flex items-center justify-between border-b border-navy/5 bg-[#12305A] px-4 py-3 text-white">
             <h2 className="font-semibold">
-              {METRIC_LABELS[metric]} · {date}
+              {metricLabel(metric, date)} · {date}
               {groupFilter && (
                 <span className="font-normal text-white/85">
                   {" "}
@@ -858,7 +864,7 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
                                   : "bg-red-50 text-red-700"
                             }`}
                           >
-                            {r.dayStatusLabel || METRIC_LABELS[metric]}
+                            {r.dayStatusLabel || metricLabel(metric, date)}
                           </span>
                         </td>
                       )}

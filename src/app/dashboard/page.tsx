@@ -379,7 +379,7 @@ export default function DashboardPage() {
       intervalSnapshotsSent.current.clear();
       return;
     }
-    // Hourly interval snapshots (attendance FLAG) only for native punch-in sessions.
+    // 30-min interval snapshots (attendance FLAG) only for native / iOS punch-in sessions.
     // FieldLocationService also records them in background; this poller is a backup while the UI is open.
     if (isPureNativeApp()) {
       startIntervalSnapshotPoller(open);
@@ -948,17 +948,23 @@ export default function DashboardPage() {
         </div>
 
         {!inNativeApp && (
-          <a
-            href={LATEST_NATIVE_APK}
-            download="AAP-Attendance-native.apk"
-            className="mt-3 flex items-center justify-between rounded-2xl border border-navy/10 bg-navy px-4 py-3 text-white shadow-card"
-          >
-            <div>
-              <p className="font-semibold">{t("installApp")}</p>
-              <p className="text-sm text-white/75">{t("installAppHint")}</p>
+          <>
+            <a
+              href={LATEST_NATIVE_APK}
+              download="AAP-Attendance-native.apk"
+              className="mt-3 flex items-center justify-between rounded-2xl border border-navy/10 bg-navy px-4 py-3 text-white shadow-card"
+            >
+              <div>
+                <p className="font-semibold">{t("installApp")}</p>
+                <p className="text-sm text-white/75">{t("installAppHint")}</p>
+              </div>
+              <span className="shrink-0 rounded-xl bg-white/15 px-3 py-1.5 text-sm font-semibold">{t("downloadApk")}</span>
+            </a>
+            <div className="mt-3 rounded-2xl border border-navy/10 bg-white px-4 py-3 shadow-card">
+              <p className="font-semibold">{t("installAppIos")}</p>
+              <p className="text-sm text-navy/55">{t("installAppIosHint")}</p>
             </div>
-            <span className="shrink-0 rounded-xl bg-white/15 px-3 py-1.5 text-sm font-semibold">{t("downloadApk")}</span>
-          </a>
+          </>
         )}
 
         <Link

@@ -8,6 +8,7 @@ import { hierarchyDesignations } from "@/lib/hierarchy";
 import { downloadAssemblyAttendancePdfZip } from "@/lib/assemblyAttendancePdf";
 import { downloadCsv } from "@/lib/reportExport";
 import { clientSourceLabel } from "@/lib/clientSource";
+import { absentOrInProgressHint, absentOrInProgressLabel } from "@/lib/dailyAttendance";
 
 type AttStatus = "present" | "half_day" | "absent" | "leave";
 type RowStatus = AttStatus | "pending";
@@ -355,7 +356,7 @@ export default function AttendanceModulePage() {
         Auto: punch by 10:30 + 6–12h = Present · after 10:30 to 1:00 = Half-day · after 1:00 PM no punch = Absent ·
         until 1:00 PM, no punch stays Pending. Leave mark / approved leave / holiday (that designation) = Leave. Multiple punch-ins
         the same day (e.g. after GPS/phone off) are added together for hours. Manual change requires a reason. Flag (native punch-in
-        only): 8+ hourly
+        only): 8+ thirty-minute
         location checks at the same lat/lng during a session (no block — admin review only).
       </p>
 
@@ -373,8 +374,8 @@ export default function AttendanceModulePage() {
           <p className="text-2xl font-semibold">{summary.pending}</p>
         </div>
         <div className="rounded-2xl bg-red-600 px-4 py-3 text-white shadow-card">
-          <p className="text-xs uppercase tracking-wider text-white/75">Absent</p>
-          <p className="text-xs text-white/70">After 1:00 PM</p>
+          <p className="text-xs uppercase tracking-wider text-white/75">{absentOrInProgressLabel(date)}</p>
+          <p className="text-xs text-white/70">{absentOrInProgressHint(date)}</p>
           <p className="text-2xl font-semibold">{summary.absent}</p>
         </div>
         <div className="rounded-2xl bg-sky-600 px-4 py-3 text-white shadow-card">
@@ -710,7 +711,7 @@ export default function AttendanceModulePage() {
                 {flagDetail.name} · {flagDetail.phone} · {date}
               </p>
               <p className="mt-1 text-xs text-violet-800">
-                {flagDetail.sameCount} valid checks at the same lat/lng (hourly intervals)
+                {flagDetail.sameCount} valid checks at the same lat/lng (thirty-minute intervals)
               </p>
               <p className="mt-1 text-xs text-navy/50">
                 Invalid / batch-uploaded rows (same GPS time) are ignored for flag count.

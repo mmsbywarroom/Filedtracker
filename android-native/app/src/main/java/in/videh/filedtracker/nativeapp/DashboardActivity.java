@@ -138,7 +138,7 @@ public class DashboardActivity extends AppCompatActivity {
             sessionStatus.setText(R.string.punched_in);
             punchInBtn.setVisibility(View.GONE);
             punchOutBtn.setVisibility(View.VISIBLE);
-            gpsText.setText("Background GPS active — allow Always location for hourly tracking.");
+            gpsText.setText("Background GPS active — allow Always location for 30-min tracking.");
         } else {
             sessionStatus.setText(R.string.not_punched_in);
             punchInBtn.setVisibility(faceRegistered && punchInAllowed ? View.VISIBLE : View.GONE);

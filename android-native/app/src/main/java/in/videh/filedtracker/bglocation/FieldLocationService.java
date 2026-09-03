@@ -290,7 +290,7 @@ public class FieldLocationService extends Service {
             return;
         }
 
-        // Hourly snapshots feed attendance FLAG only — VPN logs are a separate 1-hour security check.
+        // 30-min FLAG snapshots (native/iOS). VPN security logs are separate (hourly).
         long now = System.currentTimeMillis();
         int dueSlot = IntervalScheduler.findDueSlot(
                 punchInMs,
@@ -443,7 +443,7 @@ public class FieldLocationService extends Service {
         }
         NotificationCompat.Builder b = new NotificationCompat.Builder(this, CHANNEL_ID)
                 .setContentTitle("AAP Attendance active")
-                .setContentText("Recording route and hourly GPS checks")
+                .setContentText("Recording route and 30-min GPS checks")
                 .setSmallIcon(android.R.drawable.ic_menu_mylocation)
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)

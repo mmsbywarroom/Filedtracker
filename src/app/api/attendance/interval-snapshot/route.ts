@@ -10,7 +10,7 @@ import {
   slotDueAtMs,
 } from "@/lib/attendanceIntervalFlag";
 
-const MIN_GAP_BETWEEN_SLOTS_MS = 40 * 60 * 1000;
+const MIN_GAP_BETWEEN_SLOTS_MS = 8 * 60 * 1000;
 
 export async function POST(req: Request) {
   const s = await requireUser(req);
@@ -72,7 +72,7 @@ export async function POST(req: Request) {
   if (recentOther) {
     return NextResponse.json(
       {
-        error: "Another interval was just recorded. Wait for the next hourly check.",
+        error: "Another interval was just recorded. Wait for the next 30-minute check.",
         code: "BATCH_THROTTLE",
       },
       { status: 429 }

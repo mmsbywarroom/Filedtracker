@@ -52,6 +52,25 @@ export function isAfterNoPunchAbsentCutoff(dateYmd: string, now = new Date()) {
   return now.getTime() >= noPunchAbsentCutoff(dateYmd).getTime();
 }
 
+/**
+ * Dashboard summary label for the absent bucket:
+ * before 1:00 PM IST on that day → "In progress"; from 1:00 PM → "Absent".
+ * Past calendar days always show "Absent".
+ */
+export function absentOrInProgressLabel(dateYmd: string, now = new Date()) {
+  const today = istDateString(now);
+  if (dateYmd < today) return "Absent";
+  if (!isAfterNoPunchAbsentCutoff(dateYmd, now)) return "In progress";
+  return "Absent";
+}
+
+export function absentOrInProgressHint(dateYmd: string, now = new Date()) {
+  if (absentOrInProgressLabel(dateYmd, now) === "In progress") {
+    return "Duty still running — after 1:00 PM this becomes Absent (no punch / late / under 6h)";
+  }
+  return "After 1:00 PM: no punch, late punch, or under 6h";
+}
+
 export function firstPunchIn(sessions: PunchRow[]) {
   if (!sessions.length) return null;
   return sessions.reduce((a, b) => (a.punchInAt < b.punchInAt ? a : b)).punchInAt;

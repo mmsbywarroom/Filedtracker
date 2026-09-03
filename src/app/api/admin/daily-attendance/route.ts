@@ -167,7 +167,7 @@ export async function GET(req: Request) {
       });
       const { status, source, reason, hours, firstIn, sessionCount } = resolved;
 
-      // FLAG only from native-app punch-in sessions (≥8 identical hourly lat/lng checks).
+      // FLAG only from native-app punch-in sessions (≥8 identical 30-min lat/lng checks).
       const pinFlag = userPinnedFlagFromSessions(
         sessions
           .filter((sess) => sess.punchInClient === "native")
