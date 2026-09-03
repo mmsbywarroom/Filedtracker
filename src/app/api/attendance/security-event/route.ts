@@ -47,6 +47,11 @@ export async function POST(req: Request) {
   const lng = Number(body?.lng);
   const clientSource = parseClientSource(req);
 
+  // Security evidence is ONLY for native-app punch. Reject web/browser reports.
+  if (clientSource !== "native") {
+    return NextResponse.json({ ok: true, skipped: "web" });
+  }
+
   // Consolidate VPN / spoof / mock into one daily punch-evidence row for native punch audit.
   const isEvidence =
     violationType === "punch_evidence" ||
@@ -54,7 +59,7 @@ export async function POST(req: Request) {
     action === "detected" ||
     action === "punch_allowed";
 
-  if (isEvidence && clientSource === "native") {
+  if (isEvidence) {
     violationType = "punch_evidence";
     action = "punch_evidence";
   }

@@ -27,7 +27,10 @@ export async function GET(req: Request) {
   const ids = scoped.map((u) => u.id);
   if (!ids.length) return NextResponse.json({ logs: [], typeLabels: TYPE_LABELS });
 
-  const where: Record<string, unknown> = { userId: { in: ids } };
+  const where: Record<string, unknown> = {
+    userId: { in: ids },
+    clientSource: "native", // Only show native-app evidence (web punch = no evidence)
+  };
   if (type) where.violationType = type;
   if (date) {
     const start = new Date(`${date}T00:00:00+05:30`);
