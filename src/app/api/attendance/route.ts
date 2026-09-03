@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { parseClientSource } from "@/lib/clientSource";
-import { canPunchInNow, punchInWindowMessage } from "@/lib/punchInWindow";
+import { punchInWindowMessage } from "@/lib/punchInWindow";
+import { canUserPunchIn, punchInDeniedMessage, punchInReentryMessage } from "@/lib/punchReentry";
 import { prisma } from "@/lib/prisma";
 import { downsample, sessionTravelMeters } from "@/lib/utils";
 import { sanitizeFaceImage } from "@/lib/faceImage";
@@ -11,6 +12,7 @@ import { autoPunchOutIfStale, closeStaleSessionForRePunch } from "@/lib/punchOut
 import { requireUserFaceMatch } from "@/lib/requireFaceMatch";
 import { findHolidayToday, holidayAppliesTo } from "@/lib/holidays";
 import { assertPanIndiaPunchLocation, isPanIndiaPunchPhone } from "@/lib/panIndiaPunch";
+import { hoursWorkedOnDay } from "@/lib/dailyAttendance";
 
 function istDayBounds(d = new Date()) {
   const ymd = d.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
@@ -118,6 +120,17 @@ export async function GET(req: Request) {
     );
   }, 0);
 
+  const punchGate = await canUserPunchIn(s.sub, s.phone);
+  const todayHours = hoursWorkedOnDay(
+    todayRows.map((r) => ({ punchInAt: r.punchInAt, punchOutAt: r.punchOutAt })),
+    new Date()
+  );
+  const priorClosedMs = todayRows.reduce((sum, r) => {
+    if (!r.punchOutAt) return sum;
+    if (openFresh && r.id === openFresh.id) return sum;
+    return sum + Math.max(0, r.punchOutAt.getTime() - r.punchInAt.getTime());
+  }, 0);
+
   return NextResponse.json({
     open: openFresh
       ? {
@@ -128,9 +141,13 @@ export async function GET(req: Request) {
         }
       : null,
     todayDistanceMeters,
+    todayHoursWorked: Math.round(todayHours * 10) / 10,
+    todayPriorClosedMs: priorClosedMs,
     history: history.map((h) => ({ ...h, points: h.id === mapId ? mapPoints : [] })),
-    punchInAllowed: canPunchInNow(s.phone),
-    punchInWindowMessage: punchInWindowMessage(),
+    punchInAllowed: punchGate.allowed,
+    punchInAllowedReason: punchGate.reason,
+    punchInWindowMessage:
+      punchGate.reason === "reentry" ? punchInReentryMessage() : punchInWindowMessage(),
   });
 }
 
@@ -194,8 +211,9 @@ export async function POST(req: Request) {
       { status: 403 }
     );
   }
-  if (!canPunchInNow(user.phone)) {
-    return NextResponse.json({ error: punchInWindowMessage(), code: "PUNCH_IN_WINDOW" }, { status: 403 });
+  const punchGate = await canUserPunchIn(s.sub, user.phone);
+  if (!punchGate.allowed) {
+    return NextResponse.json({ error: punchInDeniedMessage(), code: "PUNCH_IN_WINDOW" }, { status: 403 });
   }
   const holiday = await findHolidayToday();
   if (holiday && holidayAppliesTo(holiday, user.designation)) {
@@ -240,7 +258,13 @@ export async function POST(req: Request) {
       punchInAt: new Date(),
       punchInLat: lat,
       punchInLng: lng,
-      punchInAddress: address,
+      punchInAddress:
+        punchGate.reason === "reentry"
+          ? [address, "Re-entry after early punch-out (hours joined with morning session)"]
+              .filter(Boolean)
+              .join(" · ")
+              .slice(0, 200)
+          : address,
       punchInFace,
       punchInClient: parseClientSource(req),
       lastKnownLat: lat,
@@ -253,5 +277,9 @@ export async function POST(req: Request) {
     select: { id: true, punchInAt: true },
   });
 
-  return NextResponse.json({ attendance: { ...attendance, intervalSnapshotsDone: [] }, ok: true });
+  return NextResponse.json({
+    attendance: { ...attendance, intervalSnapshotsDone: [] },
+    ok: true,
+    reentry: punchGate.reason === "reentry",
+  });
 }

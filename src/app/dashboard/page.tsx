@@ -105,6 +105,8 @@ export default function DashboardPage() {
   const [bootError, setBootError] = useState("");
   const [booting, setBooting] = useState(true);
   const [punchInAllowed, setPunchInAllowed] = useState(true);
+  const [punchInHint, setPunchInHint] = useState("");
+  const [todayPriorClosedMs, setTodayPriorClosedMs] = useState(0);
 
   const applyPosition = useCallback((pos: GeolocationPosition, force = false) => {
     const acc = pos.coords.accuracy || 9999;
@@ -188,6 +190,12 @@ export default function DashboardPage() {
         setOpen(att.open ?? null);
         setTodayDistanceMeters(Number(att.todayDistanceMeters) || 0);
         setPunchInAllowed(att.punchInAllowed !== false);
+        setTodayPriorClosedMs(Number(att.todayPriorClosedMs) || 0);
+        setPunchInHint(
+          att.punchInAllowed && att.punchInAllowedReason === "reentry"
+            ? String(att.punchInWindowMessage || "")
+            : ""
+        );
         const last = att.history?.[0];
         if (!att.open && last?.punchOutReason === "gps_off" && last.punchOutAt) {
           const age = Date.now() - new Date(last.punchOutAt).getTime();
@@ -744,11 +752,11 @@ export default function DashboardPage() {
     });
     const otherToday = Math.max(0, todayDistanceMeters - (open.distanceMeters || 0));
     return {
-      durationMs: Date.now() - start,
+      durationMs: todayPriorClosedMs + (Date.now() - start),
       points: open.points,
       travelMeters: otherToday + sessionMeters,
     };
-  }, [open, livePos, todayDistanceMeters]);
+  }, [open, livePos, todayDistanceMeters, todayPriorClosedMs]);
 
   async function logout() {
     await logoutUser();
@@ -895,6 +903,8 @@ export default function DashboardPage() {
                 </button>
                 {!punchInAllowed ? (
                   <p className="text-center text-xs font-medium text-amber-800 sm:text-left">{t("punchInWindow")}</p>
+                ) : punchInHint ? (
+                  <p className="text-center text-xs font-medium text-teal sm:text-left">{punchInHint}</p>
                 ) : (
                   <p className="text-center text-xs text-navy/45 sm:text-left">{t("punchStart")}</p>
                 )}
