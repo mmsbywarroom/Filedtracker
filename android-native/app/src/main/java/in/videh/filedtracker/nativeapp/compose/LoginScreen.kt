@@ -47,7 +47,7 @@ import androidx.compose.material3.TextButton
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -66,18 +66,13 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import android.app.Activity
-import android.content.BroadcastReceiver
-import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
+import android.Manifest
+import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
-import com.google.android.gms.auth.api.phone.SmsRetriever
-import com.google.android.gms.common.api.CommonStatusCodes
-import com.google.android.gms.common.api.Status
 import `in`.videh.filedtracker.nativeapp.ApiClient
 import `in`.videh.filedtracker.nativeapp.AppConfig
 import `in`.videh.filedtracker.nativeapp.LocaleHelper
+import `in`.videh.filedtracker.nativeapp.OtpSmsBus
 import `in`.videh.filedtracker.nativeapp.R
 import `in`.videh.filedtracker.nativeapp.SessionStore
 import kotlinx.coroutines.Dispatchers
@@ -96,49 +91,40 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("") }
     var isError by remember { mutableStateOf(false) }
+    var pendingOtpSend by remember { mutableStateOf(false) }
 
-    val smsConsentLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode != Activity.RESULT_OK) return@rememberLauncherForActivityResult
-        val body = result.data?.getStringExtra(SmsRetriever.EXTRA_SMS_MESSAGE).orEmpty()
-        val code = Regex("\\b(\\d{6})\\b").find(body)?.groupValues?.get(1)
-        if (!code.isNullOrBlank()) otp = code
+    val incomingOtp = OtpSmsBus.code
+    LaunchedEffect(incomingOtp, otpSent) {
+        val code = incomingOtp ?: return@LaunchedEffect
+        if (otpSent) {
+            otp = code
+            OtpSmsBus.consume()
+        }
     }
 
-    DisposableEffect(otpSent) {
-        if (!otpSent) return@DisposableEffect onDispose { }
-        SmsRetriever.getClient(context).startSmsUserConsent(null)
-        val receiver = object : BroadcastReceiver() {
-            override fun onReceive(ctx: Context?, intent: Intent?) {
-                if (intent?.action != SmsRetriever.SMS_RETRIEVED_ACTION) return
-                val extras = intent.extras ?: return
-                val status = extras.get(SmsRetriever.EXTRA_STATUS) as? Status ?: return
-                if (status.statusCode != CommonStatusCodes.SUCCESS) return
-                @Suppress("DEPRECATION")
-                val consent = extras.getParcelable<Intent>(SmsRetriever.EXTRA_CONSENT_INTENT)
-                if (consent != null) {
-                    try {
-                        smsConsentLauncher.launch(consent)
-                    } catch (_: Exception) {
-                    }
-                }
+    fun sendOtpNow() {
+        busy = true
+        message = "Sending OTP…"
+        scope.launch {
+            try {
+                withContext(Dispatchers.IO) { ApiClient.requestOtp(phone) }
+                otpSent = true
+                message = context.getString(R.string.otp_sms_hint)
+            } catch (e: Exception) {
+                isError = true
+                message = errorText(e, "Could not send OTP")
+            } finally {
+                busy = false
             }
         }
-        val filter = IntentFilter(SmsRetriever.SMS_RETRIEVED_ACTION)
-        ContextCompat.registerReceiver(
-            context,
-            receiver,
-            filter,
-            SmsRetriever.SEND_PERMISSION,
-            null,
-            ContextCompat.RECEIVER_EXPORTED
-        )
-        onDispose {
-            try {
-                context.unregisterReceiver(receiver)
-            } catch (_: Exception) {
-            }
+    }
+
+    val smsPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) {
+        if (pendingOtpSend) {
+            pendingOtpSend = false
+            sendOtpNow()
         }
     }
 
@@ -278,20 +264,16 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
                                     message = "Enter a valid 10-digit mobile number."
                                     return@Button
                                 }
-                                busy = true
-                                message = "Sending OTP…"
-                                scope.launch {
-                                    try {
-                                        withContext(Dispatchers.IO) { ApiClient.requestOtp(phone) }
-                                        otpSent = true
-                                        message = context.getString(R.string.otp_sms_hint)
-                                    } catch (e: Exception) {
-                                        isError = true
-                                        message = errorText(e, "Could not send OTP")
-                                    } finally {
-                                        busy = false
-                                    }
+                                val smsOk = ContextCompat.checkSelfPermission(
+                                    context,
+                                    Manifest.permission.RECEIVE_SMS
+                                ) == PackageManager.PERMISSION_GRANTED
+                                if (!smsOk) {
+                                    pendingOtpSend = true
+                                    smsPermissionLauncher.launch(Manifest.permission.RECEIVE_SMS)
+                                    return@Button
                                 }
+                                sendOtpNow()
                             } else {
                                 if (otp.length != 6) {
                                     isError = true

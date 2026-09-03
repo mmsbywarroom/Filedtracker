@@ -43,5 +43,5 @@
     <string name="mock_gps_blocked">Fake GPS detected. Uninstall location spoof apps.</string>
     <string name="punch_in_window_blocked">Punch in is only allowed between 5:00 AM and 1:00 PM (IST).</string>
     <string name="allow_always_hint">Select “Allow all the time”, then press Back.</string>
-    <string name="otp_sms_hint">When the SMS arrives, tap Allow so OTP fills automatically.</string>
+    <string name="otp_sms_hint">OTP SMS aate hi box mein auto fill ho jayega.</string>
 </resources>
