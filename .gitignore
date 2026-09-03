@@ -16,3 +16,7 @@ android-native/build
 android-native/app/build
 AAP-Attendance*.apk
 !public/aap-attendance-native.apk
+ios-native/signing/
+*.pem
+*.p8
+*.p12

@@ -1,5 +1,8 @@
 # Native iOS → TestFlight (not React Native)
 # Bundle: in.videh.filedtracker.aap | Team: 33AW34RHHQ
+#
+# Required Codemagic env group "code-signing" with secret:
+#   CERTIFICATE_PRIVATE_KEY = full contents of ios-native/signing/cert_key.pem
 
 workflows:
   ios-testflight:
@@ -7,9 +10,10 @@ workflows:
     max_build_duration: 60
     instance_type: mac_mini_m2
     integrations:
-      # Settings → Developer Portal key name
       app_store_connect: Codemagic
     environment:
+      groups:
+        - code-signing
       vars:
         XCODE_PROJECT: "ios-native/AAPAttendance.xcodeproj"
         XCODE_SCHEME: "AAPAttendance"
@@ -22,7 +26,8 @@ workflows:
           keychain initialize
           app-store-connect fetch-signing-files "$BUNDLE_ID" \
             --type IOS_APP_STORE \
-            --create
+            --create \
+            --certificate-key=@env:CERTIFICATE_PRIVATE_KEY
           keychain add-certificates
           xcode-project use-profiles
       - name: Build IPA for App Store / TestFlight
