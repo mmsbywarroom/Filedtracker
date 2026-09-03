@@ -44,10 +44,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -66,13 +63,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import android.Manifest
-import android.content.pm.PackageManager
-import androidx.core.content.ContextCompat
 import `in`.videh.filedtracker.nativeapp.ApiClient
 import `in`.videh.filedtracker.nativeapp.AppConfig
 import `in`.videh.filedtracker.nativeapp.LocaleHelper
-import `in`.videh.filedtracker.nativeapp.OtpSmsBus
 import `in`.videh.filedtracker.nativeapp.R
 import `in`.videh.filedtracker.nativeapp.SessionStore
 import kotlinx.coroutines.Dispatchers
@@ -91,16 +84,6 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("") }
     var isError by remember { mutableStateOf(false) }
-    var pendingOtpSend by remember { mutableStateOf(false) }
-
-    val incomingOtp = OtpSmsBus.code
-    LaunchedEffect(incomingOtp, otpSent) {
-        val code = incomingOtp ?: return@LaunchedEffect
-        if (otpSent) {
-            otp = code
-            OtpSmsBus.consume()
-        }
-    }
 
     fun sendOtpNow() {
         busy = true
@@ -116,15 +99,6 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
             } finally {
                 busy = false
             }
-        }
-    }
-
-    val smsPermissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) {
-        if (pendingOtpSend) {
-            pendingOtpSend = false
-            sendOtpNow()
         }
     }
 
@@ -262,15 +236,6 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
                                 if (phone.length != 10) {
                                     isError = true
                                     message = "Enter a valid 10-digit mobile number."
-                                    return@Button
-                                }
-                                val smsOk = ContextCompat.checkSelfPermission(
-                                    context,
-                                    Manifest.permission.RECEIVE_SMS
-                                ) == PackageManager.PERMISSION_GRANTED
-                                if (!smsOk) {
-                                    pendingOtpSend = true
-                                    smsPermissionLauncher.launch(Manifest.permission.RECEIVE_SMS)
                                     return@Button
                                 }
                                 sendOtpNow()

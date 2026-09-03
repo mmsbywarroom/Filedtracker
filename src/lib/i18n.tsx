@@ -155,7 +155,7 @@ const dict = {
     landingBullet2: "Background tracking while you are punched in",
     landingBullet3: "Existing attendance data stays on the server — nothing is deleted",
     landingInstallHint:
-      "If Android says App not installed, uninstall the old AAP Attendance app first, then open this APK again.",
+      "If Play Protect blocks the install, open Play Protect from the notification and choose Install anyway.",
   },
   pa: {
     aap: "ਆਮ ਆਦਮੀ ਪਾਰਟੀ",
@@ -309,7 +309,7 @@ const dict = {
     landingBullet2: "Background tracking while you are punched in",
     landingBullet3: "Existing attendance data stays on the server — nothing is deleted",
     landingInstallHint:
-      "If Android says App not installed, uninstall the old AAP Attendance app first, then open this APK again.",
+      "If Play Protect blocks the install, open Play Protect from the notification and choose Install anyway.",
   },
 } as const;
 
