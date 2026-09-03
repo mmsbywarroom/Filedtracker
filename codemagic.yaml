@@ -7,9 +7,8 @@ workflows:
     max_build_duration: 60
     instance_type: mac_mini_m2
     integrations:
-      # Codemagic UI → Team integrations → App Store Connect API key
-      # Name the integration exactly: Filedtracker
-      app_store_connect: Filedtracker
+      # Codemagic UI → Settings → Developer Portal key name
+      app_store_connect: Codemagic
     environment:
       ios_signing:
         distribution_type: app_store
