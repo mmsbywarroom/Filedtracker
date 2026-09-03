@@ -225,21 +225,8 @@ public class FieldLocationService extends Service {
             }
             gpsFailStreak = 0;
             if (SecurityHelper.isMockLocation(loc)) {
-                String spoof = SecurityHelper.findMockGpsAppPackage(this);
-                String detail = spoof != null
-                        ? "Fake GPS / spoof app: " + SecurityHelper.appDisplayName(this, spoof)
-                        : "Mock location flag on GPS fix";
-                SecurityReporter.report(
-                        this,
-                        spoof != null ? "spoof_app" : "mock_gps",
-                        "blocked",
-                        detail,
-                        loc.getLatitude(),
-                        loc.getLongitude()
-                );
-                TrackingApi.postGpsOff(apiBase, token, loc.getLatitude(), loc.getLongitude());
-                stop(this);
-                return;
+                SecurityHelper.reportPunchEvidence(this, loc);
+                // Do not stop — keep recording so Attendance FLAG can catch fixed fake GPS.
             }
             maybeHourlySecurityCheck(loc);
             try {
@@ -301,21 +288,8 @@ public class FieldLocationService extends Service {
         withLocation(loc -> {
             if (loc == null) return;
             if (SecurityHelper.isMockLocation(loc)) {
-                String spoof = SecurityHelper.findMockGpsAppPackage(this);
-                String detail = spoof != null
-                        ? "Fake GPS / spoof app: " + SecurityHelper.appDisplayName(this, spoof)
-                        : "Mock location flag on GPS fix";
-                SecurityReporter.report(
-                        this,
-                        spoof != null ? "spoof_app" : "mock_gps",
-                        "blocked",
-                        detail,
-                        loc.getLatitude(),
-                        loc.getLongitude()
-                );
-                TrackingApi.postGpsOff(apiBase, token, loc.getLatitude(), loc.getLongitude());
-                stop(this);
-                return;
+                SecurityHelper.reportPunchEvidence(this, loc);
+                // Continue — 30-min snapshots still record so FLAG can catch fixed coords.
             }
             long ts = System.currentTimeMillis();
             maybeHourlySecurityCheck(loc);

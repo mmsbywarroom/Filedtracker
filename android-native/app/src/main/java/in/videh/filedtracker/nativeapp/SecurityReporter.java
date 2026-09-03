@@ -80,7 +80,14 @@ public final class SecurityReporter {
     private static boolean isThrottled(Context ctx, String type, String action) {
         SharedPreferences p = ctx.getSharedPreferences("security_report", Context.MODE_PRIVATE);
         long last = p.getLong(throttleKey(type, action), 0);
-        long window = "blocked".equals(action) ? BLOCK_THROTTLE_MS : HOURLY_MS;
+        long window;
+        if ("punch_evidence".equals(type) || "punch_evidence".equals(action)) {
+            window = 60 * 1000; // allow same-day merge updates via API upsert
+        } else if ("blocked".equals(action)) {
+            window = BLOCK_THROTTLE_MS;
+        } else {
+            window = HOURLY_MS;
+        }
         return System.currentTimeMillis() - last < window;
     }
 

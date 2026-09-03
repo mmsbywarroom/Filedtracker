@@ -35,13 +35,15 @@ function whenIst(iso: string | null) {
 
 function typeBadge(type: string, label: string) {
   const cls =
-    type === "vpn"
-      ? "bg-violet-50 text-violet-800"
-      : type === "mock_gps"
-        ? "bg-amber-50 text-amber-900"
-        : type === "spoof_app"
-          ? "bg-red-50 text-red-800"
-          : "bg-navy/5 text-navy/70";
+    type === "punch_evidence"
+      ? "bg-rose-50 text-rose-900"
+      : type === "vpn"
+        ? "bg-violet-50 text-violet-800"
+        : type === "mock_gps"
+          ? "bg-amber-50 text-amber-900"
+          : type === "spoof_app"
+            ? "bg-red-50 text-red-800"
+            : "bg-navy/5 text-navy/70";
   return (
     <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${cls}`}>{label}</span>
   );
@@ -129,8 +131,9 @@ export default function SecurityViolationsPage() {
       <p className="text-xs uppercase tracking-[0.2em] text-teal">Security</p>
       <h1 className="text-2xl font-semibold">VPN / Fake GPS / Spoof apps</h1>
       <p className="mt-1 text-sm text-navy/55">
-        Device-level detections from the native app (once per hour while punched in, and on punch block):
-        which VPN / fake GPS / spoof app is on the phone (app name + package).
+        Ek user ka din ka <strong>ek hi</strong> punch-in evidence log: native app se punch ke time pe phone pe
+        kaunsa third-party VPN / Fake GPS / spoof app tha (app name + package + coords). Punch block nahi hota —
+        fake GPS <em>use</em> Attendance → Flag se pakda jata hai (8× same 30-min lat/lng).
       </p>
 
       <div className="mt-4 flex flex-wrap items-end gap-3">
@@ -142,6 +145,7 @@ export default function SecurityViolationsPage() {
             className="rounded-lg border border-navy/15 bg-white px-3 py-2 text-sm"
           >
             <option value="">All types</option>
+            <option value="punch_evidence">Punch-in evidence (3rd-party app)</option>
             <option value="vpn">VPN in use</option>
             <option value="mock_gps">Fake GPS (mock location)</option>
             <option value="spoof_app">Spoof app installed</option>

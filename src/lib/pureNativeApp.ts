@@ -64,7 +64,13 @@ export function readNativeSecurityStatus(): NativeSecurityStatus | null {
 }
 
 /** Dual report: native OkHttp + cookie-authenticated web API (admin log). */
-function reportSecurityViolation(type: "vpn" | "mock_gps" | "spoof_app", action: string, detail: string) {
+function reportSecurityViolation(
+  type: "vpn" | "mock_gps" | "spoof_app" | "punch_evidence",
+  action: string,
+  detail: string,
+  lat?: number | null,
+  lng?: number | null
+) {
   const bridge = pureNativeBridge();
   try {
     bridge?.reportSecurityEvent?.(type, action, detail);
@@ -72,6 +78,9 @@ function reportSecurityViolation(type: "vpn" | "mock_gps" | "spoof_app", action:
     /* ignore */
   }
   try {
+    const body: Record<string, unknown> = { type, action, detail };
+    if (Number.isFinite(lat)) body.lat = lat;
+    if (Number.isFinite(lng)) body.lng = lng;
     void fetch("/api/attendance/security-event", {
       method: "POST",
       credentials: "include",
@@ -80,49 +89,42 @@ function reportSecurityViolation(type: "vpn" | "mock_gps" | "spoof_app", action:
         "Content-Type": "application/json",
         "X-Client-Source": "native",
       },
-      body: JSON.stringify({ type, action, detail }),
+      body: JSON.stringify(body),
     });
   } catch {
     /* ignore */
   }
 }
 
-/** Block punch when VPN / spoof apps detected; also report to admin. */
+/**
+ * One solid evidence log per user/day: third-party VPN/Fake GPS apps present at native punch.
+ * Does not block punch — Attendance FLAG catches fixed fake GPS coords.
+ */
 export function assertNativeSecureForPunch(): void {
   const bridge = pureNativeBridge();
   if (!bridge) return;
   const status = readNativeSecurityStatus();
   if (!status) return;
 
-  if (status.vpn || status.vpnPackage) {
-    const detail =
-      status.detail ||
-      (status.vpnPackage
-        ? `VPN app: ${status.vpnPackage}`
-        : status.vpnActive
-          ? "VPN connected on device"
-          : "VPN detected on punch attempt");
-    reportSecurityViolation("vpn", "blocked", detail);
-    if (status.vpnActive) {
-      throw new Error("Turn off VPN before punch in/out.");
+  const apps: string[] = [];
+  if (status.vpnPackage || status.vpnActive || status.vpn) {
+    if (status.vpnPackage) {
+      apps.push(`VPN app: ${status.vpnPackage}${status.vpnActive ? " (connected)" : ""}`);
+    } else if (status.vpnActive || status.vpn) {
+      apps.push("VPN connected on device");
     }
-    throw new Error(
-      status.vpnPackage
-        ? `Remove VPN app from this phone before punch in/out (${status.vpnPackage}).`
-        : "Remove VPN app from this phone before punch in/out."
-    );
   }
-  if (status.spoofApp) {
-    const detail = status.spoofPackage
-      ? `Spoof / fake GPS app: ${status.spoofPackage}`
-      : "Fake GPS / location changer app installed";
-    reportSecurityViolation("spoof_app", "blocked", detail);
-    throw new Error(
+  if (status.spoofPackage || status.spoofApp || status.mockLikely) {
+    apps.push(
       status.spoofPackage
-        ? `Remove fake GPS / spoof apps from this phone (${status.spoofPackage}).`
-        : "Remove fake GPS / spoof apps from this phone."
+        ? `Fake GPS / spoof app: ${status.spoofPackage}`
+        : "Fake GPS / spoof app detected"
     );
   }
+  if (!apps.length) return;
+
+  const detail = `Apps at native punch-in: ${apps.join("; ")}. Pakka device evidence — third-party app(s) on phone when punching in native app.`;
+  reportSecurityViolation("punch_evidence", "punch_evidence", detail);
 }
 
 export function saveNativeSession(token: string, apiBase: string, phone: string) {

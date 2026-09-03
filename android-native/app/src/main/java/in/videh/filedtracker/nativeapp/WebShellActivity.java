@@ -218,7 +218,7 @@ public class WebShellActivity extends AppCompatActivity {
     }
 
     /**
-     * Blocks punch API calls when VPN / fake-GPS is active — works even if remote web JS is outdated.
+     * One punch-evidence report (server upserts 1 row/user/day). Does not block punch.
      */
     private void injectPunchSecurityHook(WebView view) {
         if (view == null) return;
@@ -226,34 +226,27 @@ public class WebShellActivity extends AppCompatActivity {
                 "(function(){"
                         + "if(window.__ftPunchSecurityHook)return;"
                         + "window.__ftPunchSecurityHook=1;"
-                        + "function ftSecBlock(){"
+                        + "function ftSecReport(){"
                         + "try{"
-                        + "if(!window.NativeAppBridge||!NativeAppBridge.getSecurityStatus)return null;"
+                        + "if(!window.NativeAppBridge||!NativeAppBridge.getSecurityStatus)return;"
                         + "var s=JSON.parse(NativeAppBridge.getSecurityStatus());"
-                        + "if(!s)return null;"
-                        + "if(s.vpn||s.vpnPackage){"
-                        + "var d=s.detail||(s.vpnPackage?('VPN app: '+s.vpnPackage):'VPN detected');"
-                        + "try{NativeAppBridge.reportSecurityEvent('vpn','blocked',d);}catch(e){}"
-                        + "try{fetch('/api/attendance/security-event',{method:'POST',credentials:'include',keepalive:true,headers:{'Content-Type':'application/json','X-Client-Source':'native'},body:JSON.stringify({type:'vpn',action:'blocked',detail:d})});}catch(e){}"
-                        + "return s.vpnActive?'Turn off VPN before punch in/out.':(s.vpnPackage?('Remove VPN app from this phone before punch in/out ('+s.vpnPackage+').'):'Remove VPN app from this phone before punch in/out.');"
-                        + "}"
-                        + "if(s.spoofApp||s.spoofPackage){"
-                        + "var sd=s.spoofPackage?('Spoof / fake GPS app: '+s.spoofPackage):'Fake GPS / spoof app installed';"
-                        + "try{NativeAppBridge.reportSecurityEvent('spoof_app','blocked',sd);}catch(e){}"
-                        + "try{fetch('/api/attendance/security-event',{method:'POST',credentials:'include',keepalive:true,headers:{'Content-Type':'application/json','X-Client-Source':'native'},body:JSON.stringify({type:'spoof_app',action:'blocked',detail:sd})});}catch(e){}"
-                        + "return s.spoofPackage?('Remove fake GPS / spoof apps from this phone ('+s.spoofPackage+').'):'Remove fake GPS / spoof apps from this phone.';"
-                        + "}"
+                        + "if(!s)return;"
+                        + "var apps=[];"
+                        + "if(s.vpnPackage)apps.push('VPN app: '+s.vpnPackage+(s.vpnActive?' (connected)':''));"
+                        + "else if(s.vpn||s.vpnActive)apps.push('VPN connected on device');"
+                        + "if(s.spoofPackage)apps.push('Fake GPS / spoof app: '+s.spoofPackage);"
+                        + "else if(s.spoofApp||s.mockLikely)apps.push('Fake GPS / spoof app detected');"
+                        + "if(!apps.length)return;"
+                        + "var d='Apps at native punch-in: '+apps.join('; ')+'. Pakka device evidence — third-party app(s) on phone when punching in native app.';"
+                        + "try{NativeAppBridge.reportSecurityEvent('punch_evidence','punch_evidence',d);}catch(e){}"
+                        + "try{fetch('/api/attendance/security-event',{method:'POST',credentials:'include',keepalive:true,headers:{'Content-Type':'application/json','X-Client-Source':'native'},body:JSON.stringify({type:'punch_evidence',action:'punch_evidence',detail:d})});}catch(e){}"
                         + "}catch(e){}"
-                        + "return null;"
                         + "}"
                         + "var origFetch=window.fetch;"
                         + "window.fetch=function(input,init){"
                         + "var url=typeof input==='string'?input:(input&&input.url)||'';"
                         + "var method=((init&&init.method)||(typeof input!=='string'&&input&&input.method)||'GET').toUpperCase();"
-                        + "if(method==='POST'&&/\\/api\\/attendance(\\/punch-out)?(\\?|$)/.test(url)){"
-                        + "var err=ftSecBlock();"
-                        + "if(err)return Promise.reject(new Error(err));"
-                        + "}"
+                        + "if(method==='POST'&&/\\/api\\/attendance(\\/punch-out)?(\\?|$)/.test(url)){ftSecReport();}"
                         + "return origFetch.apply(this,arguments);"
                         + "};"
                         + "})();";

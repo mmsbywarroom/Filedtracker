@@ -8,8 +8,8 @@ android {
         applicationId "in.videh.filedtracker.native"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 8
-        versionName "1.0.7"
+        versionCode 10
+        versionName "1.0.9"
     }
 
     buildTypes {

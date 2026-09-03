@@ -78,14 +78,12 @@ final class LocationTracker: NSObject, CLLocationManagerDelegate {
         if SecurityHelper.isMockLocation(loc) {
             TrackingApi.postSecurityEvent(
                 type: "mock_gps",
-                action: "blocked",
-                detail: "Fake GPS / simulated location",
+                action: "detected",
+                detail: "Fake GPS / simulated location · tracking continues (FLAG if same lat/lng)",
                 lat: loc.coordinate.latitude,
                 lng: loc.coordinate.longitude
             )
-            TrackingApi.postGpsOff(lat: loc.coordinate.latitude, lng: loc.coordinate.longitude)
-            stop()
-            return
+            // Continue tracking so FLAG can catch fixed coordinates.
         }
 
         let now = Date().timeIntervalSince1970

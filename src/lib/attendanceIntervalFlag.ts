@@ -63,7 +63,7 @@ export function isSessionPinnedByIntervals(
 }
 
 export function pinnedFlagReason(sameCount: number): string {
-  return `${sameCount} native-app thirty-minute location checks at the same lat/lng — review for possible fake GPS.`;
+  return `${sameCount} native-app thirty-minute location checks at the same lat/lng — possible fake GPS (user stayed pinned).`;
 }
 
 export function userPinnedFlagFromSessions(

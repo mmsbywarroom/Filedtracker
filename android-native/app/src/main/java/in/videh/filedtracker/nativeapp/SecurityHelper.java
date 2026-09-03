@@ -248,40 +248,44 @@ public final class SecurityHelper {
     }
 
     public static void reportViolations(Context ctx, Location loc, String action) {
+        reportPunchEvidence(ctx, loc);
+    }
+
+    /** One consolidated evidence row per day (server upserts). */
+    public static void reportPunchEvidence(Context ctx, Location loc) {
         boolean vpnActive = isVpnActive(ctx);
         String vpnPkg = findKnownVpnAppPackage(ctx);
-        if (vpnActive || vpnPkg != null) {
-            String detail;
-            if (vpnPkg != null) {
-                String named = appDisplayName(ctx, vpnPkg);
-                detail = vpnActive ? ("VPN connected · app: " + named) : ("VPN app installed: " + named);
-            } else {
-                detail = "VPN connected on device";
-            }
-            SecurityReporter.report(ctx, "vpn", action, detail, locLat(loc), locLng(loc));
-        }
         String spoofPkg = findMockGpsAppPackage(ctx);
+        boolean mock = loc != null && isMockLocation(loc);
+        if (!vpnActive && vpnPkg == null && spoofPkg == null && !mock) return;
+
+        StringBuilder apps = new StringBuilder();
+        if (vpnPkg != null) {
+            apps.append("VPN app: ").append(appDisplayName(ctx, vpnPkg));
+            if (vpnActive) apps.append(" (connected)");
+        } else if (vpnActive) {
+            apps.append("VPN connected on device");
+        }
         if (spoofPkg != null) {
-            SecurityReporter.report(
-                    ctx,
-                    "spoof_app",
-                    action,
-                    "Spoof / fake GPS app: " + appDisplayName(ctx, spoofPkg),
-                    locLat(loc),
-                    locLng(loc)
-            );
+            if (apps.length() > 0) apps.append("; ");
+            apps.append("Fake GPS / spoof app: ").append(appDisplayName(ctx, spoofPkg));
         }
-        if (loc != null && isMockLocation(loc)) {
-            String extra = spoofPkg != null ? (" · " + appDisplayName(ctx, spoofPkg)) : "";
-            SecurityReporter.report(
-                    ctx,
-                    "mock_gps",
-                    action,
-                    "Mock location flag on GPS fix" + extra,
-                    loc.getLatitude(),
-                    loc.getLongitude()
-            );
+        if (mock) {
+            if (apps.length() > 0) apps.append("; ");
+            apps.append("Mock location flag on GPS fix");
         }
+        String detail =
+                "Apps at native punch-in: "
+                        + apps
+                        + ". Pakka device evidence — third-party app(s) on phone when using native app.";
+        SecurityReporter.report(
+                ctx,
+                "punch_evidence",
+                "punch_evidence",
+                detail,
+                locLat(loc),
+                locLng(loc)
+        );
     }
 
     private static Double locLat(Location loc) {
@@ -292,30 +296,11 @@ public final class SecurityHelper {
         return loc != null ? loc.getLongitude() : null;
     }
 
+    /** Report VPN / spoof evidence — do not block punch. */
     public static void assertSecureForPunch(Context ctx, Location loc) {
-        reportViolations(ctx, loc, "blocked");
-        if (shouldBlockVpn(ctx)) {
-            String pkg = findKnownVpnAppPackage(ctx);
-            if (isVpnActive(ctx)) {
-                throw new SecurityException("Turn off VPN before punch in/out.");
-            }
-            throw new SecurityException(
-                    "Remove VPN app from this phone before punch in/out"
-                            + (pkg != null ? " (" + pkg + ")." : ".")
-            );
-        }
-        if (hasKnownMockGpsApp(ctx)) {
-            String pkg = findMockGpsAppPackage(ctx);
-            throw new SecurityException(
-                    "Remove fake GPS / spoof apps from this phone"
-                            + (pkg != null ? " (" + pkg + ")." : ".")
-            );
-        }
+        reportPunchEvidence(ctx, loc);
         if (loc == null) {
             throw new SecurityException("Could not verify GPS location.");
-        }
-        if (isMockLocation(loc)) {
-            throw new SecurityException("Fake GPS detected. Turn off mock location and use real GPS.");
         }
     }
 }
