@@ -1,5 +1,5 @@
 # Native iOS → TestFlight (not React Native)
-# Bundle: in.videh.filedtracker.aap | Team: 33AW34RHHQ
+# Bundle: in.videh.filedtracker.attendance | Team: 33AW34RHHQ
 #
 # Codemagic → Application settings → Environment variables:
 #   Variable name: CERTIFICATE_PRIVATE_KEY
@@ -21,7 +21,7 @@ workflows:
       vars:
         XCODE_PROJECT: "ios-native/AAPAttendance.xcodeproj"
         XCODE_SCHEME: "AAPAttendance"
-        BUNDLE_ID: "in.videh.filedtracker.aap"
+        BUNDLE_ID: "in.videh.filedtracker.attendance"
       xcode: latest
     scripts:
       - name: Init keychain + create/fetch App Store signing

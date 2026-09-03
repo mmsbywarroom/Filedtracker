@@ -4,7 +4,7 @@ SwiftUI app that matches the **Android Compose** screens (login, home, face punc
 
 | App | Bundle ID | Folder |
 |-----|-----------|--------|
-| **Native iOS** | `in.videh.filedtracker.aap` | `ios-native/` |
+| **Native iOS** | `in.videh.filedtracker.attendance` | `ios-native/` |
 | Native Android | `in.videh.filedtracker.native` | `android-native/` |
 | Web | browser | `src/` |
 
@@ -28,7 +28,7 @@ Windows pe iOS IPA build **nahi** ho sakti.
 1. Mac pe Xcode 15+ install karo
 2. `ios-native/AAPAttendance.xcodeproj` kholo
 3. Signing & Capabilities → **Team** `33AW34RHHQ` (or apna App Store Connect team)
-4. Bundle ID `in.videh.filedtracker.aap`
+4. Bundle ID `in.videh.filedtracker.attendance`
 5. iPhone USB se Run, ya **Product → Archive**
 6. Organizer → Distribute App → **TestFlight**, ya Codemagic `ios-testflight` workflow
 
