@@ -1,0 +1,36 @@
+# Native iOS → TestFlight (not React Native)
+# Bundle: in.videh.filedtracker.aap | Team: 33AW34RHHQ
+
+workflows:
+  ios-testflight:
+    name: iOS TestFlight
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    integrations:
+      # Codemagic UI → Team integrations → App Store Connect API key
+      # Name the integration exactly: Filedtracker
+      app_store_connect: Filedtracker
+    environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: in.videh.filedtracker.aap
+      vars:
+        XCODE_PROJECT: "ios-native/AAPAttendance.xcodeproj"
+        XCODE_SCHEME: "AAPAttendance"
+      xcode: latest
+    scripts:
+      - name: Set up code signing
+        script: xcode-project use-profiles
+      - name: Build IPA for App Store / TestFlight
+        script: |
+          xcode-project build-ipa \
+            --project "$CM_BUILD_DIR/$XCODE_PROJECT" \
+            --scheme "$XCODE_SCHEME"
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+        submit_to_app_store: false
