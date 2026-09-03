@@ -17,9 +17,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0.0</string>
+	<string>1.2.6</string>
 	<key>CFBundleVersion</key>
-	<string>1</string>
+	<string>2</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>
@@ -44,9 +44,9 @@
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>AAP Attendance uses your location to punch in and record your field route.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>AAP Attendance records your location every hour while you are punched in, including when the app is in the background.</string>
+	<string>AAP Attendance records your location every 30 minutes while you are punched in, including when the app is in the background.</string>
 	<key>NSLocationAlwaysUsageDescription</key>
-	<string>AAP Attendance records your location every hour while you are punched in, including when the app is in the background.</string>
+	<string>AAP Attendance records your location every 30 minutes while you are punched in, including when the app is in the background.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>AAP Attendance uses the camera for face punch in and punch out.</string>
 	<key>NSMicrophoneUsageDescription</key>
