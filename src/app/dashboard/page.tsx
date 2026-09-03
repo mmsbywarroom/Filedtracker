@@ -232,8 +232,10 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const staff = new URLSearchParams(window.location.search).get("staff") === "1";
-    // Never location.replace("/") here — that bounced with middleware into a refresh loop.
-    if (!isPureNativeApp() && !staff) {
+    // Temporary: allow iPhone Safari web until TestFlight external is approved.
+    // Android browser stays APK-only. Never location.replace("/") — refresh-loop risk.
+    const allowWeb = isPureNativeApp() || staff || isIosBrowser();
+    if (!allowWeb) {
       setFieldWebBlocked(true);
       setBooting(false);
       return;

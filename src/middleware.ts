@@ -53,10 +53,12 @@ export async function middleware(req: NextRequest) {
   const ua = req.headers.get("user-agent") || "";
   const nativeWebView = ua.includes("AAPNative/");
   const staffWeb = req.nextUrl.searchParams.get("staff") === "1";
+  // Temporary: iPhone Safari web until TestFlight external is live. Android stays APK-only.
+  const iosBrowser = /iPhone|iPad|iPod/i.test(ua) && !nativeWebView;
+  const fieldWebOk = nativeWebView || staffWeb || iosBrowser;
 
   if (pathname.startsWith("/dashboard")) {
-    // Field web is APK-only. Cookie + Android used to bounce /dashboard ↔ / forever.
-    if (!nativeWebView && !staffWeb) {
+    if (!fieldWebOk) {
       return NextResponse.redirect(new URL("/", req.url));
     }
     if (userTok?.role !== "user") return NextResponse.redirect(new URL("/", req.url));
@@ -76,9 +78,14 @@ export async function middleware(req: NextRequest) {
   }
 
   if (pathname === "/") {
-    // Rally users still go to the rally app. Field cookies stay on APK download.
-    if (userTok?.role === "user" && userTok.kind === "rally" && !req.nextUrl.searchParams.has("relogin")) {
-      return NextResponse.redirect(new URL("/rally", req.url));
+    if (userTok?.role === "user" && !req.nextUrl.searchParams.has("relogin")) {
+      if (userTok.kind === "rally") {
+        return NextResponse.redirect(new URL("/rally", req.url));
+      }
+      // iOS / native field session → dashboard; Android browser stays on APK landing.
+      if (userTok.kind === "field" && fieldWebOk) {
+        return NextResponse.redirect(new URL("/dashboard", req.url));
+      }
     }
     return NextResponse.next();
   }

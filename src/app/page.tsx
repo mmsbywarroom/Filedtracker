@@ -4,13 +4,14 @@ import { FormEvent, useEffect, useState } from "react";
 import { ApkDownloadLanding } from "@/components/ApkDownloadLanding";
 import { BrandMark } from "@/components/BrandMark";
 import { LangToggle, useLang } from "@/lib/i18n";
-import { isAndroidBrowser } from "@/lib/clientDevice";
+import { isAndroidBrowser, isIosBrowser } from "@/lib/clientDevice";
 import { isPureNativeApp, saveNativeSession } from "@/lib/pureNativeApp";
 
 /**
- * - Pure native WebView: OTP login (app shell still loads web UI until Compose ships)
- * - Android Chrome / browser: APK download only (no web punch)
- * - Desktop / iOS browser: APK / TestFlight landing (no field web punch)
+ * - Pure native WebView: OTP login
+ * - Android browser: APK download only
+ * - iPhone Safari: temporary web login until TestFlight external is approved
+ * - Desktop: APK landing (?staff=1 for web login)
  */
 export default function HomePage() {
   const { t } = useLang();
@@ -26,10 +27,9 @@ export default function HomePage() {
       setMode("native-login");
       return;
     }
-    // All browsers (Android + others): download landing — field web punch closed.
-    // Keep a tiny escape for ?staff=1 desktop testing if needed.
     const staff = new URLSearchParams(window.location.search).get("staff") === "1";
-    if (staff && !isAndroidBrowser()) {
+    // Temporary iOS web until TestFlight public link is live.
+    if (isIosBrowser() || (staff && !isAndroidBrowser())) {
       setMode("native-login");
       return;
     }
