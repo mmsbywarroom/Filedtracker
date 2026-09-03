@@ -146,6 +146,16 @@ const dict = {
     installAppIos: "iPhone",
     installAppIosHint: "iOS app is TestFlight-only (no APK link). Until then use Safari → Add to Home Screen.",
     downloadApk: "Download APK",
+    landingLeadAndroid:
+      "Web punch is closed. Download the official Android app for face and GPS attendance.",
+    landingLeadIos: "The iPhone app will come on TestFlight. Punch is not available on the web.",
+    landingLeadDesktop:
+      "Download the official Android app for field staff. Punch from the browser is closed.",
+    landingBullet1: "Face punch and live GPS — same rules as before",
+    landingBullet2: "Background tracking while you are punched in",
+    landingBullet3: "Existing attendance data stays on the server — nothing is deleted",
+    landingInstallHint:
+      "If Android says App not installed, uninstall the old AAP Attendance app first, then open this APK again.",
   },
   pa: {
     aap: "ਆਮ ਆਦਮੀ ਪਾਰਟੀ",
@@ -290,6 +300,16 @@ const dict = {
     installAppIos: "iPhone",
     installAppIosHint: "iOS ਐਪ TestFlight ਤੋਂ ਲੱਗੇਗੀ (APK ਲਿੰਕ ਨਹੀਂ)। ਉਸ ਤੋਂ ਪਹਿਲਾਂ Safari → Add to Home Screen।",
     downloadApk: "APK ਡਾਊਨਲੋਡ ਕਰੋ",
+    landingLeadAndroid:
+      "Web punch is closed. Download the official Android app for face and GPS attendance.",
+    landingLeadIos: "The iPhone app will come on TestFlight. Punch is not available on the web.",
+    landingLeadDesktop:
+      "Download the official Android app for field staff. Punch from the browser is closed.",
+    landingBullet1: "Face punch and live GPS — same rules as before",
+    landingBullet2: "Background tracking while you are punched in",
+    landingBullet3: "Existing attendance data stays on the server — nothing is deleted",
+    landingInstallHint:
+      "If Android says App not installed, uninstall the old AAP Attendance app first, then open this APK again.",
   },
 } as const;
 

@@ -21,14 +21,19 @@ android {
         applicationId "in.videh.filedtracker.native"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 16
-        versionName "1.2.4"
+        versionCode 17
+        versionName "1.2.5"
         manifestPlaceholders = [MAPS_API_KEY: mapsApiKey]
     }
 
     buildTypes {
+        debug {
+            debuggable true
+        }
         release {
             minifyEnabled false
+            debuggable false
+            signingConfig signingConfigs.debug
         }
     }
 

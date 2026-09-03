@@ -21,6 +21,14 @@ const nextConfig = {
       ],
     },
     {
+      source: "/:path*.apk",
+      headers: [
+        { key: "Content-Type", value: "application/vnd.android.package-archive" },
+        { key: "Content-Disposition", value: 'attachment; filename="AAP-Attendance.apk"' },
+        { key: "Cache-Control", value: "public, max-age=0, must-revalidate" },
+      ],
+    },
+    {
       source: "/weights/:path*",
       headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
     },

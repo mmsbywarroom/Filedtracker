@@ -60,11 +60,7 @@ export function ApkDownloadLanding() {
               ready ? "apk-anim-in apk-anim-delay-3" : "opacity-0"
             }`}
           >
-            {android
-              ? "Web punch band hai. Face + GPS attendance ke liye official Android app download karo."
-              : ios
-                ? "iPhone pe TestFlight se app aayegi. Web se punch nahi hota."
-                : "Field staff ke liye official Android app download karo. Browser se punch band hai."}
+            {android ? t("landingLeadAndroid") : ios ? t("landingLeadIos") : t("landingLeadDesktop")}
           </p>
 
           <div
@@ -79,21 +75,22 @@ export function ApkDownloadLanding() {
             ) : (
               <a
                 href={LATEST_NATIVE_APK}
-                download="AAP-Attendance-native.apk"
-                className="apk-cta group inline-flex h-14 items-center justify-center gap-2 rounded-2xl bg-teal-bright px-8 text-base font-bold text-ink shadow-[0_0_0_0_rgba(255,209,0,0.45)] transition hover:brightness-105"
+                className="apk-cta group inline-flex h-14 items-center justify-center gap-2 rounded-2xl bg-teal-bright px-8 text-base font-bold text-ink transition hover:brightness-105"
               >
                 <span className="apk-cta__shine" aria-hidden />
                 {t("downloadApk")}
                 <span className="text-xs font-semibold opacity-70">v{NATIVE_APK_VERSION}</span>
               </a>
             )}
-            <a
-              href="/admin"
-              className="inline-flex h-14 items-center justify-center rounded-2xl border border-white/15 px-6 text-sm font-semibold text-white/75 transition hover:border-white/35 hover:text-white"
-            >
-              Admin login
-            </a>
           </div>
+
+          <p
+            className={`mt-4 max-w-lg text-xs leading-relaxed text-white/45 ${
+              ready ? "apk-anim-in apk-anim-delay-4" : "opacity-0"
+            }`}
+          >
+            {t("landingInstallHint")}
+          </p>
 
           <ul
             className={`mt-10 grid max-w-lg gap-3 text-sm text-white/55 ${
@@ -102,15 +99,15 @@ export function ApkDownloadLanding() {
           >
             <li className="flex gap-2">
               <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-teal-bright" />
-              Face punch + live GPS — same rules as before
+              {t("landingBullet1")}
             </li>
             <li className="flex gap-2">
               <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-teal-bright" />
-              Background tracking while punched in
+              {t("landingBullet2")}
             </li>
             <li className="flex gap-2">
               <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-teal-bright" />
-              Purana attendance data server pe as-is — kuch delete nahi
+              {t("landingBullet3")}
             </li>
           </ul>
         </div>

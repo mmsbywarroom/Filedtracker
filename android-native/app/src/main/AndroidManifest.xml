@@ -13,8 +13,6 @@
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-    <!-- Sideloaded APK: needed so we can reliably see VPN / fake-GPS packages on Android 11+ -->
-    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
 
     <!-- Package visibility so we can detect common VPN / fake-GPS apps on Android 11+ -->
     <queries>
