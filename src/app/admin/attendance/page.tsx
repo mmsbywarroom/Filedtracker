@@ -99,6 +99,26 @@ function fmtTime(iso: string | null) {
   return new Date(iso).toLocaleString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit" });
 }
 
+/** Same rounding as FLAG / coordKey — rows that share this key are "same location". */
+function snapCoordKey(lat: number, lng: number) {
+  return `${lat.toFixed(5)},${lng.toFixed(5)}`;
+}
+
+/** Keys that appear 2+ times among valid snapshots in a list. */
+function duplicatedCoordKeys(list: SnapshotRow[]) {
+  const counts = new Map<string, number>();
+  for (const s of list) {
+    if (s.valid === false) continue;
+    const k = snapCoordKey(s.lat, s.lng);
+    counts.set(k, (counts.get(k) || 0) + 1);
+  }
+  const dups = new Set<string>();
+  for (const [k, c] of Array.from(counts.entries())) {
+    if (c >= 2) dups.add(k);
+  }
+  return { dups, counts };
+}
+
 function statusClass(status: string) {
   if (status === "present") return "bg-emerald-50 text-emerald-700";
   if (status === "half_day") return "bg-amber-50 text-amber-800";
@@ -789,11 +809,17 @@ export default function AttendanceModulePage() {
                       </p>
                     );
                   }
+                  const { dups, counts } = duplicatedCoordKeys(list);
                   return (
                     <div key={idx} className={flagShowAll && idx > 0 ? "mt-6 border-t border-navy/10 pt-4" : ""}>
                       {flagShowAll && "punchInAt" in sess && sess.punchInAt ? (
                         <p className="mb-2 text-xs font-semibold text-navy/55">
                           Session {idx + 1}: {fmtDateTime(sess.punchInAt)} → {fmtDateTime(sess.punchOutAt)}
+                        </p>
+                      ) : null}
+                      {dups.size > 0 ? (
+                        <p className="mb-2 text-[11px] text-violet-700">
+                          Violet rows = same lat/lng (rounded to 5 decimals) appearing more than once.
                         </p>
                       ) : null}
                       <table className="min-w-full text-left text-sm">
@@ -808,27 +834,39 @@ export default function AttendanceModulePage() {
                           </tr>
                         </thead>
                         <tbody>
-                          {list.map((snap, i) => (
-                            <tr
-                              key={`${snap.slot}-${i}`}
-                              className={`border-t border-navy/5 ${
-                                snap.valid === false
-                                  ? "bg-red-50/60 opacity-70"
-                                  : snap.sameGroup || !flagShowAll
-                                    ? "bg-violet-50/80"
-                                    : ""
-                              }`}
-                            >
-                              <td className="px-2 py-2">{i + 1}</td>
-                              <td className="px-2 py-2 text-xs whitespace-nowrap">
-                                {snap.scheduledAt ? fmtDateTime(snap.scheduledAt) : "—"}
-                              </td>
-                              <td className="px-2 py-2 text-xs">{snap.slotLabel || `Slot ${snap.slot}`}</td>
-                              <td className="px-2 py-2 font-mono text-xs">{snap.lat.toFixed(6)}</td>
-                              <td className="px-2 py-2 font-mono text-xs">{snap.lng.toFixed(6)}</td>
-                              <td className="px-2 py-2 text-xs text-navy/55">{fmtDateTime(snap.recordedAt)}</td>
-                            </tr>
-                          ))}
+                          {list.map((snap, i) => {
+                            const key = snapCoordKey(snap.lat, snap.lng);
+                            const sameLoc = snap.valid !== false && dups.has(key);
+                            const sameCount = counts.get(key) || 0;
+                            return (
+                              <tr
+                                key={`${snap.slot}-${i}`}
+                                className={`border-t border-navy/5 ${
+                                  snap.valid === false
+                                    ? "bg-red-50/60 opacity-70"
+                                    : sameLoc
+                                      ? "bg-violet-100 font-medium ring-1 ring-inset ring-violet-300"
+                                      : ""
+                                }`}
+                              >
+                                <td className="px-2 py-2">
+                                  {i + 1}
+                                  {sameLoc ? (
+                                    <span className="ml-1 rounded bg-violet-200 px-1.5 py-0.5 text-[10px] font-semibold text-violet-900">
+                                      same ×{sameCount}
+                                    </span>
+                                  ) : null}
+                                </td>
+                                <td className="px-2 py-2 text-xs whitespace-nowrap">
+                                  {snap.scheduledAt ? fmtDateTime(snap.scheduledAt) : "—"}
+                                </td>
+                                <td className="px-2 py-2 text-xs">{snap.slotLabel || `Slot ${snap.slot}`}</td>
+                                <td className="px-2 py-2 font-mono text-xs">{snap.lat.toFixed(6)}</td>
+                                <td className="px-2 py-2 font-mono text-xs">{snap.lng.toFixed(6)}</td>
+                                <td className="px-2 py-2 text-xs text-navy/55">{fmtDateTime(snap.recordedAt)}</td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
