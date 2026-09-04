@@ -39,7 +39,7 @@ function statusClass(s: Row["alwaysStatus"]) {
 
 export default function LocationPermissionsPage() {
   const [q, setQ] = useState("");
-  const [status, setStatus] = useState("all");
+  const [status, setStatus] = useState("");
   const [rows, setRows] = useState<Row[]>([]);
   const [summary, setSummary] = useState({ total: 0, always: 0, whileUsing: 0, denied: 0, unknown: 0 });
   const [zone, setZone] = useState("");
@@ -53,7 +53,7 @@ export default function LocationPermissionsPage() {
     setLoading(true);
     const params = new URLSearchParams();
     if (q) params.set("q", q);
-    if (status !== "all") params.set("status", status);
+    if (status) params.set("status", status);
     const res = await fetch(`/api/admin/location-permissions?${params}`);
     if (res.status === 401) {
       window.location.href = "/admin/login";
@@ -137,24 +137,6 @@ export default function LocationPermissionsPage() {
         ))}
       </div>
 
-      <div className="mt-4">
-        <label className="text-xs font-semibold text-navy/60">
-          Always status
-          <select
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-            className="admin-field mt-1 block h-11 min-w-[180px] rounded-xl border border-navy/15 bg-white px-3 text-sm shadow-sm"
-          >
-            <option value="all">All statuses</option>
-            <option value="always">Always allow</option>
-            <option value="while_using">While using only</option>
-            <option value="denied">No location</option>
-            <option value="unknown">Not reported yet</option>
-            <option value="not_always">Not Always (all issues)</option>
-          </select>
-        </label>
-      </div>
-
       <AdminReportToolbar
         q={q}
         onQ={setQ}
@@ -178,6 +160,19 @@ export default function LocationPermissionsPage() {
           setPage(1);
         }}
         designations={designations}
+        reason={status}
+        onReason={(v) => {
+          setStatus(v);
+          setPage(1);
+        }}
+        reasonLabel="Always location"
+        reasons={[
+          { value: "always", label: "Always allow" },
+          { value: "while_using", label: "While using only" },
+          { value: "denied", label: "No location" },
+          { value: "unknown", label: "Not reported yet" },
+          { value: "not_always", label: "Not Always (all issues)" },
+        ]}
         onApply={load}
         onCsv={() => downloadCsv("location-always-allow", exportHeaders, exportRows)}
         onPdf={() => downloadPdf("Always location (native)", exportHeaders, exportRows)}

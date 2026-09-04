@@ -21,6 +21,7 @@ export function AdminReportToolbar({
   reason,
   onReason,
   reasons,
+  reasonLabel = "Reason",
   onApply,
   onCsv,
   onPdf,
@@ -42,6 +43,7 @@ export function AdminReportToolbar({
   reason?: string;
   onReason?: (v: string) => void;
   reasons?: { value: string; label: string }[];
+  reasonLabel?: string;
   onApply?: () => void;
   onCsv: () => void;
   onPdf: () => void;
@@ -93,9 +95,9 @@ export function AdminReportToolbar({
       </label>
       {(reasons?.length ?? 0) > 0 && (
         <label className="text-xs font-semibold text-navy/60">
-          Reason
+          {reasonLabel}
           <select value={reason ?? ""} onChange={(e) => onReason?.(e.target.value)} className={field}>
-            <option value="">All reasons</option>
+            <option value="">All</option>
             {reasons!.map((r) => (
               <option key={r.value} value={r.value}>
                 {r.label}
