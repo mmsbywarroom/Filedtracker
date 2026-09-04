@@ -6,6 +6,7 @@ import { autoPunchOutIfStale, closeOpenAttendance } from "@/lib/punchOut";
 import { assertInsideCallCenterSite, isCallCenterDesignation } from "@/lib/callCenterGeofence";
 import { mergeMapProbeLog } from "@/lib/gpsSpoofVerdict";
 import { isPanIndiaPunchPhone } from "@/lib/panIndiaPunch";
+import { maybeRecordDueIntervalSnapshot } from "@/lib/recordDueIntervalSnapshot";
 
 export async function POST(req: Request) {
   const s = await requireUser(req);
@@ -154,6 +155,19 @@ export async function POST(req: Request) {
       where: { id: open.id },
       data: spreadUpdate,
     });
+  }
+
+  // Fill due 30-min FLAG slot from live GPS when track/heartbeat is flowing (native only).
+  const snapLat = spreadUpdate.lastKnownLat ?? (hasHeartbeat ? hbLat : NaN);
+  const snapLng = spreadUpdate.lastKnownLng ?? (hasHeartbeat ? hbLng : NaN);
+  if (open.punchInClient === "native" && Number.isFinite(snapLat) && Number.isFinite(snapLng)) {
+    await maybeRecordDueIntervalSnapshot({
+      attendanceId: open.id,
+      punchInAt: open.punchInAt,
+      punchInClient: open.punchInClient,
+      lat: snapLat,
+      lng: snapLng,
+    }).catch(() => null);
   }
 
   return NextResponse.json({ ok: true });

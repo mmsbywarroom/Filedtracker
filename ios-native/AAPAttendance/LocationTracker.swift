@@ -120,8 +120,8 @@ final class LocationTracker: NSObject, CLLocationManagerDelegate {
         guard !SessionStore.hasSentSlot(slot) else { return }
         let due = punch + Double(slot) * flagIntervalSec
         let now = Date().timeIntervalSince1970
-        // Same window as server: early 2 min … late 15 min
-        guard now >= due - 120, now <= due + 15 * 60 else { return }
+        // Same window as server: early 2 min … late 25 min (Doze / delayed wake)
+        guard now >= due - 120, now <= due + 25 * 60 else { return }
         TrackingApi.postIntervalSnapshot(slot: slot, lat: loc.coordinate.latitude, lng: loc.coordinate.longitude) { ok in
             if ok { SessionStore.markSlotSent(slot) }
         }

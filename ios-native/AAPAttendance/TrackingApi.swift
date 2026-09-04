@@ -16,7 +16,7 @@ enum TrackingApi {
         req.timeoutInterval = 25
         URLSession.shared.dataTask(with: req) { _, res, _ in
             let code = (res as? HTTPURLResponse)?.statusCode ?? 0
-            completion?(code >= 200 && code < 300 || code == 429)
+            completion?(code >= 200 && code < 300)
         }.resume()
     }
 

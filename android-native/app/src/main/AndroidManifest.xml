@@ -12,6 +12,8 @@
 
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
 
     <!-- Package visibility so we can detect common VPN / fake-GPS apps on Android 11+ -->
     <queries>
@@ -90,6 +92,14 @@
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name="in.videh.filedtracker.bglocation.IntervalAlarmReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="in.videh.filedtracker.INTERVAL_CHECK" />
             </intent-filter>
         </receiver>
     </application>

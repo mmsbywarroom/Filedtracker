@@ -46,7 +46,8 @@ public final class TrackingApi {
                 if (res.isSuccessful()) return true;
                 String msg = res.body() != null ? res.body().string() : "";
                 Log.w(TAG, "interval-snapshot " + res.code() + " " + msg);
-                return res.code() == 429 || msg.contains("alreadyRecorded");
+                // Do not treat 429 as success — slot must stay unsent so we retry in-window.
+                return false;
             }
         } catch (Exception e) {
             Log.e(TAG, "postIntervalSnapshot failed", e);

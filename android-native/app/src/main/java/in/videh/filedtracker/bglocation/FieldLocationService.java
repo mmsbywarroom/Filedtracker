@@ -35,6 +35,7 @@ public class FieldLocationService extends Service {
     private static final String TAG = "FTLocationService";
     private static final String CHANNEL_ID = "ft_field_tracking";
     private static final int NOTIFICATION_ID = 41001;
+    public static final String ACTION_INTERVAL_CHECK = "in.videh.filedtracker.ACTION_INTERVAL_CHECK";
     private static final long TICK_MS = 60_000L;
     private static final long TRACK_MS = 15_000L;
     private static final long HEARTBEAT_MS = 120_000L;
@@ -88,6 +89,7 @@ public class FieldLocationService extends Service {
         try {
             TrackingPrefs.saveSession(ctx, apiBase, token, punchInAt);
             startExisting(ctx);
+            IntervalAlarms.scheduleNext(ctx);
         } catch (Exception e) {
             Log.e(TAG, "FieldLocationService.start failed", e);
         }
@@ -103,13 +105,31 @@ public class FieldLocationService extends Service {
             } else {
                 ctx.startService(intent);
             }
+            IntervalAlarms.scheduleNext(ctx);
         } catch (Exception e) {
             Log.e(TAG, "FieldLocationService.startExisting failed", e);
         }
     }
 
+    /** Alarm / boot asks for an immediate 30-min slot attempt. */
+    public static void requestIntervalCheck(Context ctx) {
+        try {
+            if (!TrackingPrefs.isActive(ctx)) return;
+            Intent intent = new Intent(ctx, FieldLocationService.class);
+            intent.setAction(ACTION_INTERVAL_CHECK);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                ctx.startForegroundService(intent);
+            } else {
+                ctx.startService(intent);
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "requestIntervalCheck failed", e);
+        }
+    }
+
     public static void stop(Context ctx) {
         try {
+            IntervalAlarms.cancel(ctx);
             TrackingPrefs.clear(ctx);
             ctx.stopService(new Intent(ctx, FieldLocationService.class));
         } catch (Exception e) {
@@ -157,6 +177,10 @@ public class FieldLocationService extends Service {
             handler.removeCallbacks(trackRunnable);
             handler.post(trackRunnable);
             handler.post(tickRunnable);
+            IntervalAlarms.scheduleNext(this);
+            if (intent != null && ACTION_INTERVAL_CHECK.equals(intent.getAction())) {
+                handler.post(this::runIntervalTick);
+            }
         } catch (Exception e) {
             Log.e(TAG, "onStartCommand setup failed", e);
         }
@@ -312,7 +336,10 @@ public class FieldLocationService extends Service {
                 if (ok) {
                     TrackingPrefs.markSlotSent(this, dueSlot);
                     Log.i(TAG, "interval snapshot slot=" + dueSlot);
+                    IntervalAlarms.scheduleNext(this);
                 }
+            } else {
+                IntervalAlarms.scheduleNext(this);
             }
         });
     }
