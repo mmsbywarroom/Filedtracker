@@ -35,7 +35,19 @@ type Row = {
   flagged?: boolean;
   flagReason?: string;
   flagSameCount?: number;
+  intervalSnapCount?: number;
+  maxIntervalSnaps?: number;
+  nativeSessionCount?: number;
   hasSameInOutSession?: boolean;
+};
+
+type IntervalHealth = {
+  nativeUsers: number;
+  withAnySnapshot: number;
+  with4PlusSnapshots: number;
+  with8PlusSnapshots: number;
+  totalSnapshots: number;
+  maxSnapshotsOneUser: number;
 };
 
 type Summary = {
@@ -120,6 +132,7 @@ export default function AttendanceModulePage() {
   const [sector, setSector] = useState("");
   const [q, setQ] = useState("");
   const [allRows, setAllRows] = useState<Row[]>([]);
+  const [intervalHealth, setIntervalHealth] = useState<IntervalHealth | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -148,6 +161,7 @@ export default function AttendanceModulePage() {
     }
     const data = await res.json();
     setAllRows(data.rows || []);
+    setIntervalHealth(data.intervalHealth || null);
     setPage(1);
   }
 
@@ -359,6 +373,29 @@ export default function AttendanceModulePage() {
         only): 8+ thirty-minute
         location checks at the same lat/lng during a session (no block — admin review only).
       </p>
+
+      {intervalHealth ? (
+        <div className="mt-4 rounded-2xl border border-navy/10 bg-white px-4 py-3 text-sm text-navy/80 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wider text-teal">30-min location checks (native app)</p>
+          <p className="mt-1">
+            Native punch users: <strong>{intervalHealth.nativeUsers}</strong>
+            {" · "}
+            Got ≥1 check: <strong>{intervalHealth.withAnySnapshot}</strong>
+            {" · "}
+            Got ≥4 checks (~2h): <strong>{intervalHealth.with4PlusSnapshots}</strong>
+            {" · "}
+            Got ≥8 checks (~4h): <strong>{intervalHealth.with8PlusSnapshots}</strong>
+            {" · "}
+            Total checks saved: <strong>{intervalHealth.totalSnapshots}</strong>
+            {" · "}
+            Max on one user: <strong>{intervalHealth.maxSnapshotsOneUser}</strong>
+          </p>
+          <p className="mt-1 text-xs text-navy/50">
+            Flagged (same lat/lng ×8) can stay 0 even when checks are working — only pinned/fake GPS usually matches exactly.
+            If &quot;Got ≥1 check&quot; is near 0 while many native punches exist, Always location / background service is failing.
+          </p>
+        </div>
+      ) : null}
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
         <div className="rounded-2xl bg-emerald-600 px-4 py-3 text-white shadow-card">
@@ -674,6 +711,12 @@ export default function AttendanceModulePage() {
                     ) : (
                       <span className="text-xs text-navy/35">—</span>
                     )}
+                    {(r.nativeSessionCount || 0) > 0 ? (
+                      <p className="mt-1 text-[10px] text-navy/45">
+                        30-min checks: {r.intervalSnapCount || 0}
+                        {(r.maxIntervalSnaps || 0) > 0 ? ` (max ${r.maxIntervalSnaps})` : ""}
+                      </p>
+                    ) : null}
                     {r.flagged && r.flagSameCount ? (
                       <button
                         type="button"

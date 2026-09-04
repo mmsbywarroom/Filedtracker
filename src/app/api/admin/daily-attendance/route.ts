@@ -140,13 +140,6 @@ export async function GET(req: Request) {
   const onLeave = new Set(leaves.map((l) => l.userId));
   const markByUser = new Map(marks.map((m) => [m.userId, m]));
 
-  let present = 0;
-  let halfDay = 0;
-  let absent = 0;
-  let leave = 0;
-  let pending = 0;
-  let flagged = 0;
-
   const allRows = users
     .filter((u) => canSeeUser(s.admin, u))
     .map((u) => {
@@ -167,13 +160,21 @@ export async function GET(req: Request) {
       });
       const { status, source, reason, hours, firstIn, sessionCount } = resolved;
 
+      const nativeSessions = sessions.filter((sess) => sess.punchInClient === "native");
+      const intervalSnapCount = nativeSessions.reduce(
+        (sum, sess) => sum + (snapsByAttendance.get(sess.id)?.length || 0),
+        0
+      );
+      const maxIntervalSnaps = nativeSessions.reduce(
+        (max, sess) => Math.max(max, snapsByAttendance.get(sess.id)?.length || 0),
+        0
+      );
+
       // FLAG only from native-app punch-in sessions (≥8 identical 30-min lat/lng checks).
       const pinFlag = userPinnedFlagFromSessions(
-        sessions
-          .filter((sess) => sess.punchInClient === "native")
-          .map((sess) => ({
-            snapshots: snapsByAttendance.get(sess.id) || [],
-          }))
+        nativeSessions.map((sess) => ({
+          snapshots: snapsByAttendance.get(sess.id) || [],
+        }))
       );
 
       const lastOut = sessions.length
@@ -237,6 +238,9 @@ export async function GET(req: Request) {
         flagged: pinFlag.flagged,
         flagReason: pinFlag.reason,
         flagSameCount: pinFlag.sameCount,
+        intervalSnapCount,
+        maxIntervalSnaps,
+        nativeSessionCount: nativeSessions.length,
         hasSameInOutSession,
       };
     });
@@ -257,6 +261,12 @@ export async function GET(req: Request) {
     return true;
   });
 
+  let present = 0;
+  let halfDay = 0;
+  let absent = 0;
+  let leave = 0;
+  let pending = 0;
+  let flagged = 0;
   for (const r of rows) {
     if (r.status === "present") present += 1;
     else if (r.status === "half_day") halfDay += 1;
@@ -266,10 +276,26 @@ export async function GET(req: Request) {
     if (r.flagged) flagged += 1;
   }
 
+  // Health of 30-min FLAG pipeline (independent of "same lat/lng x8" flag count).
+  const nativeUsers = rows.filter((r) => (r.nativeSessionCount || 0) > 0);
+  const withAnySnap = nativeUsers.filter((r) => (r.intervalSnapCount || 0) > 0);
+  const with4Plus = nativeUsers.filter((r) => (r.maxIntervalSnaps || 0) >= 4);
+  const with8Plus = nativeUsers.filter((r) => (r.maxIntervalSnaps || 0) >= 8);
+  const totalSnaps = nativeUsers.reduce((s, r) => s + (r.intervalSnapCount || 0), 0);
+  const maxSnapsOneUser = nativeUsers.reduce((m, r) => Math.max(m, r.maxIntervalSnaps || 0), 0);
+
   return NextResponse.json({
     date,
     rows,
     summary: { present, halfDay, absent, leave, pending, flagged, total: rows.length },
+    intervalHealth: {
+      nativeUsers: nativeUsers.length,
+      withAnySnapshot: withAnySnap.length,
+      with4PlusSnapshots: with4Plus.length,
+      with8PlusSnapshots: with8Plus.length,
+      totalSnapshots: totalSnaps,
+      maxSnapshotsOneUser: maxSnapsOneUser,
+    },
     rules: {
       present: `Punch in by 10:30 AM and stay on duty 6–12 hours`,
       halfDay: `Punch in after 10:30 AM and by 1:00 PM`,
