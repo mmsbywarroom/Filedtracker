@@ -8,10 +8,14 @@ import {
 
 /** Public — native apps poll this to force-update before punch. */
 export async function GET() {
+  const base = (process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "https://filed.videh.co.in").replace(
+    /\/$/,
+    ""
+  );
   return NextResponse.json({
     androidVersionCode: NATIVE_APK_VERSION_CODE,
     androidVersionName: NATIVE_APK_VERSION,
-    apkUrl: LATEST_NATIVE_APK,
+    apkUrl: `${base}${LATEST_NATIVE_APK}`,
     iosTestFlightUrl: IOS_TESTFLIGHT_URL,
   });
 }

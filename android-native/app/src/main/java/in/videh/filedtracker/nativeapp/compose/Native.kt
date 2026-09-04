@@ -6,6 +6,7 @@ import android.content.ContextWrapper
 import android.content.pm.PackageManager
 import android.location.Location
 import `in`.videh.filedtracker.nativeapp.LocationHelper
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.json.JSONArray
 import org.json.JSONObject
@@ -119,5 +120,11 @@ fun JSONObject.doubleOrNull(key: String): Double? {
 fun JSONArray.objects(): List<JSONObject> =
     (0 until length()).mapNotNull { optJSONObject(it) }
 
-fun errorText(e: Throwable, fallback: String): String =
-    e.message?.takeIf { it.isNotBlank() } ?: fallback
+fun errorText(e: Throwable, fallback: String): String {
+    // Compose cancels in-flight work when you leave a screen — never show that as a red error.
+    if (e is CancellationException) return ""
+    val msg = e.message?.trim().orEmpty()
+    if (msg.contains("coroutine scope left the composition", ignoreCase = true)) return ""
+    if (msg.contains("Job was cancelled", ignoreCase = true)) return ""
+    return msg.ifBlank { fallback }
+}

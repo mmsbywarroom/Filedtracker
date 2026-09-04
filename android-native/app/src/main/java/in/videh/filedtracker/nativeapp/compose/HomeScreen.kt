@@ -82,6 +82,7 @@ import `in`.videh.filedtracker.nativeapp.R
 import `in`.videh.filedtracker.nativeapp.SecurityHelper
 import `in`.videh.filedtracker.nativeapp.SecurityReporter
 import `in`.videh.filedtracker.nativeapp.SessionStore
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -165,8 +166,11 @@ fun HomeScreen(
             openSession = payload.second.optJSONObject("open")
             todayDistance = payload.second.optDouble("todayDistanceMeters", 0.0)
             todayHours = payload.second.optDouble("todayHoursWorked", 0.0)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
-            say(errorText(e, "Could not load dashboard"), true)
+            val text = errorText(e, "Could not load dashboard")
+            if (text.isNotBlank()) say(text, true)
         } finally {
             loading = false
         }

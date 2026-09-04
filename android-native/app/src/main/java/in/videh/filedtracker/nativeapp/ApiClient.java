@@ -59,7 +59,7 @@ public final class ApiClient {
                 .addHeader("Authorization", "Bearer " + token)
                 .addHeader("X-Client-Source", "native")
                 .addHeader("Content-Type", "application/json")
-                .addHeader("User-Agent", "AAPAttendanceNative/1.3.2");
+                .addHeader("User-Agent", "AAPAttendanceNative/1.3.4");
     }
 
     /** Public — no auth. Used for force-update gate. */

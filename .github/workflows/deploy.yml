@@ -19,7 +19,7 @@ jobs:
           ls -lh filedtracker.tar.gz
           docker images filedtracker:latest
 
-      # Free disk BEFORE scp — otherwise copy fails with "Process exited with status 1"
+      # Free disk BEFORE scp — keep the live app RUNNING so a failed upload cannot leave 502.
       - name: Free disk on EC2 before upload
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -34,17 +34,11 @@ jobs:
             sudo mkdir -p /opt/filedtracker
             sudo chown ec2-user:ec2-user /opt/filedtracker
             cd /opt/filedtracker || true
-            # Drop old tarball / stopped app so scp has room
+            # Drop old tarball only — do NOT stop/rmi the running app image here.
             rm -f filedtracker.tar.gz /tmp/filedtracker.tar.gz 2>/dev/null || true
-            if [ -f docker-compose.prod.yml ]; then
-              sudo docker compose -f docker-compose.prod.yml stop app || true
-              sudo docker compose -f docker-compose.prod.yml rm -f app || true
-            fi
-            sudo docker rmi filedtracker:latest || true
             sudo docker container prune -f || true
-            sudo docker image prune -af || true
+            sudo docker image prune -f || true
             sudo docker builder prune -af || true
-            sudo docker system prune -af || true
             sudo journalctl --vacuum-size=40M >/dev/null 2>&1 || true
             sudo find /var/lib/docker/containers -name '*-json.log' -type f -exec truncate -s 0 {} \; 2>/dev/null || true
             sudo dnf clean all >/dev/null 2>&1 || sudo yum clean all >/dev/null 2>&1 || true

@@ -72,6 +72,7 @@ import `in`.videh.filedtracker.nativeapp.LocationHelper
 import `in`.videh.filedtracker.nativeapp.R
 import `in`.videh.filedtracker.nativeapp.SecurityHelper
 import `in`.videh.filedtracker.nativeapp.SessionStore
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -280,8 +281,11 @@ fun FaceScreen(
                         resetForRetry()
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
-                setStatus(errorText(e, "Could not complete. Try again."), true)
+                val text = errorText(e, "Could not complete. Try again.")
+                if (text.isNotBlank()) setStatus(text, true)
                 resetForRetry()
             }
         }
