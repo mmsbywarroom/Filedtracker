@@ -212,7 +212,8 @@ export default function AttendanceModulePage() {
     return () => window.clearInterval(id);
   }, [loadMapUsers]);
 
-  const rows = useMemo(() => {
+  /** Geo / search / client filters — status & flag cards count from this so chips stay accurate. */
+  const baseRows = useMemo(() => {
     const sectorQ = sector.trim().toLowerCase();
     const textQ = q.trim().toLowerCase();
     return allRows.filter((r) => {
@@ -221,9 +222,6 @@ export default function AttendanceModulePage() {
       if (assembly && r.assemblyName !== assembly) return false;
       if (designation && r.designation !== designation) return false;
       if (sectorQ && !(r.sectorAllotted || "").toLowerCase().includes(sectorQ)) return false;
-      if (statusFilter && r.status !== statusFilter) return false;
-      if (flagFilter === "flagged" && !r.flagged) return false;
-      if (flagFilter === "not_flagged" && r.flagged) return false;
       if (sameCoordsFilter === "yes" && !r.hasSameInOutSession) return false;
       if (sameCoordsFilter === "no" && r.hasSameInOutSession) return false;
       if (clientFilter === "none" && r.punchInClient) return false;
@@ -239,11 +237,20 @@ export default function AttendanceModulePage() {
       }
       return true;
     });
-  }, [allRows, zone, district, assembly, designation, sector, statusFilter, flagFilter, sameCoordsFilter, clientFilter, q]);
+  }, [allRows, zone, district, assembly, designation, sector, sameCoordsFilter, clientFilter, q]);
+
+  const rows = useMemo(() => {
+    return baseRows.filter((r) => {
+      if (statusFilter && r.status !== statusFilter) return false;
+      if (flagFilter === "flagged" && !r.flagged) return false;
+      if (flagFilter === "not_flagged" && r.flagged) return false;
+      return true;
+    });
+  }, [baseRows, statusFilter, flagFilter]);
 
   const summary = useMemo(() => {
-    const s: Summary = { present: 0, halfDay: 0, absent: 0, leave: 0, pending: 0, flagged: 0, total: rows.length };
-    for (const r of rows) {
+    const s: Summary = { present: 0, halfDay: 0, absent: 0, leave: 0, pending: 0, flagged: 0, total: baseRows.length };
+    for (const r of baseRows) {
       if (r.status === "present") s.present += 1;
       else if (r.status === "half_day") s.halfDay += 1;
       else if (r.status === "leave") s.leave += 1;
@@ -252,7 +259,22 @@ export default function AttendanceModulePage() {
       if (r.flagged) s.flagged += 1;
     }
     return s;
-  }, [rows]);
+  }, [baseRows]);
+
+  function selectSummaryStatus(next: string) {
+    setFlagFilter("");
+    setStatusFilter((cur) => (cur === next ? "" : next));
+  }
+
+  function selectSummaryFlagged() {
+    setStatusFilter("");
+    setFlagFilter((cur) => (cur === "flagged" ? "" : "flagged"));
+  }
+
+  function selectSummaryTotal() {
+    setStatusFilter("");
+    setFlagFilter("");
+  }
 
   useEffect(() => {
     setPage(1);
@@ -418,37 +440,87 @@ export default function AttendanceModulePage() {
       ) : null}
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
-        <div className="rounded-2xl bg-emerald-600 px-4 py-3 text-white shadow-card">
-          <p className="text-xs uppercase tracking-wider text-white/75">Present</p>
-          <p className="text-2xl font-semibold">{summary.present}</p>
-        </div>
-        <div className="rounded-2xl bg-amber-500 px-4 py-3 text-white shadow-card">
-          <p className="text-xs uppercase tracking-wider text-white/75">Half-day</p>
-          <p className="text-2xl font-semibold">{summary.halfDay}</p>
-        </div>
-        <div className="rounded-2xl bg-orange-500 px-4 py-3 text-white shadow-card">
-          <p className="text-xs uppercase tracking-wider text-white/75">Pending</p>
-          <p className="text-2xl font-semibold">{summary.pending}</p>
-        </div>
-        <div className="rounded-2xl bg-red-600 px-4 py-3 text-white shadow-card">
-          <p className="text-xs uppercase tracking-wider text-white/75">{absentOrInProgressLabel(date)}</p>
-          <p className="text-xs text-white/70">{absentOrInProgressHint(date)}</p>
-          <p className="text-2xl font-semibold">{summary.absent}</p>
-        </div>
-        <div className="rounded-2xl bg-sky-600 px-4 py-3 text-white shadow-card">
-          <p className="text-xs uppercase tracking-wider text-white/75">Leave</p>
-          <p className="text-2xl font-semibold">{summary.leave}</p>
-        </div>
-        <div className="rounded-2xl bg-violet-600 px-4 py-3 text-white shadow-card">
-          <p className="text-xs uppercase tracking-wider text-white/75">Flagged</p>
-          <p className="text-xs text-white/70">Same lat/lng ×8</p>
-          <p className="text-2xl font-semibold">{summary.flagged}</p>
-        </div>
-        <div className="rounded-2xl bg-ink px-4 py-3 text-white shadow-card">
-          <p className="text-xs uppercase tracking-wider text-white/75">Total</p>
-          <p className="text-2xl font-semibold">{summary.total}</p>
-        </div>
+        {(
+          [
+            {
+              key: "present",
+              label: "Present",
+              value: summary.present,
+              active: statusFilter === "present" && !flagFilter,
+              onClick: () => selectSummaryStatus("present"),
+              className: "bg-emerald-600",
+            },
+            {
+              key: "half_day",
+              label: "Half-day",
+              value: summary.halfDay,
+              active: statusFilter === "half_day" && !flagFilter,
+              onClick: () => selectSummaryStatus("half_day"),
+              className: "bg-amber-500",
+            },
+            {
+              key: "pending",
+              label: "Pending",
+              value: summary.pending,
+              active: statusFilter === "pending" && !flagFilter,
+              onClick: () => selectSummaryStatus("pending"),
+              className: "bg-orange-500",
+            },
+            {
+              key: "absent",
+              label: absentOrInProgressLabel(date),
+              hint: absentOrInProgressHint(date),
+              value: summary.absent,
+              active: statusFilter === "absent" && !flagFilter,
+              onClick: () => selectSummaryStatus("absent"),
+              className: "bg-red-600",
+            },
+            {
+              key: "leave",
+              label: "Leave",
+              value: summary.leave,
+              active: statusFilter === "leave" && !flagFilter,
+              onClick: () => selectSummaryStatus("leave"),
+              className: "bg-sky-600",
+            },
+            {
+              key: "flagged",
+              label: "Flagged",
+              hint: "Same lat/lng ×8",
+              value: summary.flagged,
+              active: flagFilter === "flagged" && !statusFilter,
+              onClick: selectSummaryFlagged,
+              className: "bg-violet-600",
+            },
+            {
+              key: "total",
+              label: "Total",
+              value: summary.total,
+              active: !statusFilter && !flagFilter,
+              onClick: selectSummaryTotal,
+              className: "bg-ink",
+            },
+          ] as const
+        ).map((card) => (
+          <button
+            key={card.key}
+            type="button"
+            onClick={card.onClick}
+            aria-pressed={card.active}
+            title={`Filter: ${card.label}`}
+            className={`rounded-2xl px-4 py-3 text-left text-white shadow-card transition hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-white/80 ${
+              card.className
+            } ${card.active ? "ring-2 ring-white" : "opacity-95"}`}
+          >
+            <p className="text-xs uppercase tracking-wider text-white/75">{card.label}</p>
+            {"hint" in card && card.hint ? (
+              <p className="text-xs text-white/70">{card.hint}</p>
+            ) : null}
+            <p className="text-2xl font-semibold tabular-nums">{card.value}</p>
+          </button>
+        ))}
       </div>
+      <p className="mt-2 text-xs text-navy/45">Tap a summary card to filter the list · tap again to clear</p>
 
       <div className="admin-filters mt-4 mb-4 grid gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8">
         <label className="text-xs font-medium text-navy/55">
