@@ -1,6 +1,8 @@
 package `in`.videh.filedtracker.nativeapp.compose
 
 import android.Manifest
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -105,6 +107,9 @@ fun HomeScreen(
     var isError by remember { mutableStateOf(false) }
     var gpsText by remember { mutableStateOf("") }
     var reloadKey by remember { mutableStateOf(0) }
+    var updateRequired by remember { mutableStateOf(false) }
+    var updateApkUrl by remember { mutableStateOf(SessionStore.apiBase(context).trimEnd('/') + "/aap-attendance-native.apk") }
+    var updateVersionName by remember { mutableStateOf("") }
 
     val faceRegistered = user?.stringOrNull("faceRegisteredAt") != null
     val punchedIn = openSession != null
@@ -112,6 +117,33 @@ fun HomeScreen(
     fun say(text: String, error: Boolean = false) {
         message = text
         isError = error
+    }
+
+    fun localVersionCode(): Int {
+        return try {
+            val p = context.packageManager.getPackageInfo(context.packageName, 0)
+            if (android.os.Build.VERSION.SDK_INT >= 28) p.longVersionCode.toInt() else @Suppress("DEPRECATION") p.versionCode
+        } catch (_: Exception) {
+            0
+        }
+    }
+
+    suspend fun checkForceUpdate() {
+        try {
+            val ver = withContext(Dispatchers.IO) { ApiClient.getAppVersion() }
+            val minCode = ver.optInt("androidVersionCode", 0)
+            val apk = ver.optString("apkUrl", "").orEmpty()
+            val name = ver.optString("androidVersionName", "").orEmpty()
+            if (apk.startsWith("http")) {
+                updateApkUrl = apk
+            } else if (apk.isNotBlank()) {
+                updateApkUrl = SessionStore.apiBase(context).trimEnd('/') + apk
+            }
+            updateVersionName = name
+            updateRequired = minCode > 0 && localVersionCode() < minCode
+        } catch (_: Exception) {
+            // If version check fails, do not brick punch — network may be flaky.
+        }
     }
 
     suspend fun reload() {
@@ -187,6 +219,10 @@ fun HomeScreen(
     }
 
     fun requestPunch(mode: String) {
+        if (updateRequired) {
+            say("Please update the app first, then punch.", true)
+            return
+        }
         val act = activity ?: return
         if (!LocationHelper.hasFineLocation(act)) {
             pendingMode = mode
@@ -207,6 +243,7 @@ fun HomeScreen(
     }
 
     LaunchedEffect(reloadKey) {
+        checkForceUpdate()
         reload()
         // Admin audit: log VPN / spoof apps even outside a punch.
         withContext(Dispatchers.IO) {
@@ -273,6 +310,22 @@ fun HomeScreen(
 
         StatusPill(punchedIn = punchedIn)
 
+        if (updateRequired) {
+            Spacer(Modifier.height(16.dp))
+            ForceUpdateCard(
+                versionName = updateVersionName,
+                onUpdate = {
+                    try {
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(updateApkUrl))
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        context.startActivity(intent)
+                    } catch (e: Exception) {
+                        say(errorText(e, "Could not open download link"), true)
+                    }
+                }
+            )
+        }
+
         Spacer(Modifier.height(16.dp))
 
         AnimatedVisibility(
@@ -305,7 +358,7 @@ fun HomeScreen(
 
         Spacer(Modifier.height(18.dp))
 
-        if (!loading && !faceRegistered) {
+        if (!loading && !faceRegistered && !updateRequired) {
             RegisterFaceCard(busy = busy, onRegister = { openFace(DashboardActivity.MODE_REGISTER) })
             Spacer(Modifier.height(18.dp))
         }
@@ -314,7 +367,7 @@ fun HomeScreen(
             Box(Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = AapColors.Yellow)
             }
-        } else if (faceRegistered || punchedIn) {
+        } else if (!updateRequired && (faceRegistered || punchedIn)) {
             PunchButton(
                 punchedIn = punchedIn,
                 busy = busy,
@@ -545,6 +598,41 @@ private fun PunchButton(punchedIn: Boolean, busy: Boolean, onClick: () -> Unit) 
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ForceUpdateCard(versionName: String, onUpdate: () -> Unit) {
+    AapCard(Modifier.fillMaxWidth()) {
+        Column {
+            Text(
+                "Update required",
+                style = MaterialTheme.typography.titleLarge,
+                color = AapColors.Yellow
+            )
+            Spacer(Modifier.size(6.dp))
+            Text(
+                if (versionName.isNotBlank()) {
+                    "A new app version (v$versionName) is available. Update now to punch in or punch out."
+                } else {
+                    "A new app version is available. Update now to punch in or punch out."
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = AapColors.TextMuted
+            )
+            Spacer(Modifier.size(14.dp))
+            Button(
+                onClick = onUpdate,
+                modifier = Modifier.fillMaxWidth().height(54.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = AapColors.Yellow,
+                    contentColor = AapColors.Navy
+                )
+            ) {
+                Text("Update app", fontWeight = FontWeight.Bold)
             }
         }
     }

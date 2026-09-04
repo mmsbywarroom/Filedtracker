@@ -233,10 +233,8 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const staff = new URLSearchParams(window.location.search).get("staff") === "1";
-    // Temporary: allow iPhone Safari web until TestFlight external is approved.
-    // Android browser: never web punch (ignore ?staff=1). Native APK WebView OK.
-    const allowWeb =
-      isPureNativeApp() || isIosBrowser() || (staff && !isAndroidBrowser());
+    // Phone browsers (Android + Safari) never get web punch — native / TestFlight only.
+    const allowWeb = isPureNativeApp() || (staff && !isAndroidBrowser() && !isIosBrowser());
     if (!allowWeb) {
       setFieldWebBlocked(true);
       setBooting(false);

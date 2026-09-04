@@ -53,12 +53,12 @@ export async function middleware(req: NextRequest) {
   const ua = req.headers.get("user-agent") || "";
   const nativeWebView = ua.includes("AAPNative/");
   const androidBrowser = /Android/i.test(ua) && !nativeWebView;
-  const iosBrowser = /iPhone|iPad|iPod/i.test(ua) && !nativeWebView;
-  // staff=1 is desktop-only escape — never unlock Android Chrome web punch.
+  const mobileBrowser =
+    (/Android|iPhone|iPad|iPod/i.test(ua) && !nativeWebView) || false;
+  // Desktop escape only — never unlock phone browser web punch (Android or Safari).
   const staffWeb =
-    req.nextUrl.searchParams.get("staff") === "1" && !androidBrowser;
-  // Temporary: iPhone Safari web until TestFlight external is live. Android stays APK-only.
-  const fieldWebOk = nativeWebView || staffWeb || iosBrowser;
+    req.nextUrl.searchParams.get("staff") === "1" && !mobileBrowser;
+  const fieldWebOk = nativeWebView || staffWeb;
 
   if (pathname.startsWith("/dashboard")) {
     if (!fieldWebOk) {
@@ -85,10 +85,11 @@ export async function middleware(req: NextRequest) {
       if (userTok.kind === "rally") {
         return NextResponse.redirect(new URL("/rally", req.url));
       }
-      // iOS / native field session → dashboard; Android browser stays on APK landing.
+      // Only native app / desktop staff web may open field dashboard.
       if (userTok.kind === "field" && fieldWebOk) {
         return NextResponse.redirect(new URL("/dashboard", req.url));
       }
+      // Phone browser with old cookie → stay on download landing (clear session redirect).
     }
     return NextResponse.next();
   }

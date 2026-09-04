@@ -9,9 +9,8 @@ import { isPureNativeApp, saveNativeSession } from "@/lib/pureNativeApp";
 
 /**
  * - Pure native WebView: OTP login
- * - Android browser: APK download only
- * - iPhone Safari: temporary web login until TestFlight external is approved
- * - Desktop: APK landing (?staff=1 for web login)
+ * - Phone browsers (Android + Safari): download landing (APK + TestFlight)
+ * - Desktop: same download landing (?staff=1 for web login escape)
  */
 export default function HomePage() {
   const { t } = useLang();
@@ -29,8 +28,8 @@ export default function HomePage() {
       return;
     }
     const staff = new URLSearchParams(window.location.search).get("staff") === "1";
-    // Temporary iOS web until TestFlight public link is live.
-    if (isIosBrowser() || (staff && !isAndroidBrowser())) {
+    // Desktop staff escape only — never phone browser web punch.
+    if (staff && !isAndroidBrowser() && !isIosBrowser()) {
       setMode("native-login");
       return;
     }

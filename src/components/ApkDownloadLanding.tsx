@@ -3,10 +3,14 @@
 import { useEffect, useState } from "react";
 import { BrandMark } from "@/components/BrandMark";
 import { LangToggle, useLang } from "@/lib/i18n";
-import { LATEST_NATIVE_APK, NATIVE_APK_VERSION } from "@/lib/apkDownload";
+import {
+  IOS_TESTFLIGHT_URL,
+  LATEST_NATIVE_APK,
+  NATIVE_APK_VERSION,
+} from "@/lib/apkDownload";
 import { isAndroidBrowser, isIosBrowser } from "@/lib/clientDevice";
 
-/** Public landing: Android → APK only. No field web punch. */
+/** Public landing: Android APK + iOS TestFlight. No field web punch. */
 export function ApkDownloadLanding() {
   const { t } = useLang();
   const [ready, setReady] = useState(false);
@@ -64,24 +68,26 @@ export function ApkDownloadLanding() {
           </p>
 
           <div
-            className={`mt-9 flex flex-col gap-3 sm:flex-row sm:items-center ${
+            className={`mt-9 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center ${
               ready ? "apk-anim-in apk-anim-delay-4" : "opacity-0"
             }`}
           >
-            {ios ? (
-              <span className="inline-flex h-14 items-center justify-center rounded-2xl border border-white/20 bg-white/5 px-7 text-sm font-semibold text-white/80">
-                iOS TestFlight — soon
-              </span>
-            ) : (
-              <a
-                href={LATEST_NATIVE_APK}
-                className="apk-cta group inline-flex h-14 items-center justify-center gap-2 rounded-2xl bg-teal-bright px-8 text-base font-bold text-ink transition hover:brightness-105"
-              >
-                <span className="apk-cta__shine" aria-hidden />
-                {t("downloadApk")}
-                <span className="text-xs font-semibold opacity-70">v{NATIVE_APK_VERSION}</span>
-              </a>
-            )}
+            <a
+              href={LATEST_NATIVE_APK}
+              className="apk-cta group inline-flex h-14 items-center justify-center gap-2 rounded-2xl bg-teal-bright px-8 text-base font-bold text-ink transition hover:brightness-105"
+            >
+              <span className="apk-cta__shine" aria-hidden />
+              {t("downloadApk")}
+              <span className="text-xs font-semibold opacity-70">v{NATIVE_APK_VERSION}</span>
+            </a>
+            <a
+              href={IOS_TESTFLIGHT_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex h-14 items-center justify-center gap-2 rounded-2xl border border-white/25 bg-white/10 px-8 text-base font-bold text-white transition hover:bg-white/15"
+            >
+              {t("downloadTestFlight")}
+            </a>
           </div>
 
           <p

@@ -59,7 +59,26 @@ public final class ApiClient {
                 .addHeader("Authorization", "Bearer " + token)
                 .addHeader("X-Client-Source", "native")
                 .addHeader("Content-Type", "application/json")
-                .addHeader("User-Agent", "AAPAttendanceNative/1.3.1");
+                .addHeader("User-Agent", "AAPAttendanceNative/1.3.2");
+    }
+
+    /** Public — no auth. Used for force-update gate. */
+    public static JSONObject getAppVersion() throws IOException, ApiError {
+        Request req = new Request.Builder()
+                .url(AppConfig.API_BASE + "/api/app/version")
+                .get()
+                .build();
+        try (Response res = SHARED.newCall(req).execute()) {
+            String body = res.body() != null ? res.body().string() : "";
+            if (!res.isSuccessful()) {
+                throw new ApiError(res.code(), "Could not check for updates");
+            }
+            return new JSONObject(body);
+        } catch (ApiError e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IOException(e);
+        }
     }
 
     private JSONObject readJson(Response res) throws IOException, ApiError, JSONException {

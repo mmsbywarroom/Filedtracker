@@ -145,17 +145,19 @@ const dict = {
     installAppHint: "Download the Android app for background GPS while punched in.",
     installAppIos: "iPhone",
     installAppIosHint: "iOS app is TestFlight-only (no APK link). Until then use Safari → Add to Home Screen.",
-    downloadApk: "Download APK",
+    downloadApk: "Download Android APK",
+    downloadTestFlight: "Download iOS (TestFlight)",
     landingLeadAndroid:
-      "Web punch is closed. Download the official Android app for face and GPS attendance.",
-    landingLeadIos: "The iPhone app will come on TestFlight. Punch is not available on the web.",
+      "Web punch is closed. Install the official Android app below.",
+    landingLeadIos:
+      "Web punch is closed on Safari. Install via TestFlight below (or Android APK if needed).",
     landingLeadDesktop:
-      "Download the official Android app for field staff. Punch from the browser is closed.",
+      "Install the official app — Android APK or iPhone TestFlight. Browser punch is closed.",
     landingBullet1: "Face punch and live GPS — same rules as before",
     landingBullet2: "Background tracking while you are punched in",
     landingBullet3: "Existing attendance data stays on the server — nothing is deleted",
     landingInstallHint:
-      "If Play Protect blocks the install, open Play Protect from the notification and choose Install anyway.",
+      "Android: if Play Protect blocks, choose Install anyway. iPhone: install TestFlight first, then open the link.",
   },
   pa: {
     aap: "ਆਮ ਆਦਮੀ ਪਾਰਟੀ",
@@ -299,17 +301,16 @@ const dict = {
     installAppHint: "ਪੰਚ ਇਨ ਦੌਰਾਨ ਬੈਕਗ੍ਰਾਊਂਡ GPS ਲਈ Android ਐਪ ਡਾਊਨਲੋਡ ਕਰੋ।",
     installAppIos: "iPhone",
     installAppIosHint: "iOS ਐਪ TestFlight ਤੋਂ ਲੱਗੇਗੀ (APK ਲਿੰਕ ਨਹੀਂ)। ਉਸ ਤੋਂ ਪਹਿਲਾਂ Safari → Add to Home Screen।",
-    downloadApk: "APK ਡਾਊਨਲੋਡ ਕਰੋ",
-    landingLeadAndroid:
-      "Web punch is closed. Download the official Android app for face and GPS attendance.",
-    landingLeadIos: "The iPhone app will come on TestFlight. Punch is not available on the web.",
-    landingLeadDesktop:
-      "Download the official Android app for field staff. Punch from the browser is closed.",
+    downloadApk: "Android APK ਡਾਊਨਲੋਡ",
+    downloadTestFlight: "iOS TestFlight ਡਾਊਨਲੋਡ",
+    landingLeadAndroid: "Web punch ਬੰਦ ਹੈ। ਹੇਠਾਂ ਅਧਿਕਾਰਿਤ Android ਐਪ ਇੰਸਟਾਲ ਕਰੋ।",
+    landingLeadIos: "Safari ਤੇ web punch ਬੰਦ ਹੈ। ਹੇਠਾਂ TestFlight ਤੋਂ ਐਪ ਲਗਾਓ।",
+    landingLeadDesktop: "Android APK ਜਾਂ iPhone TestFlight ਇੰਸਟਾਲ ਕਰੋ। Browser punch ਬੰਦ ਹੈ।",
     landingBullet1: "Face punch and live GPS — same rules as before",
     landingBullet2: "Background tracking while you are punched in",
     landingBullet3: "Existing attendance data stays on the server — nothing is deleted",
     landingInstallHint:
-      "If Play Protect blocks the install, open Play Protect from the notification and choose Install anyway.",
+      "Android: Play Protect ਰੋਕੇ ਤਾਂ Install anyway। iPhone: ਪਹਿਲਾਂ TestFlight, ਫਿਰ ਲਿੰਕ ਖੋਲ੍ਹੋ।",
   },
 } as const;
 
