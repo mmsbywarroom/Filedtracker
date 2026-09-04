@@ -38,6 +38,10 @@ docker network prune -f >/dev/null 2>&1 || true
 rm -f /opt/filedtracker/filedtracker.tar.gz /tmp/filedtracker.tar.gz 2>/dev/null || true
 rm -rf /tmp/npm-* /tmp/node-jiti-* 2>/dev/null || true
 
+# Leftover deploy junk
+rm -rf /opt/filedtracker/.next /opt/filetracker/filedtracker.tar.gz 2>/dev/null || true
+docker volume prune -f >/dev/null 2>&1 || true
+
 # System journal — cap size (disk full = app death)
 journalctl --vacuum-size=80M >/dev/null 2>&1 || true
 journalctl --vacuum-time=1d >/dev/null 2>&1 || true

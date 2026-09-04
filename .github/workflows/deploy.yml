@@ -14,7 +14,52 @@ jobs:
         run: docker build -t filedtracker:latest .
 
       - name: Pack image
-        run: docker save filedtracker:latest | gzip > filedtracker.tar.gz
+        run: |
+          docker save filedtracker:latest | gzip -9 > filedtracker.tar.gz
+          ls -lh filedtracker.tar.gz
+          docker images filedtracker:latest
+
+      # Free disk BEFORE scp — otherwise copy fails with "Process exited with status 1"
+      - name: Free disk on EC2 before upload
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          command_timeout: 10m
+          script: |
+            set -e
+            echo "=== disk before pre-clean ==="
+            df -h /
+            sudo mkdir -p /opt/filedtracker
+            sudo chown ec2-user:ec2-user /opt/filedtracker
+            cd /opt/filedtracker || true
+            # Drop old tarball / stopped app so scp has room
+            rm -f filedtracker.tar.gz /tmp/filedtracker.tar.gz 2>/dev/null || true
+            if [ -f docker-compose.prod.yml ]; then
+              sudo docker compose -f docker-compose.prod.yml stop app || true
+              sudo docker compose -f docker-compose.prod.yml rm -f app || true
+            fi
+            sudo docker rmi filedtracker:latest || true
+            sudo docker container prune -f || true
+            sudo docker image prune -af || true
+            sudo docker builder prune -af || true
+            sudo docker system prune -af || true
+            sudo journalctl --vacuum-size=40M >/dev/null 2>&1 || true
+            sudo find /var/lib/docker/containers -name '*-json.log' -type f -exec truncate -s 0 {} \; 2>/dev/null || true
+            sudo dnf clean all >/dev/null 2>&1 || sudo yum clean all >/dev/null 2>&1 || true
+            if [ -x /opt/filedtracker/disk-cleanup.sh ]; then
+              sudo /opt/filedtracker/disk-cleanup.sh || true
+            fi
+            echo "=== disk after pre-clean ==="
+            df -h /
+            AVAIL_KB=$(df -Pk / | awk 'NR==2{print $4}')
+            # Need ~2.5GB free for gzipped image + docker load
+            if [ "${AVAIL_KB:-0}" -lt 2500000 ]; then
+              echo "ERROR: only ${AVAIL_KB} KB free on EC2 — need at least 2.5GB"
+              sudo du -xh /var/lib/docker 2>/dev/null | sort -h | tail -20 || true
+              exit 1
+            fi
 
       - name: Copy files to EC2
         uses: appleboy/scp-action@v0.1.7
@@ -52,21 +97,9 @@ jobs:
               sudo curl -SL https://github.com/docker/compose/releases/download/v2.29.7/docker-compose-linux-x86_64 -o /usr/libexec/docker/cli-plugins/docker-compose
               sudo chmod +x /usr/libexec/docker/cli-plugins/docker-compose
             fi
-            echo "=== disk before cleanup ==="
+            echo "=== disk before load ==="
             df -h /
-            sudo docker system df || true
-            # Stop app so the old image can be deleted — otherwise load needs 2× image space
-            sudo docker compose -f docker-compose.prod.yml stop app || true
-            sudo docker compose -f docker-compose.prod.yml rm -f app || true
-            sudo docker rmi filedtracker:latest || true
-            sudo docker container prune -f || true
-            sudo docker image prune -af || true
-            sudo docker builder prune -af || true
-            sudo docker system prune -f || true
-            sudo journalctl --vacuum-size=50M >/dev/null 2>&1 || true
-            sudo find /var/lib/docker/containers -name '*-json.log' -type f -exec truncate -s 0 {} \; 2>/dev/null || true
-            echo "=== disk after cleanup ==="
-            df -h /
+            ls -lh filedtracker.tar.gz
             gzip -dc filedtracker.tar.gz | sudo docker load
             rm -f filedtracker.tar.gz
             sudo docker compose -f docker-compose.prod.yml up -d
@@ -79,15 +112,13 @@ jobs:
               sudo dnf install -y cronie
             fi
             sudo mkdir -p /etc/cron.d
-            # Every 6 hours + daily 4:15 — keep disk/logs from filling EC2
             echo '15 */6 * * * root /opt/filedtracker/disk-cleanup.sh >> /var/log/filedtracker-cleanup.log 2>&1' | sudo tee /etc/cron.d/filedtracker-cleanup >/dev/null
             sudo chmod 644 /etc/cron.d/filedtracker-cleanup
-            # Every 15 minutes: auto punch-out sessions open > 12 hours
             echo '*/15 * * * * root /opt/filedtracker/auto-punch-out.sh >> /var/log/filedtracker-auto-punch.log 2>&1' | sudo tee /etc/cron.d/filedtracker-auto-punch >/dev/null
             sudo chmod 644 /etc/cron.d/filedtracker-auto-punch
             sudo systemctl enable --now crond
-            # Free disk immediately on every deploy
             sudo /opt/filedtracker/disk-cleanup.sh >> /var/log/filedtracker-cleanup.log 2>&1 || true
-            # Close any already-stale sessions right after deploy
             sudo /opt/filedtracker/auto-punch-out.sh >> /var/log/filedtracker-auto-punch.log 2>&1 || true
+            echo "=== disk after deploy ==="
+            df -h /
             sudo docker compose -f docker-compose.prod.yml ps

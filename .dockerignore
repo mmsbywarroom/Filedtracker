@@ -1,6 +1,26 @@
 node_modules
 .next
 .git
+.github
+.cursor
 .env
+.env.*
+*.md
+tsconfig.tsbuildinfo
+
+# Mobile apps — never ship inside the web Docker image (hundreds of MB)
+android-native
+ios-native
+codemagic.yaml
+
+# Local / export data
+data
 prisma/dev.db
 prisma/dev.db-journal
+*.csv
+
+# IDE / OS junk
+.vscode
+.idea
+**/.DS_Store
+**/Thumbs.db
