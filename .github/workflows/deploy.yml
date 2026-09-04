@@ -15,7 +15,7 @@ jobs:
 
       - name: Pack image
         run: |
-          docker save filedtracker:latest | gzip -9 > filedtracker.tar.gz
+          docker save filedtracker:latest | gzip > filedtracker.tar.gz
           ls -lh filedtracker.tar.gz
           docker images filedtracker:latest
 
@@ -102,7 +102,9 @@ jobs:
             ls -lh filedtracker.tar.gz
             gzip -dc filedtracker.tar.gz | sudo docker load
             rm -f filedtracker.tar.gz
-            sudo docker compose -f docker-compose.prod.yml up -d
+            # Never try Docker Hub for local-only image tag
+            sudo docker compose -f docker-compose.prod.yml up -d --pull never 2>/dev/null \
+              || sudo docker compose -f docker-compose.prod.yml up -d
             sudo docker image prune -f
             sudo cp -f /opt/filedtracker/deploy/disk-cleanup.sh /opt/filedtracker/disk-cleanup.sh || true
             sudo chmod +x /opt/filedtracker/disk-cleanup.sh 2>/dev/null || true

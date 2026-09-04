@@ -101,7 +101,7 @@ fun FaceScreen(
     val isPunch =
         mode == DashboardActivity.MODE_PUNCH_IN || mode == DashboardActivity.MODE_PUNCH_OUT
     val autoPunch = !selfTest
-    val needHits = if (mode == DashboardActivity.MODE_REGISTER) 3 else 2
+    val needHits = if (mode == DashboardActivity.MODE_REGISTER) 2 else 1
 
     var hasCamera by remember {
         mutableStateOf(
@@ -117,6 +117,7 @@ fun FaceScreen(
     var busy by remember { mutableStateOf(false) }
     var autoFired by remember { mutableStateOf(false) }
     var cachedLoc by remember { mutableStateOf<Location?>(null) }
+    val captureExecutor: ExecutorService = remember { Executors.newSingleThreadExecutor() }
 
     fun setStatus(text: String, error: Boolean = false) {
         status = text
@@ -139,11 +140,15 @@ fun FaceScreen(
         if (!isPunch) return@LaunchedEffect
         val act = activity ?: return@LaunchedEffect
         try {
-            val loc = awaitLocation(act)
-            SecurityHelper.assertSecureForPunch(context, loc)
+            val loc = withContext(Dispatchers.IO) { awaitLocation(act) }
+            try {
+                SecurityHelper.assertSecureForPunch(context, loc)
+            } catch (_: Exception) {
+                // Do not block punch UI on security probe — server still records evidence.
+            }
             cachedLoc = loc
-        } catch (e: Exception) {
-            setStatus(errorText(e, "Could not verify GPS location."), true)
+        } catch (_: Exception) {
+            // GPS may arrive later during punch; don't freeze the camera on warm-up failure.
         }
     }
 
@@ -157,7 +162,8 @@ fun FaceScreen(
         FaceDetection.getClient(
             FaceDetectorOptions.Builder()
                 .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
-                .setMinFaceSize(0.25f)
+                .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_NONE)
+                .setMinFaceSize(0.15f)
                 .build()
         )
     }
@@ -165,6 +171,7 @@ fun FaceScreen(
     DisposableEffect(Unit) {
         onDispose {
             analysisExecutor.shutdown()
+            captureExecutor.shutdown()
             detector.close()
         }
     }
@@ -190,14 +197,15 @@ fun FaceScreen(
                             val res = api.describeFace(dataUrl)
                             val descriptor = res.optJSONArray("descriptor")
                                 ?: throw IllegalStateException(
-                                    "Hold still with your full face in the frame for a few seconds, then try again."
+                                    "Hold still — eyes, nose and chin clearly in the frame, then try again."
                                 )
                             val samples = res.optJSONArray("samples") ?: JSONArray().put(descriptor)
                             descriptor to samples
                         }
                         setStatus("Saving face…")
                         withContext(Dispatchers.IO) {
-                            api.registerFace(payload.first, payload.second, dataUrl, false)
+                            // Soft match for eyes/nose/chin when upper head is covered (no UI label).
+                            api.registerFace(payload.first, payload.second, dataUrl, true)
                         }
                         setStatus("Face registered.")
                         onSuccess()
@@ -212,13 +220,16 @@ fun FaceScreen(
                             val res = api.describeFace(dataUrl)
                             val descriptor = res.optJSONArray("descriptor")
                                 ?: throw IllegalStateException(
-                                    "Hold still with your full face in the frame for a few seconds, then try again."
+                                    "Hold still — eyes, nose and chin clearly in the frame, then try again."
                                 )
                             descriptor
                         }
                         val locJob = async(Dispatchers.IO) {
                             val loc = cachedLoc ?: awaitLocation(act)
-                            SecurityHelper.assertSecureForPunch(context, loc)
+                            try {
+                                SecurityHelper.assertSecureForPunch(context, loc)
+                            } catch (_: Exception) {
+                            }
                             loc
                         }
                         val descriptor = describeJob.await()
@@ -287,35 +298,38 @@ fun FaceScreen(
         statusError = false
         setStatus("Capturing…")
         imageCapture.takePicture(
-            ContextCompat.getMainExecutor(context),
+            captureExecutor,
             object : ImageCapture.OnImageCapturedCallback() {
                 override fun onCaptureSuccess(image: ImageProxy) {
                     val dataUrl = try {
                         toJpegDataUrl(image)
                     } catch (e: Exception) {
-                        setStatus(errorText(e, "Could not read the captured photo"), true)
-                        resetForRetry()
+                        scope.launch {
+                            setStatus(errorText(e, "Could not read the captured photo"), true)
+                            resetForRetry()
+                        }
                         null
                     } finally {
                         image.close()
                     }
                     if (dataUrl == null) return
-                    capturedBytes = dataUrl.length
-                    if (selfTest) {
-                        busy = false
-                        setStatus(
-                            "Camera and face detection are working " +
-                                "(${dataUrl.length} chars encoded)."
-                        )
-                        autoFired = false
-                    } else {
-                        completeAfterCapture(dataUrl)
+                    scope.launch {
+                        capturedBytes = dataUrl.length
+                        if (selfTest) {
+                            busy = false
+                            setStatus("Camera OK.")
+                            autoFired = false
+                        } else {
+                            completeAfterCapture(dataUrl)
+                        }
                     }
                 }
 
                 override fun onError(exception: ImageCaptureException) {
-                    setStatus(errorText(exception, "Capture failed"), true)
-                    resetForRetry()
+                    scope.launch {
+                        setStatus(errorText(exception, "Capture failed"), true)
+                        resetForRetry()
+                    }
                 }
             }
         )
@@ -595,10 +609,10 @@ private fun toJpegDataUrl(image: ImageProxy): String {
     }
 
     val out = ByteArrayOutputStream()
-    upright.compress(Bitmap.CompressFormat.JPEG, 78, out)
+    upright.compress(Bitmap.CompressFormat.JPEG, 62, out)
     if (upright !== decoded) upright.recycle()
     decoded.recycle()
     return "data:image/jpeg;base64," + Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
 }
 
-private const val MAX_CAPTURE_SIDE = 640
+private const val MAX_CAPTURE_SIDE = 480

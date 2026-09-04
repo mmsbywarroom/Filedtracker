@@ -1,6 +1,7 @@
 services:
   app:
     image: filedtracker:latest
+    pull_policy: never
     restart: unless-stopped
     env_file:
       - .env

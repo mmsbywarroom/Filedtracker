@@ -34,12 +34,22 @@ function parseDataUrl(image: string): Buffer {
   return Buffer.from(b64, "base64");
 }
 
-/** Extract face-api 128-d descriptor from a JPEG/PNG data URL or raw base64. */
-export async function describeFaceFromImage(image: string): Promise<{
-  ok: true;
-  descriptor: number[];
-  samples: number[][];
-} | { ok: false; error: string }> {
+const DETECT_TRIES: { inputSize: number; scoreThreshold: number }[] = [
+  { inputSize: 320, scoreThreshold: 0.4 },
+  { inputSize: 416, scoreThreshold: 0.35 },
+  { inputSize: 224, scoreThreshold: 0.32 },
+  { inputSize: 416, scoreThreshold: 0.28 },
+];
+
+/**
+ * Extract face-api 128-d descriptor from a JPEG/PNG data URL or raw base64.
+ * Retries with softer detector settings so eyes/nose/mouth still match when
+ * the upper head is covered (native + web).
+ */
+export async function describeFaceFromImage(
+  image: string,
+  opts?: { relaxed?: boolean }
+): Promise<{ ok: true; descriptor: number[]; samples: number[][] } | { ok: false; error: string }> {
   try {
     await loadModels();
     const buf = parseDataUrl(image);
@@ -50,12 +60,29 @@ export async function describeFaceFromImage(image: string): Promise<{
     const ctx = canvas.getContext("2d");
     ctx.drawImage(img, 0, 0);
 
-    const det = await faceapi
-      .detectSingleFace(canvas as unknown as HTMLCanvasElement, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: 0.4 }))
-      .withFaceLandmarks()
-      .withFaceDescriptor();
+    const tries = opts?.relaxed ? DETECT_TRIES : DETECT_TRIES.slice(0, 2);
+    let det: faceapi.WithFaceDescriptor<
+      faceapi.WithFaceLandmarks<{ detection: faceapi.FaceDetection }, faceapi.FaceLandmarks68>
+    > | null = null;
 
-    if (!det) return { ok: false, error: "No face detected. Face the camera and try again." };
+    for (const opt of tries) {
+      det =
+        (await faceapi
+          .detectSingleFace(
+            canvas as unknown as HTMLCanvasElement,
+            new faceapi.TinyFaceDetectorOptions(opt)
+          )
+          .withFaceLandmarks()
+          .withFaceDescriptor()) || null;
+      if (det) break;
+    }
+
+    if (!det) {
+      return {
+        ok: false,
+        error: "Hold still — eyes, nose and chin clearly in the frame, then try again.",
+      };
+    }
 
     const descriptor = Array.from(det.descriptor);
     return { ok: true, descriptor, samples: [descriptor] };

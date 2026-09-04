@@ -95,12 +95,34 @@ public final class LocationHelper {
             return;
         }
         FusedLocationProviderClient fused = LocationServices.getFusedLocationProviderClient(activity);
-        CancellationTokenSource cts = new CancellationTokenSource();
-        fused.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cts.getToken())
-                .addOnSuccessListener(loc -> {
-                    if (loc != null) cb.onResult(loc);
-                    else cb.onError("Could not get GPS location. Try again outdoors.");
+        // Prefer last known fix first (instant) — punch must feel snappy.
+        fused.getLastLocation()
+                .addOnSuccessListener(last -> {
+                    if (last != null && System.currentTimeMillis() - last.getTime() < 90_000L) {
+                        cb.onResult(last);
+                        return;
+                    }
+                    CancellationTokenSource cts = new CancellationTokenSource();
+                    fused.getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, cts.getToken())
+                            .addOnSuccessListener(loc -> {
+                                if (loc != null) cb.onResult(loc);
+                                else if (last != null) cb.onResult(last);
+                                else cb.onError("Could not get GPS location. Try again outdoors.");
+                            })
+                            .addOnFailureListener(e -> {
+                                if (last != null) cb.onResult(last);
+                                else cb.onError(e.getMessage() != null ? e.getMessage() : "GPS failed");
+                            });
                 })
-                .addOnFailureListener(e -> cb.onError(e.getMessage() != null ? e.getMessage() : "GPS failed"));
+                .addOnFailureListener(e -> {
+                    CancellationTokenSource cts = new CancellationTokenSource();
+                    fused.getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, cts.getToken())
+                            .addOnSuccessListener(loc -> {
+                                if (loc != null) cb.onResult(loc);
+                                else cb.onError("Could not get GPS location. Try again outdoors.");
+                            })
+                            .addOnFailureListener(err ->
+                                    cb.onError(err.getMessage() != null ? err.getMessage() : "GPS failed"));
+                });
     }
 }

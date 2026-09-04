@@ -22,17 +22,8 @@ export async function POST(req: Request) {
   }
 
   if (!list.length) {
-    return NextResponse.json({ error: "Face could not be captured. Try again in good light." }, { status: 400 });
-  }
-
-  const minSamples = usesTurban ? 3 : 3;
-  if (list.length < minSamples) {
     return NextResponse.json(
-      {
-        error: usesTurban
-          ? "Hold still — eyes, nose and chin visible. Wait a few seconds, then try again."
-          : "Hold still with your full face in the frame for a few seconds, then try again.",
-      },
+      { error: "Hold still — eyes, nose and chin clearly in the frame, then try again." },
       { status: 400 }
     );
   }

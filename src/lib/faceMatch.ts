@@ -66,7 +66,7 @@ export function matchFaceDescriptor(
     };
   }
 
-  // Standard mode: majority must agree. Turban: one good match is enough (pagri colour changes daily).
+  // Standard mode: majority must agree. Covered-head mode: one good match is enough.
   if (!opts.turbanMode && distances.length >= 2) {
     const closeEnough = distances.filter((d) => d < threshold + 0.06).length;
     if (closeEnough < Math.ceil(distances.length / 2)) {

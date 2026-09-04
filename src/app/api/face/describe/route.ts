@@ -18,7 +18,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Face image is required." }, { status: 400 });
   }
 
-  const result = await describeFaceFromImage(image);
+  const result = await describeFaceFromImage(image, { relaxed: true });
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 400 });
   }

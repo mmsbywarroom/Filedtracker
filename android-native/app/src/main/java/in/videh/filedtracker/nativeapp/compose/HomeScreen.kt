@@ -230,8 +230,16 @@ fun HomeScreen(
     }
 
     DisposableEffect(lifecycleOwner) {
+        var lastResumeAt = 0L
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) reloadKey++
+            if (event == Lifecycle.Event.ON_RESUME) {
+                val now = System.currentTimeMillis()
+                // Avoid hammering /api/me on every face-screen return (felt like app lag / logout).
+                if (now - lastResumeAt > 20_000L) {
+                    lastResumeAt = now
+                    reloadKey++
+                }
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }

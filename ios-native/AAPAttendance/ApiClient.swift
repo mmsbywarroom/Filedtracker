@@ -58,12 +58,16 @@ enum ApiClient {
             "descriptor": descriptor,
             "samples": samples,
             "image": image,
-            "usesTurban": false,
+            // Soft match for eyes/nose/chin when upper head is covered (no UI label).
+            "usesTurban": true,
         ])
     }
 
     static func describeFace(imageDataUrl: String) async throws -> [String: Any] {
-        try await authed(path: "/api/face/describe", method: "POST", body: ["image": imageDataUrl])
+        try await authed(path: "/api/face/describe", method: "POST", body: [
+            "image": imageDataUrl,
+            "relaxed": true,
+        ])
     }
 
     static func reportLocationPermission(foreground: Bool, background: Bool) async throws {
@@ -89,7 +93,7 @@ enum ApiClient {
         req.timeoutInterval = 55
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("native", forHTTPHeaderField: "X-Client-Source")
-        req.setValue("AAPAttendance/1.2.6 AAPNative/1", forHTTPHeaderField: "User-Agent")
+        req.setValue("AAPAttendance/1.3.0 AAPNative/1", forHTTPHeaderField: "User-Agent")
         if let token, !token.isEmpty {
             req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }

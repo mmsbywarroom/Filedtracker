@@ -18,6 +18,22 @@ import okhttp3.Response;
 public final class ApiClient {
     private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
 
+    /** Shared client — connection reuse keeps punch / OTP fast. */
+    private static final OkHttpClient SHARED = new OkHttpClient.Builder()
+            .connectTimeout(12, TimeUnit.SECONDS)
+            .readTimeout(45, TimeUnit.SECONDS)
+            .writeTimeout(45, TimeUnit.SECONDS)
+            .callTimeout(55, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
+            .build();
+
+    private static final OkHttpClient OTP = SHARED.newBuilder()
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
+            .writeTimeout(20, TimeUnit.SECONDS)
+            .callTimeout(25, TimeUnit.SECONDS)
+            .build();
+
     public static class ApiError extends Exception {
         public final int statusCode;
 
@@ -34,11 +50,7 @@ public final class ApiClient {
     public ApiClient(Context ctx) {
         this.apiBase = SessionStore.apiBase(ctx);
         this.token = SessionStore.token(ctx);
-        this.http = new OkHttpClient.Builder()
-                .connectTimeout(25, TimeUnit.SECONDS)
-                .readTimeout(35, TimeUnit.SECONDS)
-                .writeTimeout(35, TimeUnit.SECONDS)
-                .build();
+        this.http = SHARED;
     }
 
     private Request.Builder authReq(String path) {
@@ -46,7 +58,8 @@ public final class ApiClient {
                 .url(apiBase + path)
                 .addHeader("Authorization", "Bearer " + token)
                 .addHeader("X-Client-Source", "native")
-                .addHeader("Content-Type", "application/json");
+                .addHeader("Content-Type", "application/json")
+                .addHeader("User-Agent", "AAPAttendanceNative/1.3.1");
     }
 
     private JSONObject readJson(Response res) throws IOException, ApiError, JSONException {
@@ -58,6 +71,9 @@ public final class ApiClient {
                 err = o.optString("error", body);
             } catch (Exception ignored) {
             }
+            if (res.code() == 401) {
+                throw new ApiError(401, "Session expired. Please log in again.");
+            }
             throw new ApiError(res.code(), err.isEmpty() ? "Request failed (" + res.code() + ")" : err);
         }
         if (body.isEmpty()) return new JSONObject();
@@ -65,7 +81,6 @@ public final class ApiClient {
     }
 
     public static void requestOtp(String phone) throws IOException, ApiError {
-        OkHttpClient c = new OkHttpClient();
         JSONObject body = new JSONObject();
         try {
             body.put("phone", phone);
@@ -76,20 +91,21 @@ public final class ApiClient {
                 .url(AppConfig.API_BASE + "/api/auth/otp/request")
                 .post(RequestBody.create(body.toString(), JSON))
                 .build();
-        try (Response res = c.newCall(req).execute()) {
+        try (Response res = OTP.newCall(req).execute()) {
             if (!res.isSuccessful()) {
                 String msg = res.body() != null ? res.body().string() : "";
                 try {
                     msg = new JSONObject(msg).optString("error", msg);
                 } catch (Exception ignored) {
                 }
-                throw new ApiError(res.code(), msg.isEmpty() ? "Could not send OTP" : msg);
+                throw new ApiError(res.code(), msg.isEmpty() ? "Could not send OTP. Check network and try again." : msg);
             }
+        } catch (java.net.SocketTimeoutException e) {
+            throw new ApiError(408, "Network timeout. Check internet and try again.");
         }
     }
 
     public static JSONObject verifyOtp(String phone, String otp) throws IOException, ApiError, JSONException {
-        OkHttpClient c = new OkHttpClient();
         JSONObject body = new JSONObject();
         try {
             body.put("phone", phone);
@@ -101,7 +117,7 @@ public final class ApiClient {
                 .url(AppConfig.API_BASE + "/api/auth/otp/verify")
                 .post(RequestBody.create(body.toString(), JSON))
                 .build();
-        try (Response res = c.newCall(req).execute()) {
+        try (Response res = OTP.newCall(req).execute()) {
             String raw = res.body() != null ? res.body().string() : "";
             if (!res.isSuccessful()) {
                 String msg = raw;
@@ -112,6 +128,8 @@ public final class ApiClient {
                 throw new ApiError(res.code(), msg.isEmpty() ? "OTP verification failed" : msg);
             }
             return new JSONObject(raw);
+        } catch (java.net.SocketTimeoutException e) {
+            throw new ApiError(408, "Network timeout. Check internet and try again.");
         }
     }
 
@@ -139,21 +157,14 @@ public final class ApiClient {
 
     public JSONObject punchIn(double lat, double lng, Double accuracy, JSONArray descriptor, String image)
             throws IOException, ApiError {
-        JSONObject body = new JSONObject();
-        try {
-            body.put("lat", lat);
-            body.put("lng", lng);
-            if (accuracy != null) body.put("accuracy", accuracy);
-            body.put("descriptor", descriptor);
-            body.put("image", image);
-        } catch (Exception e) {
-            throw new IOException(e);
-        }
+        JSONObject body = punchBody(lat, lng, accuracy, descriptor, image);
         Request req = authReq("/api/attendance").post(RequestBody.create(body.toString(), JSON)).build();
         try (Response res = http.newCall(req).execute()) {
             return readJson(res);
         } catch (ApiError e) {
             throw e;
+        } catch (java.net.SocketTimeoutException e) {
+            throw new ApiError(408, "Punch timed out. Stay on this screen and try again.");
         } catch (Exception e) {
             throw new IOException(e);
         }
@@ -161,6 +172,21 @@ public final class ApiClient {
 
     public JSONObject punchOut(double lat, double lng, Double accuracy, JSONArray descriptor, String image)
             throws IOException, ApiError {
+        JSONObject body = punchBody(lat, lng, accuracy, descriptor, image);
+        Request req = authReq("/api/attendance/punch-out").post(RequestBody.create(body.toString(), JSON)).build();
+        try (Response res = http.newCall(req).execute()) {
+            return readJson(res);
+        } catch (ApiError e) {
+            throw e;
+        } catch (java.net.SocketTimeoutException e) {
+            throw new ApiError(408, "Punch timed out. Stay on this screen and try again.");
+        } catch (Exception e) {
+            throw new IOException(e);
+        }
+    }
+
+    private static JSONObject punchBody(double lat, double lng, Double accuracy, JSONArray descriptor, String image)
+            throws IOException {
         JSONObject body = new JSONObject();
         try {
             body.put("lat", lat);
@@ -171,17 +197,9 @@ public final class ApiClient {
         } catch (Exception e) {
             throw new IOException(e);
         }
-        Request req = authReq("/api/attendance/punch-out").post(RequestBody.create(body.toString(), JSON)).build();
-        try (Response res = http.newCall(req).execute()) {
-            return readJson(res);
-        } catch (ApiError e) {
-            throw e;
-        } catch (Exception e) {
-            throw new IOException(e);
-        }
+        return body;
     }
 
-    /** GET /api/leave → { leaves: [...] } */
     public JSONObject getLeave() throws IOException, ApiError {
         Request req = authReq("/api/leave").get().build();
         try (Response res = http.newCall(req).execute()) {
@@ -193,9 +211,7 @@ public final class ApiClient {
         }
     }
 
-    /** POST /api/leave with yyyy-MM-dd dates → { leave, ok } */
-    public JSONObject createLeave(String fromDate, String toDate, String reason)
-            throws IOException, ApiError {
+    public JSONObject createLeave(String fromDate, String toDate, String reason) throws IOException, ApiError {
         JSONObject body = new JSONObject();
         try {
             body.put("fromDate", fromDate);
@@ -214,7 +230,6 @@ public final class ApiClient {
         }
     }
 
-    /** GET /api/attendance/history → { records: [...] } */
     public JSONObject getHistory() throws IOException, ApiError {
         Request req = authReq("/api/attendance/history").get().build();
         try (Response res = http.newCall(req).execute()) {
@@ -226,14 +241,14 @@ public final class ApiClient {
         }
     }
 
-    public JSONObject registerFace(JSONArray descriptor, JSONArray samples, String image, boolean turban)
+    public JSONObject registerFace(JSONArray descriptor, JSONArray samples, String image, boolean coveredUpper)
             throws IOException, ApiError {
         JSONObject body = new JSONObject();
         try {
             body.put("descriptor", descriptor);
             body.put("samples", samples);
             body.put("image", image);
-            body.put("usesTurban", turban);
+            body.put("usesTurban", coveredUpper);
         } catch (Exception e) {
             throw new IOException(e);
         }
@@ -247,11 +262,11 @@ public final class ApiClient {
         }
     }
 
-    /** POST /api/face/describe — server extracts face-api 128-d from JPEG (no WebView). */
     public JSONObject describeFace(String imageDataUrl) throws IOException, ApiError {
         JSONObject body = new JSONObject();
         try {
             body.put("image", imageDataUrl);
+            body.put("relaxed", true);
         } catch (Exception e) {
             throw new IOException(e);
         }
@@ -260,12 +275,13 @@ public final class ApiClient {
             return readJson(res);
         } catch (ApiError e) {
             throw e;
+        } catch (java.net.SocketTimeoutException e) {
+            throw new ApiError(408, "Face check timed out. Try again on a better network.");
         } catch (Exception e) {
             throw new IOException(e);
         }
     }
 
-    /** Report Always / While-using location permission for admin audit. */
     public void reportLocationPermission(boolean foreground, boolean background) throws IOException, ApiError {
         JSONObject body = new JSONObject();
         try {

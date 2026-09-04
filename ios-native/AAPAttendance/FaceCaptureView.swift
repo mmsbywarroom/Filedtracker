@@ -122,7 +122,10 @@ struct FaceCaptureView: View {
             do {
                 let payload = try await ApiClient.describeFace(imageDataUrl: dataUrl)
                 if payload.doubles("descriptor").isEmpty {
-                    throw ApiError(statusCode: 0, message: "No face found in the photo. Try again.")
+                    throw ApiError(
+                        statusCode: 0,
+                        message: "Hold still — eyes, nose and chin clearly in the frame, then try again."
+                    )
                 }
                 onFinished(payload, dataUrl, mode)
                 dismiss()
