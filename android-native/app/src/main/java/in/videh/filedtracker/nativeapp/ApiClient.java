@@ -20,10 +20,10 @@ public final class ApiClient {
 
     /** Shared client — connection reuse keeps punch / OTP fast. */
     private static final OkHttpClient SHARED = new OkHttpClient.Builder()
-            .connectTimeout(12, TimeUnit.SECONDS)
-            .readTimeout(45, TimeUnit.SECONDS)
-            .writeTimeout(45, TimeUnit.SECONDS)
-            .callTimeout(55, TimeUnit.SECONDS)
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(25, TimeUnit.SECONDS)
+            .writeTimeout(25, TimeUnit.SECONDS)
+            .callTimeout(35, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
             .build();
 
@@ -59,7 +59,7 @@ public final class ApiClient {
                 .addHeader("Authorization", "Bearer " + token)
                 .addHeader("X-Client-Source", "native")
                 .addHeader("Content-Type", "application/json")
-                .addHeader("User-Agent", "AAPAttendanceNative/1.3.4");
+                .addHeader("User-Agent", "AAPAttendanceNative/1.3.5");
     }
 
     /** Public — no auth. Used for force-update gate. */

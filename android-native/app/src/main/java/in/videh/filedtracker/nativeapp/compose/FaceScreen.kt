@@ -209,6 +209,7 @@ fun FaceScreen(
                         withContext(Dispatchers.IO) {
                             api.registerFace(payload.first, payload.second, dataUrl, true)
                         }
+                        HomeDashboardCache.markFaceRegistered()
                         setStatus("Face registered.")
                         onSuccess()
                     }
@@ -250,8 +251,9 @@ fun FaceScreen(
                         }
 
                         if (mode == DashboardActivity.MODE_PUNCH_IN) {
-                            val punchInAt =
-                                res.optJSONObject("attendance")?.optString("punchInAt", "").orEmpty()
+                            val att = res.optJSONObject("attendance")
+                            HomeDashboardCache.applyPunchIn(att)
+                            val punchInAt = att?.optString("punchInAt", "").orEmpty()
                             if (punchInAt.isNotBlank()) {
                                 withContext(Dispatchers.IO) {
                                     FieldLocationService.start(
@@ -268,6 +270,7 @@ fun FaceScreen(
                             }
                             setStatus("Punched in.")
                         } else {
+                            HomeDashboardCache.applyPunchOut()
                             withContext(Dispatchers.IO) {
                                 FieldLocationService.stop(context)
                             }

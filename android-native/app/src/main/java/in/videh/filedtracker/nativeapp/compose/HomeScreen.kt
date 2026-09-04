@@ -84,6 +84,8 @@ import `in`.videh.filedtracker.nativeapp.SecurityReporter
 import `in`.videh.filedtracker.nativeapp.SessionStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -98,20 +100,22 @@ fun HomeScreen(
     val scope = rememberCoroutineScope()
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    var user by remember { mutableStateOf<JSONObject?>(null) }
-    var openSession by remember { mutableStateOf<JSONObject?>(null) }
-    var todayDistance by remember { mutableStateOf(0.0) }
-    var todayHours by remember { mutableStateOf(0.0) }
-    var loading by remember { mutableStateOf(true) }
+    var user by remember { mutableStateOf(HomeDashboardCache.user) }
+    var openSession by remember { mutableStateOf(HomeDashboardCache.openSession) }
+    var todayDistance by remember { mutableStateOf(HomeDashboardCache.todayDistance) }
+    var todayHours by remember { mutableStateOf(HomeDashboardCache.todayHours) }
+    // Only full-screen load on true cold start — never after camera return.
+    var loading by remember { mutableStateOf(!HomeDashboardCache.bootstrapped) }
+    var refreshing by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("") }
     var isError by remember { mutableStateOf(false) }
     var gpsText by remember { mutableStateOf("") }
-    var reloadKey by remember { mutableStateOf(0) }
     var updateRequired by remember { mutableStateOf(false) }
     var updateApkUrl by remember { mutableStateOf(SessionStore.apiBase(context).trimEnd('/') + "/aap-attendance-native.apk") }
     var updateVersionName by remember { mutableStateOf("") }
 
+    val bootstrapped = user != null || HomeDashboardCache.bootstrapped
     val faceRegistered = user?.stringOrNull("faceRegisteredAt") != null
     val punchedIn = openSession != null
 
@@ -147,32 +151,42 @@ fun HomeScreen(
         }
     }
 
-    suspend fun reload() {
+    suspend fun reload(silent: Boolean) {
+        if (!silent && !bootstrapped) loading = true
+        if (silent) refreshing = true
         try {
             val payload = withContext(Dispatchers.IO) {
-                val api = ApiClient(context)
-                val me = api.getMe()
-                val att = api.getAttendance()
-                me to att
+                coroutineScope {
+                    val api = ApiClient(context)
+                    val meDeferred = async { api.getMe() }
+                    val attDeferred = async { api.getAttendance() }
+                    meDeferred.await() to attDeferred.await()
+                }
             }
             val u = payload.first.optJSONObject("user")
             if (u == null) {
                 FieldLocationService.stop(context)
+                HomeDashboardCache.clear()
                 SessionStore.clear(context)
                 onLoggedOut()
                 return
             }
-            user = u
-            openSession = payload.second.optJSONObject("open")
-            todayDistance = payload.second.optDouble("todayDistanceMeters", 0.0)
-            todayHours = payload.second.optDouble("todayHoursWorked", 0.0)
+            HomeDashboardCache.applyMeAndAttendance(payload.first, payload.second)
+            user = HomeDashboardCache.user
+            openSession = HomeDashboardCache.openSession
+            todayDistance = HomeDashboardCache.todayDistance
+            todayHours = HomeDashboardCache.todayHours
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            val text = errorText(e, "Could not load dashboard")
-            if (text.isNotBlank()) say(text, true)
+            // Keep cached UI; only surface errors when we have nothing to show.
+            if (!bootstrapped) {
+                val text = errorText(e, "Could not load dashboard")
+                if (text.isNotBlank()) say(text, true)
+            }
         } finally {
             loading = false
+            refreshing = false
         }
     }
 
@@ -246,39 +260,72 @@ fun HomeScreen(
         if (punchedIn) FieldLocationService.startExisting(context)
     }
 
-    LaunchedEffect(reloadKey) {
-        checkForceUpdate()
-        reload()
-        // Admin audit: log VPN / spoof apps even outside a punch.
-        withContext(Dispatchers.IO) {
+    // First paint: hydrate from cache, load dashboard. Version + security never block UI.
+    LaunchedEffect(Unit) {
+        val cold = !HomeDashboardCache.bootstrapped
+        user = HomeDashboardCache.user
+        openSession = HomeDashboardCache.openSession
+        todayDistance = HomeDashboardCache.todayDistance
+        todayHours = HomeDashboardCache.todayHours
+        if (!cold) loading = false
+
+        reload(silent = !cold)
+
+        // Background only — do not delay punch button.
+        launch {
             try {
-                val act = activity
-                if (act != null) {
-                    ApiClient(context).reportLocationPermission(
-                        LocationHelper.hasFineLocation(act),
-                        LocationHelper.hasBackgroundLocation(act)
-                    )
-                }
+                checkForceUpdate()
             } catch (_: Exception) {
             }
-            if (SecurityHelper.isVpnActive(context)) {
-                SecurityReporter.report(context, "vpn", "detected", "VPN active on device", null, null)
-            }
-            SecurityHelper.findMockGpsAppPackage(context)?.let {
-                SecurityReporter.report(context, "spoof_app", "detected", it, null, null)
+            withContext(Dispatchers.IO) {
+                try {
+                    val act = activity
+                    if (act != null) {
+                        ApiClient(context).reportLocationPermission(
+                            LocationHelper.hasFineLocation(act),
+                            LocationHelper.hasBackgroundLocation(act)
+                        )
+                    }
+                } catch (_: Exception) {
+                }
+                try {
+                    if (SecurityHelper.isVpnActive(context)) {
+                        SecurityReporter.report(context, "vpn", "detected", "VPN active on device", null, null)
+                    }
+                    SecurityHelper.findMockGpsAppPackage(context)?.let {
+                        SecurityReporter.report(context, "spoof_app", "detected", it, null, null)
+                    }
+                } catch (_: Exception) {
+                }
             }
         }
     }
 
     DisposableEffect(lifecycleOwner) {
+        var firstResume = true
         var lastResumeAt = 0L
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
+                // Skip first resume — LaunchedEffect(Unit) already loads.
+                if (firstResume) {
+                    firstResume = false
+                    return@LifecycleEventObserver
+                }
                 val now = System.currentTimeMillis()
-                // Avoid hammering /api/me on every face-screen return (felt like app lag / logout).
-                if (now - lastResumeAt > 20_000L) {
-                    lastResumeAt = now
-                    reloadKey++
+                if (now - lastResumeAt < 2_000L) return@LifecycleEventObserver
+                lastResumeAt = now
+                // Instant UI from cache (FaceScreen writes here before pop).
+                user = HomeDashboardCache.user
+                openSession = HomeDashboardCache.openSession
+                todayDistance = HomeDashboardCache.todayDistance
+                todayHours = HomeDashboardCache.todayHours
+                loading = false
+                scope.launch {
+                    try {
+                        reload(silent = true)
+                    } catch (_: CancellationException) {
+                    } catch (_: Exception) {
+                    }
                 }
             }
         }
@@ -297,12 +344,21 @@ fun HomeScreen(
         Spacer(Modifier.height(14.dp))
 
         ProfileHeader(
-            name = user?.stringOrNull("name") ?: if (loading) stringResource(R.string.loading) else "Field member",
+            name = user?.stringOrNull("name")
+                ?: if (loading && !bootstrapped) stringResource(R.string.loading) else "Field member",
             meta = listOfNotNull(
                 user?.stringOrNull("sectorAllotted"),
                 user?.stringOrNull("assemblyName")
             ).joinToString(" · ").ifBlank { SessionStore.phone(context) },
-            onRefresh = { reloadKey++ },
+            onRefresh = {
+                scope.launch {
+                    try {
+                        reload(silent = bootstrapped)
+                    } catch (_: CancellationException) {
+                    } catch (_: Exception) {
+                    }
+                }
+            },
             onToggleLanguage = {
                 val next = if (LocaleHelper.currentLang(context) == "pa") "en" else "pa"
                 LocaleHelper.setLanguage(context, next)
@@ -362,19 +418,19 @@ fun HomeScreen(
 
         Spacer(Modifier.height(18.dp))
 
-        if (!loading && !faceRegistered && !updateRequired) {
+        if (bootstrapped && !faceRegistered && !updateRequired) {
             RegisterFaceCard(busy = busy, onRegister = { openFace(DashboardActivity.MODE_REGISTER) })
             Spacer(Modifier.height(18.dp))
         }
 
-        if (loading) {
+        if (loading && !bootstrapped) {
             Box(Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = AapColors.Yellow)
             }
-        } else if (!updateRequired && (faceRegistered || punchedIn)) {
+        } else if (bootstrapped && !updateRequired && (faceRegistered || punchedIn)) {
             PunchButton(
                 punchedIn = punchedIn,
-                busy = busy,
+                busy = busy || refreshing,
                 onClick = {
                     requestPunch(
                         if (punchedIn) DashboardActivity.MODE_PUNCH_OUT else DashboardActivity.MODE_PUNCH_IN
@@ -458,6 +514,7 @@ fun HomeScreen(
         OutlinedButton(
             onClick = {
                 FieldLocationService.stop(context)
+                HomeDashboardCache.clear()
                 SessionStore.clear(context)
                 onLoggedOut()
             },

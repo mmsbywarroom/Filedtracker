@@ -19,7 +19,7 @@ jobs:
           ls -lh filedtracker.tar.gz
           docker images filedtracker:latest
 
-      # Free disk BEFORE scp — keep the live app RUNNING so a failed upload cannot leave 502.
+      # Free disk BEFORE scp — keep app running here; free the old image later (right before docker load).
       - name: Free disk on EC2 before upload
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -34,7 +34,6 @@ jobs:
             sudo mkdir -p /opt/filedtracker
             sudo chown ec2-user:ec2-user /opt/filedtracker
             cd /opt/filedtracker || true
-            # Drop old tarball only — do NOT stop/rmi the running app image here.
             rm -f filedtracker.tar.gz /tmp/filedtracker.tar.gz 2>/dev/null || true
             sudo docker container prune -f || true
             sudo docker image prune -f || true
@@ -43,14 +42,14 @@ jobs:
             sudo find /var/lib/docker/containers -name '*-json.log' -type f -exec truncate -s 0 {} \; 2>/dev/null || true
             sudo dnf clean all >/dev/null 2>&1 || sudo yum clean all >/dev/null 2>&1 || true
             if [ -x /opt/filedtracker/disk-cleanup.sh ]; then
-              sudo /opt/filedtracker/disk-cleanup.sh || true
+              sudo /opt/filedtracker/disk-cleanup.sh --daily || true
             fi
             echo "=== disk after pre-clean ==="
             df -h /
             AVAIL_KB=$(df -Pk / | awk 'NR==2{print $4}')
-            # Need ~2.5GB free for gzipped image + docker load
-            if [ "${AVAIL_KB:-0}" -lt 2500000 ]; then
-              echo "ERROR: only ${AVAIL_KB} KB free on EC2 — need at least 2.5GB"
+            # Need room for ~700MB tarball while old image still runs (~1.2GB min).
+            if [ "${AVAIL_KB:-0}" -lt 1200000 ]; then
+              echo "ERROR: only ${AVAIL_KB} KB free on EC2 — need at least 1.2GB before upload"
               sudo du -xh /var/lib/docker 2>/dev/null | sort -h | tail -20 || true
               exit 1
             fi
@@ -91,12 +90,26 @@ jobs:
               sudo curl -SL https://github.com/docker/compose/releases/download/v2.29.7/docker-compose-linux-x86_64 -o /usr/libexec/docker/cli-plugins/docker-compose
               sudo chmod +x /usr/libexec/docker/cli-plugins/docker-compose
             fi
-            echo "=== disk before load ==="
+            echo "=== disk before swap ==="
             df -h /
             ls -lh filedtracker.tar.gz
+            # Brief downtime: stop + drop OLD image so docker load has ~2GB+ free (8G root disk).
+            if [ -f docker-compose.prod.yml ]; then
+              sudo docker compose -f docker-compose.prod.yml stop app || true
+              sudo docker compose -f docker-compose.prod.yml rm -f app || true
+            fi
+            sudo docker rmi filedtracker:latest || true
+            sudo docker image prune -af || true
+            sudo docker builder prune -af || true
+            echo "=== disk after freeing old image ==="
+            df -h /
+            AVAIL_KB=$(df -Pk / | awk 'NR==2{print $4}')
+            if [ "${AVAIL_KB:-0}" -lt 2500000 ]; then
+              echo "ERROR: only ${AVAIL_KB} KB free before docker load — need ≥2.5GB"
+              exit 1
+            fi
             gzip -dc filedtracker.tar.gz | sudo docker load
             rm -f filedtracker.tar.gz
-            # Never try Docker Hub for local-only image tag
             sudo docker compose -f docker-compose.prod.yml up -d --pull never 2>/dev/null \
               || sudo docker compose -f docker-compose.prod.yml up -d
             sudo docker image prune -f
@@ -108,7 +121,6 @@ jobs:
               sudo dnf install -y cronie
             fi
             sudo mkdir -p /etc/cron.d
-            # Every 6 hours: light cleanup. Daily 21:00 UTC (~2:30am IST): deep cleanup.
             printf '%s\n' \
               '15 */6 * * * root /opt/filedtracker/disk-cleanup.sh >> /var/log/filedtracker-cleanup.log 2>&1' \
               '0 21 * * * root /opt/filedtracker/disk-cleanup.sh --daily >> /var/log/filedtracker-cleanup.log 2>&1' \
@@ -117,7 +129,6 @@ jobs:
             echo '*/15 * * * * root /opt/filedtracker/auto-punch-out.sh >> /var/log/filedtracker-auto-punch.log 2>&1' | sudo tee /etc/cron.d/filedtracker-auto-punch >/dev/null
             sudo chmod 644 /etc/cron.d/filedtracker-auto-punch
             sudo systemctl enable --now crond
-            # Install global Docker log rotation so container logs cannot fill the disk again
             if [ ! -f /etc/docker/daemon.json ]; then
               echo '{"log-driver":"json-file","log-opts":{"max-size":"10m","max-file":"3"}}' | sudo tee /etc/docker/daemon.json >/dev/null
               sudo systemctl restart docker || true
