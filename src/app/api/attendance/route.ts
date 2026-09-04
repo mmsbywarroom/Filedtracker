@@ -9,7 +9,7 @@ import { sanitizeFaceImage } from "@/lib/faceImage";
 import { assertInsideAssignedAssembly } from "@/lib/assemblyGeofence";
 import { assertInsideCallCenterSite, isCallCenterDesignation } from "@/lib/callCenterGeofence";
 import { autoPunchOutIfStale, closeStaleSessionForRePunch } from "@/lib/punchOut";
-import { requireUserFaceMatch } from "@/lib/requireFaceMatch";
+import { resolveAndMatchPunchFace } from "@/lib/resolvePunchFace";
 import { findHolidayToday, holidayAppliesTo } from "@/lib/holidays";
 import { assertPanIndiaPunchLocation, isPanIndiaPunchPhone } from "@/lib/panIndiaPunch";
 import { hoursWorkedOnDay } from "@/lib/dailyAttendance";
@@ -167,7 +167,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Location is required for punch in." }, { status: 400 });
   }
 
-  const face = await requireUserFaceMatch(s.sub, body?.descriptor);
+  const face = await resolveAndMatchPunchFace(s.sub, body?.descriptor, body?.image);
   if (!face.ok) {
     return NextResponse.json({ error: face.error, code: "FACE_MISMATCH" }, { status: 403 });
   }

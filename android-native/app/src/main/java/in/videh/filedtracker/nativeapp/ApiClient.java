@@ -211,7 +211,8 @@ public final class ApiClient {
             body.put("lat", lat);
             body.put("lng", lng);
             if (accuracy != null) body.put("accuracy", accuracy);
-            body.put("descriptor", descriptor);
+            // Native may omit descriptor — server describes the photo once and matches registered face.
+            if (descriptor != null && descriptor.length() > 0) body.put("descriptor", descriptor);
             body.put("image", image);
         } catch (Exception e) {
             throw new IOException(e);

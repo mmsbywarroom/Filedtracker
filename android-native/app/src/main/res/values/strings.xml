@@ -36,7 +36,7 @@
     <string name="register_face_hint">One-time setup. You need this before your first punch in.</string>
     <string name="hold_still">Face locked — hold still</string>
     <string name="face_detecting">Looking for your face…</string>
-    <string name="face_auto_hint">Green frame = match ready. Punch happens automatically.</string>
+    <string name="face_auto_hint">Green frame = face ready. Punch happens automatically.</string>
     <string name="language">Language</string>
     <string name="secure_footer">Secure • GPS verified • Face verified</string>
     <string name="vpn_blocked">Turn off VPN before punch in/out.</string>

@@ -6,7 +6,7 @@ import { sanitizeFaceImage } from "@/lib/faceImage";
 import { assertInsideAssignedAssembly } from "@/lib/assemblyGeofence";
 import { assertInsideCallCenterSite, isCallCenterDesignation } from "@/lib/callCenterGeofence";
 import { closeOpenAttendance } from "@/lib/punchOut";
-import { requireUserFaceMatch } from "@/lib/requireFaceMatch";
+import { resolveAndMatchPunchFace } from "@/lib/resolvePunchFace";
 import { assertPanIndiaPunchLocation, isPanIndiaPunchPhone } from "@/lib/panIndiaPunch";
 
 export async function POST(req: Request) {
@@ -21,7 +21,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Location is required for punch out." }, { status: 400 });
   }
 
-  const face = await requireUserFaceMatch(s.sub, body?.descriptor);
+  const face = await resolveAndMatchPunchFace(s.sub, body?.descriptor, body?.image);
   if (!face.ok) {
     return NextResponse.json({ error: face.error, code: "FACE_MISMATCH" }, { status: 403 });
   }

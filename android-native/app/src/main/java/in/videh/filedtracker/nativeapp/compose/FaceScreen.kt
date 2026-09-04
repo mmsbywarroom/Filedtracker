@@ -4,16 +4,18 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.ImageFormat
 import android.graphics.Matrix
+import android.graphics.Rect
+import android.graphics.YuvImage
 import android.location.Location
 import android.util.Base64
+import android.util.Size
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageAnalysis
-import androidx.camera.core.ImageCapture
-import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -71,20 +73,22 @@ import `in`.videh.filedtracker.nativeapp.R
 import `in`.videh.filedtracker.nativeapp.SecurityHelper
 import `in`.videh.filedtracker.nativeapp.SessionStore
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 /** Face capture mode used by the `face/{mode}` route. */
 const val FACE_MODE_CHECK = "check"
 
 /**
- * CameraX + ML Kit. Like the web app: hold still → green frame → auto capture.
- * Punch / register finish on THIS screen — camera closes only on success; errors stay here.
+ * CameraX + ML Kit. Outer frame only (no inner box) — turns green when face is locked,
+ * then auto-punches from the live analysis frame (no second takePicture = fewer crashes).
+ * Punch uses one server round-trip (image → describe + match registered face).
  */
 @ExperimentalGetImage
 @Composable
@@ -101,7 +105,8 @@ fun FaceScreen(
     val isPunch =
         mode == DashboardActivity.MODE_PUNCH_IN || mode == DashboardActivity.MODE_PUNCH_OUT
     val autoPunch = !selfTest
-    val needHits = if (mode == DashboardActivity.MODE_REGISTER) 2 else 1
+    // ~2 stable frames (~100–200ms) then snap — feels like face unlock.
+    val needHits = if (mode == DashboardActivity.MODE_REGISTER) 3 else 2
 
     var hasCamera by remember {
         mutableStateOf(
@@ -110,14 +115,16 @@ fun FaceScreen(
         )
     }
     var faceCount by remember { mutableIntStateOf(0) }
-    var goodHits by remember { mutableIntStateOf(0) }
+    var locked by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("Point the front camera at your face.") }
     var statusError by remember { mutableStateOf(false) }
     var capturedBytes by remember { mutableIntStateOf(0) }
     var busy by remember { mutableStateOf(false) }
-    var autoFired by remember { mutableStateOf(false) }
     var cachedLoc by remember { mutableStateOf<Location?>(null) }
-    val captureExecutor: ExecutorService = remember { Executors.newSingleThreadExecutor() }
+
+    val goodHits = remember { AtomicInteger(0) }
+    val captureArmed = remember { AtomicBoolean(false) }
+    val capturing = remember { AtomicBoolean(false) }
 
     fun setStatus(text: String, error: Boolean = false) {
         status = text
@@ -144,26 +151,20 @@ fun FaceScreen(
             try {
                 SecurityHelper.assertSecureForPunch(context, loc)
             } catch (_: Exception) {
-                // Do not block punch UI on security probe — server still records evidence.
             }
             cachedLoc = loc
         } catch (_: Exception) {
-            // GPS may arrive later during punch; don't freeze the camera on warm-up failure.
         }
     }
 
     val analysisExecutor: ExecutorService = remember { Executors.newSingleThreadExecutor() }
-    val imageCapture = remember {
-        ImageCapture.Builder()
-            .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
-            .build()
-    }
     val detector = remember {
         FaceDetection.getClient(
             FaceDetectorOptions.Builder()
                 .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
                 .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_NONE)
-                .setMinFaceSize(0.15f)
+                .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_NONE)
+                .setMinFaceSize(0.2f)
                 .build()
         )
     }
@@ -171,15 +172,16 @@ fun FaceScreen(
     DisposableEffect(Unit) {
         onDispose {
             analysisExecutor.shutdown()
-            captureExecutor.shutdown()
             detector.close()
         }
     }
 
     fun resetForRetry() {
         busy = false
-        autoFired = false
-        goodHits = 0
+        locked = false
+        goodHits.set(0)
+        captureArmed.set(false)
+        capturing.set(false)
     }
 
     fun completeAfterCapture(dataUrl: String) {
@@ -204,7 +206,6 @@ fun FaceScreen(
                         }
                         setStatus("Saving face…")
                         withContext(Dispatchers.IO) {
-                            // Soft match for eyes/nose/chin when upper head is covered (no UI label).
                             api.registerFace(payload.first, payload.second, dataUrl, true)
                         }
                         setStatus("Face registered.")
@@ -216,24 +217,15 @@ fun FaceScreen(
                             if (mode == DashboardActivity.MODE_PUNCH_IN) "Punching in…"
                             else "Punching out…"
                         )
-                        val describeJob = async(Dispatchers.IO) {
-                            val res = api.describeFace(dataUrl)
-                            val descriptor = res.optJSONArray("descriptor")
-                                ?: throw IllegalStateException(
-                                    "Hold still — eyes, nose and chin clearly in the frame, then try again."
-                                )
-                            descriptor
-                        }
-                        val locJob = async(Dispatchers.IO) {
-                            val loc = cachedLoc ?: awaitLocation(act)
+                        // One round-trip: server describes photo + matches registered face.
+                        val loc = withContext(Dispatchers.IO) {
+                            val warm = cachedLoc ?: awaitLocation(act)
                             try {
-                                SecurityHelper.assertSecureForPunch(context, loc)
+                                SecurityHelper.assertSecureForPunch(context, warm)
                             } catch (_: Exception) {
                             }
-                            loc
+                            warm
                         }
-                        val descriptor = describeJob.await()
-                        val loc = locJob.await()
                         cachedLoc = loc
 
                         val res = withContext(Dispatchers.IO) {
@@ -242,7 +234,7 @@ fun FaceScreen(
                                     loc.latitude,
                                     loc.longitude,
                                     loc.accuracy.toDouble(),
-                                    descriptor,
+                                    null,
                                     dataUrl
                                 )
                             } else {
@@ -250,7 +242,7 @@ fun FaceScreen(
                                     loc.latitude,
                                     loc.longitude,
                                     loc.accuracy.toDouble(),
-                                    descriptor,
+                                    null,
                                     dataUrl
                                 )
                             }
@@ -260,17 +252,24 @@ fun FaceScreen(
                             val punchInAt =
                                 res.optJSONObject("attendance")?.optString("punchInAt", "").orEmpty()
                             if (punchInAt.isNotBlank()) {
-                                FieldLocationService.start(
-                                    context,
-                                    SessionStore.apiBase(context),
-                                    SessionStore.token(context),
-                                    punchInAt
-                                )
-                                LocationHelper.requestBackgroundLocation(act)
+                                withContext(Dispatchers.IO) {
+                                    FieldLocationService.start(
+                                        context,
+                                        SessionStore.apiBase(context),
+                                        SessionStore.token(context),
+                                        punchInAt
+                                    )
+                                }
+                                try {
+                                    LocationHelper.requestBackgroundLocation(act)
+                                } catch (_: Exception) {
+                                }
                             }
                             setStatus("Punched in.")
                         } else {
-                            FieldLocationService.stop(context)
+                            withContext(Dispatchers.IO) {
+                                FieldLocationService.stop(context)
+                            }
                             setStatus("Punched out.")
                         }
                         onSuccess()
@@ -288,66 +287,28 @@ fun FaceScreen(
         }
     }
 
+    fun armCaptureFromFrame() {
+        if (capturing.get() || busy) return
+        if (!capturing.compareAndSet(false, true)) return
+        busy = true
+        locked = true
+        statusError = false
+        setStatus("Capturing…")
+        captureArmed.set(true)
+    }
+
+    /** Manual capture (self-test only) — arms next analysis frame. */
     fun capture() {
         if (faceCount != 1) {
             setStatus("Get exactly one face in the frame first.", true)
             return
         }
-        if (busy) return
-        busy = true
-        statusError = false
-        setStatus("Capturing…")
-        imageCapture.takePicture(
-            captureExecutor,
-            object : ImageCapture.OnImageCapturedCallback() {
-                override fun onCaptureSuccess(image: ImageProxy) {
-                    val dataUrl = try {
-                        toJpegDataUrl(image)
-                    } catch (e: Exception) {
-                        scope.launch {
-                            setStatus(errorText(e, "Could not read the captured photo"), true)
-                            resetForRetry()
-                        }
-                        null
-                    } finally {
-                        image.close()
-                    }
-                    if (dataUrl == null) return
-                    scope.launch {
-                        capturedBytes = dataUrl.length
-                        if (selfTest) {
-                            busy = false
-                            setStatus("Camera OK.")
-                            autoFired = false
-                        } else {
-                            completeAfterCapture(dataUrl)
-                        }
-                    }
-                }
-
-                override fun onError(exception: ImageCaptureException) {
-                    scope.launch {
-                        setStatus(errorText(exception, "Capture failed"), true)
-                        resetForRetry()
-                    }
-                }
-            }
-        )
+        armCaptureFromFrame()
     }
 
-    LaunchedEffect(goodHits, busy, autoFired, hasCamera) {
-        if (!autoPunch || !hasCamera || busy || autoFired) return@LaunchedEffect
-        if (goodHits >= needHits) {
-            autoFired = true
-            capture()
-        }
-    }
-
-    val locked = faceCount == 1
     val frameColor = when {
         statusError -> AapColors.Danger
-        busy -> AapColors.Yellow
-        locked -> AapColors.Success
+        locked || busy -> AapColors.Success
         else -> AapColors.Outline
     }
 
@@ -399,17 +360,50 @@ fun FaceScreen(
                                             it.setSurfaceProvider(previewView.surfaceProvider)
                                         }
                                         val analysis = ImageAnalysis.Builder()
+                                            .setTargetResolution(Size(480, 640))
                                             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                                             .build()
                                         analysis.setAnalyzer(analysisExecutor) { proxy: ImageProxy ->
-                                            if (busy) {
-                                                proxy.close()
-                                                return@setAnalyzer
-                                            }
-                                            val media = proxy.image
-                                            if (media == null) {
-                                                proxy.close()
-                                            } else {
+                                            try {
+                                                if (captureArmed.compareAndSet(true, false)) {
+                                                    val dataUrl = try {
+                                                        imageProxyToJpegDataUrl(proxy)
+                                                    } catch (e: Exception) {
+                                                        proxy.close()
+                                                        mainExecutor.execute {
+                                                            setStatus(
+                                                                errorText(e, "Could not read the captured photo"),
+                                                                true
+                                                            )
+                                                            resetForRetry()
+                                                        }
+                                                        return@setAnalyzer
+                                                    }
+                                                    proxy.close()
+                                                    mainExecutor.execute {
+                                                        capturedBytes = dataUrl.length
+                                                        if (selfTest) {
+                                                            busy = false
+                                                            capturing.set(false)
+                                                            captureArmed.set(false)
+                                                            setStatus("Camera OK.")
+                                                        } else {
+                                                            completeAfterCapture(dataUrl)
+                                                        }
+                                                    }
+                                                    return@setAnalyzer
+                                                }
+
+                                                if (busy || capturing.get()) {
+                                                    proxy.close()
+                                                    return@setAnalyzer
+                                                }
+
+                                                val media = proxy.image
+                                                if (media == null) {
+                                                    proxy.close()
+                                                    return@setAnalyzer
+                                                }
                                                 val input = InputImage.fromMediaImage(
                                                     media,
                                                     proxy.imageInfo.rotationDegrees
@@ -417,14 +411,34 @@ fun FaceScreen(
                                                 detector.process(input)
                                                     .addOnSuccessListener(mainExecutor) { faces ->
                                                         val count = faces.size
-                                                        faceCount = count
-                                                        if (count == 1) {
-                                                            goodHits += 1
+                                                        if (faceCount != count) faceCount = count
+                                                        val isLocked = count == 1
+                                                        if (locked != isLocked && !busy) locked = isLocked
+                                                        if (isLocked) {
+                                                            val hits = goodHits.incrementAndGet()
+                                                            if (autoPunch && hits >= needHits) {
+                                                                armCaptureFromFrame()
+                                                            }
                                                         } else {
-                                                            goodHits = 0
+                                                            goodHits.set(0)
                                                         }
                                                     }
-                                                    .addOnCompleteListener { proxy.close() }
+                                                    .addOnCompleteListener {
+                                                        try {
+                                                            proxy.close()
+                                                        } catch (_: Exception) {
+                                                        }
+                                                    }
+                                            } catch (e: Exception) {
+                                                try {
+                                                    proxy.close()
+                                                } catch (_: Exception) {
+                                                }
+                                                mainExecutor.execute {
+                                                    if (!busy) {
+                                                        setStatus(errorText(e, "Camera frame error"), true)
+                                                    }
+                                                }
                                             }
                                         }
                                         provider.unbindAll()
@@ -432,8 +446,7 @@ fun FaceScreen(
                                             lifecycleOwner,
                                             CameraSelector.DEFAULT_FRONT_CAMERA,
                                             preview,
-                                            analysis,
-                                            imageCapture
+                                            analysis
                                         )
                                     } catch (e: Exception) {
                                         setStatus(errorText(e, "Could not start the camera"), true)
@@ -442,21 +455,7 @@ fun FaceScreen(
                                 previewView
                             }
                         )
-
-                        Box(
-                            Modifier
-                                .align(Alignment.Center)
-                                .size(220.dp)
-                                .border(
-                                    width = if (locked) 4.dp else 2.dp,
-                                    color = when {
-                                        statusError -> AapColors.Danger
-                                        locked -> AapColors.Success
-                                        else -> AapColors.TextMuted.copy(alpha = 0.45f)
-                                    },
-                                    shape = RoundedCornerShape(16.dp)
-                                )
-                        )
+                        // Outer frame only — no inner guide box (user request).
                     }
                 }
             }
@@ -481,7 +480,7 @@ fun FaceScreen(
                         .background(
                             when {
                                 statusError -> AapColors.Danger
-                                locked -> AapColors.Success
+                                locked || busy -> AapColors.Success
                                 else -> AapColors.TextMuted
                             }
                         )
@@ -492,7 +491,7 @@ fun FaceScreen(
                     style = MaterialTheme.typography.titleMedium,
                     color = when {
                         statusError -> AapColors.Danger
-                        locked -> AapColors.Success
+                        locked || busy -> AapColors.Success
                         else -> AapColors.TextMuted
                     }
                 )
@@ -552,8 +551,7 @@ fun FaceScreen(
                     onClick = {
                         statusError = false
                         setStatus("Point the front camera at your face.")
-                        autoFired = false
-                        goodHits = 0
+                        resetForRetry()
                     },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -586,12 +584,24 @@ private fun faceSubtitle(mode: String): String = when (mode) {
     else -> "Camera + face detection self-test"
 }
 
-private fun toJpegDataUrl(image: ImageProxy): String {
-    val buffer = image.planes[0].buffer
-    val bytes = ByteArray(buffer.remaining())
-    buffer.get(bytes)
-    val decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-        ?: throw IllegalStateException("Could not decode the captured photo.")
+/**
+ * Encode analysis / capture frame to a small JPEG data URL.
+ * Handles JPEG and YUV_420_888; scales down to avoid OOM on low-end phones.
+ */
+@ExperimentalGetImage
+private fun imageProxyToJpegDataUrl(image: ImageProxy): String {
+    val rotation = image.imageInfo.rotationDegrees
+    val decoded = when (image.format) {
+        ImageFormat.JPEG -> {
+            val buffer = image.planes[0].buffer
+            val bytes = ByteArray(buffer.remaining())
+            buffer.get(bytes)
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                ?: throw IllegalStateException("Could not decode the captured photo.")
+        }
+        ImageFormat.YUV_420_888 -> yuv420888ToBitmap(image)
+        else -> throw IllegalStateException("Unsupported camera format ${image.format}")
+    }
 
     val matrix = Matrix()
     val longestSide = maxOf(decoded.width, decoded.height)
@@ -599,7 +609,6 @@ private fun toJpegDataUrl(image: ImageProxy): String {
         val scale = MAX_CAPTURE_SIDE.toFloat() / longestSide.toFloat()
         matrix.postScale(scale, scale)
     }
-    val rotation = image.imageInfo.rotationDegrees
     if (rotation != 0) matrix.postRotate(rotation.toFloat())
 
     val upright = if (matrix.isIdentity) {
@@ -609,10 +618,70 @@ private fun toJpegDataUrl(image: ImageProxy): String {
     }
 
     val out = ByteArrayOutputStream()
-    upright.compress(Bitmap.CompressFormat.JPEG, 62, out)
+    upright.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)
     if (upright !== decoded) upright.recycle()
     decoded.recycle()
     return "data:image/jpeg;base64," + Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
 }
 
-private const val MAX_CAPTURE_SIDE = 480
+/** Convert CameraX YUV_420_888 → Bitmap via NV21 + YuvImage (crash-safe path). */
+private fun yuv420888ToBitmap(image: ImageProxy): Bitmap {
+    val nv21 = yuv420888ToNv21(image)
+    val yuv = YuvImage(nv21, ImageFormat.NV21, image.width, image.height, null)
+    val out = ByteArrayOutputStream()
+    if (!yuv.compressToJpeg(Rect(0, 0, image.width, image.height), 80, out)) {
+        throw IllegalStateException("Could not compress camera frame.")
+    }
+    val bytes = out.toByteArray()
+    return BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+        ?: throw IllegalStateException("Could not decode camera frame.")
+}
+
+private fun yuv420888ToNv21(image: ImageProxy): ByteArray {
+    val width = image.width
+    val height = image.height
+    val yPlane = image.planes[0]
+    val uPlane = image.planes[1]
+    val vPlane = image.planes[2]
+    val ySize = width * height
+    val nv21 = ByteArray(ySize + ySize / 2)
+
+    val yBuffer = yPlane.buffer
+    val yRowStride = yPlane.rowStride
+    var pos = 0
+    if (yRowStride == width) {
+        yBuffer.get(nv21, 0, ySize)
+        pos = ySize
+    } else {
+        var rowStart = 0
+        for (row in 0 until height) {
+            yBuffer.position(rowStart)
+            yBuffer.get(nv21, pos, width)
+            pos += width
+            rowStart += yRowStride
+        }
+    }
+
+    val chromaHeight = height / 2
+    val chromaWidth = width / 2
+    val vBuffer = vPlane.buffer
+    val uBuffer = uPlane.buffer
+    val vRowStride = vPlane.rowStride
+    val uRowStride = uPlane.rowStride
+    val vPixelStride = vPlane.pixelStride
+    val uPixelStride = uPlane.pixelStride
+
+    // NV21 = YYYY… + VUVU…
+    for (row in 0 until chromaHeight) {
+        for (col in 0 until chromaWidth) {
+            val vIndex = row * vRowStride + col * vPixelStride
+            val uIndex = row * uRowStride + col * uPixelStride
+            nv21[pos++] = vBuffer.get(vIndex)
+            nv21[pos++] = uBuffer.get(uIndex)
+        }
+    }
+    return nv21
+}
+
+private const val MAX_CAPTURE_SIDE = 360
+private const val JPEG_QUALITY = 55

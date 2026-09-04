@@ -48,7 +48,7 @@ const DETECT_TRIES: { inputSize: number; scoreThreshold: number }[] = [
  */
 export async function describeFaceFromImage(
   image: string,
-  opts?: { relaxed?: boolean }
+  opts?: { relaxed?: boolean; fast?: boolean }
 ): Promise<{ ok: true; descriptor: number[]; samples: number[][] } | { ok: false; error: string }> {
   try {
     await loadModels();
@@ -60,7 +60,12 @@ export async function describeFaceFromImage(
     const ctx = canvas.getContext("2d");
     ctx.drawImage(img, 0, 0);
 
-    const tries = opts?.relaxed ? DETECT_TRIES : DETECT_TRIES.slice(0, 2);
+    // fast: 1–2 detector passes (native punch already ML-Kit locked a face).
+    const tries = opts?.fast
+      ? DETECT_TRIES.slice(0, 2)
+      : opts?.relaxed
+        ? DETECT_TRIES
+        : DETECT_TRIES.slice(0, 2);
     let det: faceapi.WithFaceDescriptor<
       faceapi.WithFaceLandmarks<{ detection: faceapi.FaceDetection }, faceapi.FaceLandmarks68>
     > | null = null;
