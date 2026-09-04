@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
+import android.location.Location
 import android.util.Base64
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -62,14 +63,18 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.face.FaceDetection
 import com.google.mlkit.vision.face.FaceDetectorOptions
+import `in`.videh.filedtracker.bglocation.FieldLocationService
 import `in`.videh.filedtracker.nativeapp.ApiClient
 import `in`.videh.filedtracker.nativeapp.DashboardActivity
+import `in`.videh.filedtracker.nativeapp.LocationHelper
 import `in`.videh.filedtracker.nativeapp.R
+import `in`.videh.filedtracker.nativeapp.SecurityHelper
+import `in`.videh.filedtracker.nativeapp.SessionStore
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
-import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -78,38 +83,25 @@ import java.util.concurrent.Executors
 const val FACE_MODE_CHECK = "check"
 
 /**
- * Descriptor handed back from [FaceScreen] to whoever opened it. Navigation drops the
- * screen's own state, so the result waits here until the home screen picks it up.
- */
-data class FaceResult(val payloadJson: String, val image: String, val mode: String)
-
-object FaceResultBus {
-    var pending by mutableStateOf<FaceResult?>(null)
-
-    fun take(): FaceResult? {
-        val value = pending
-        pending = null
-        return value
-    }
-}
-
-/**
- * CameraX + ML Kit. Like the web app: hold still → green frame → auto capture / punch.
- * JPEG goes to `POST /api/face/describe` for the same 128-d face-api descriptor.
+ * CameraX + ML Kit. Like the web app: hold still → green frame → auto capture.
+ * Punch / register finish on THIS screen — camera closes only on success; errors stay here.
  */
 @ExperimentalGetImage
 @Composable
 fun FaceScreen(
     mode: String,
     onBack: () -> Unit,
-    onFinished: (descriptorJson: String, imageDataUrl: String, mode: String) -> Unit
+    onSuccess: () -> Unit
 ) {
     val context = LocalContext.current
+    val activity = context.findActivity()
     val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
     val selfTest = mode == FACE_MODE_CHECK
+    val isPunch =
+        mode == DashboardActivity.MODE_PUNCH_IN || mode == DashboardActivity.MODE_PUNCH_OUT
     val autoPunch = !selfTest
-    val needHits = if (mode == DashboardActivity.MODE_REGISTER) 4 else 2
+    val needHits = if (mode == DashboardActivity.MODE_REGISTER) 3 else 2
 
     var hasCamera by remember {
         mutableStateOf(
@@ -120,19 +112,39 @@ fun FaceScreen(
     var faceCount by remember { mutableIntStateOf(0) }
     var goodHits by remember { mutableIntStateOf(0) }
     var status by remember { mutableStateOf("Point the front camera at your face.") }
+    var statusError by remember { mutableStateOf(false) }
     var capturedBytes by remember { mutableIntStateOf(0) }
     var busy by remember { mutableStateOf(false) }
     var autoFired by remember { mutableStateOf(false) }
+    var cachedLoc by remember { mutableStateOf<Location?>(null) }
+
+    fun setStatus(text: String, error: Boolean = false) {
+        status = text
+        statusError = error
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         hasCamera = granted
-        if (!granted) status = "Camera permission is required for face capture."
+        if (!granted) setStatus("Camera permission is required for face capture.", true)
     }
 
     LaunchedEffect(Unit) {
         if (!hasCamera) permissionLauncher.launch(Manifest.permission.CAMERA)
+    }
+
+    // Warm GPS while the user lines up their face (punch only).
+    LaunchedEffect(mode) {
+        if (!isPunch) return@LaunchedEffect
+        val act = activity ?: return@LaunchedEffect
+        try {
+            val loc = awaitLocation(act)
+            SecurityHelper.assertSecureForPunch(context, loc)
+            cachedLoc = loc
+        } catch (e: Exception) {
+            setStatus(errorText(e, "Could not verify GPS location."), true)
+        }
     }
 
     val analysisExecutor: ExecutorService = remember { Executors.newSingleThreadExecutor() }
@@ -157,40 +169,123 @@ fun FaceScreen(
         }
     }
 
-    fun describeAndFinish(dataUrl: String) {
+    fun resetForRetry() {
+        busy = false
+        autoFired = false
+        goodHits = 0
+    }
+
+    fun completeAfterCapture(dataUrl: String) {
         busy = true
-        status = "Matching face…"
+        statusError = false
         scope.launch {
             try {
-                val payload = withContext(Dispatchers.IO) {
-                    val res = ApiClient(context).describeFace(dataUrl)
-                    val descriptor = res.optJSONArray("descriptor")
-                        ?: throw IllegalStateException("No face found in the photo. Try again.")
-                    val samples = res.optJSONArray("samples") ?: JSONArray().put(descriptor)
-                    JSONObject()
-                        .put("descriptor", descriptor)
-                        .put("samples", samples)
-                        .toString()
+                val act = activity ?: throw IllegalStateException("App is not ready.")
+                val api = ApiClient(context)
+
+                when (mode) {
+                    DashboardActivity.MODE_REGISTER -> {
+                        setStatus("Matching face…")
+                        val payload = withContext(Dispatchers.IO) {
+                            val res = api.describeFace(dataUrl)
+                            val descriptor = res.optJSONArray("descriptor")
+                                ?: throw IllegalStateException(
+                                    "Hold still with your full face in the frame for a few seconds, then try again."
+                                )
+                            val samples = res.optJSONArray("samples") ?: JSONArray().put(descriptor)
+                            descriptor to samples
+                        }
+                        setStatus("Saving face…")
+                        withContext(Dispatchers.IO) {
+                            api.registerFace(payload.first, payload.second, dataUrl, false)
+                        }
+                        setStatus("Face registered.")
+                        onSuccess()
+                    }
+
+                    DashboardActivity.MODE_PUNCH_IN, DashboardActivity.MODE_PUNCH_OUT -> {
+                        setStatus(
+                            if (mode == DashboardActivity.MODE_PUNCH_IN) "Punching in…"
+                            else "Punching out…"
+                        )
+                        val describeJob = async(Dispatchers.IO) {
+                            val res = api.describeFace(dataUrl)
+                            val descriptor = res.optJSONArray("descriptor")
+                                ?: throw IllegalStateException(
+                                    "Hold still with your full face in the frame for a few seconds, then try again."
+                                )
+                            descriptor
+                        }
+                        val locJob = async(Dispatchers.IO) {
+                            val loc = cachedLoc ?: awaitLocation(act)
+                            SecurityHelper.assertSecureForPunch(context, loc)
+                            loc
+                        }
+                        val descriptor = describeJob.await()
+                        val loc = locJob.await()
+                        cachedLoc = loc
+
+                        val res = withContext(Dispatchers.IO) {
+                            if (mode == DashboardActivity.MODE_PUNCH_IN) {
+                                api.punchIn(
+                                    loc.latitude,
+                                    loc.longitude,
+                                    loc.accuracy.toDouble(),
+                                    descriptor,
+                                    dataUrl
+                                )
+                            } else {
+                                api.punchOut(
+                                    loc.latitude,
+                                    loc.longitude,
+                                    loc.accuracy.toDouble(),
+                                    descriptor,
+                                    dataUrl
+                                )
+                            }
+                        }
+
+                        if (mode == DashboardActivity.MODE_PUNCH_IN) {
+                            val punchInAt =
+                                res.optJSONObject("attendance")?.optString("punchInAt", "").orEmpty()
+                            if (punchInAt.isNotBlank()) {
+                                FieldLocationService.start(
+                                    context,
+                                    SessionStore.apiBase(context),
+                                    SessionStore.token(context),
+                                    punchInAt
+                                )
+                                LocationHelper.requestBackgroundLocation(act)
+                            }
+                            setStatus("Punched in.")
+                        } else {
+                            FieldLocationService.stop(context)
+                            setStatus("Punched out.")
+                        }
+                        onSuccess()
+                    }
+
+                    else -> {
+                        setStatus("Camera and face detection are working.")
+                        resetForRetry()
+                    }
                 }
-                onFinished(payload, dataUrl, mode)
             } catch (e: Exception) {
-                status = errorText(e, "Could not read your face. Try again.")
-                autoFired = false
-                goodHits = 0
-            } finally {
-                busy = false
+                setStatus(errorText(e, "Could not complete. Try again."), true)
+                resetForRetry()
             }
         }
     }
 
     fun capture() {
         if (faceCount != 1) {
-            status = "Get exactly one face in the frame first."
+            setStatus("Get exactly one face in the frame first.", true)
             return
         }
         if (busy) return
         busy = true
-        status = "Capturing…"
+        statusError = false
+        setStatus("Capturing…")
         imageCapture.takePicture(
             ContextCompat.getMainExecutor(context),
             object : ImageCapture.OnImageCapturedCallback() {
@@ -198,9 +293,8 @@ fun FaceScreen(
                     val dataUrl = try {
                         toJpegDataUrl(image)
                     } catch (e: Exception) {
-                        status = errorText(e, "Could not read the captured photo")
-                        busy = false
-                        autoFired = false
+                        setStatus(errorText(e, "Could not read the captured photo"), true)
+                        resetForRetry()
                         null
                     } finally {
                         image.close()
@@ -209,25 +303,24 @@ fun FaceScreen(
                     capturedBytes = dataUrl.length
                     if (selfTest) {
                         busy = false
-                        status = "Camera and face detection are working " +
-                            "(${dataUrl.length} chars encoded)."
+                        setStatus(
+                            "Camera and face detection are working " +
+                                "(${dataUrl.length} chars encoded)."
+                        )
                         autoFired = false
                     } else {
-                        describeAndFinish(dataUrl)
+                        completeAfterCapture(dataUrl)
                     }
                 }
 
                 override fun onError(exception: ImageCaptureException) {
-                    busy = false
-                    autoFired = false
-                    goodHits = 0
-                    status = errorText(exception, "Capture failed")
+                    setStatus(errorText(exception, "Capture failed"), true)
+                    resetForRetry()
                 }
             }
         )
     }
 
-    // Web-style auto punch: enough consecutive single-face frames → capture once.
     LaunchedEffect(goodHits, busy, autoFired, hasCamera) {
         if (!autoPunch || !hasCamera || busy || autoFired) return@LaunchedEffect
         if (goodHits >= needHits) {
@@ -238,6 +331,7 @@ fun FaceScreen(
 
     val locked = faceCount == 1
     val frameColor = when {
+        statusError -> AapColors.Danger
         busy -> AapColors.Yellow
         locked -> AapColors.Success
         else -> AapColors.Outline
@@ -294,6 +388,10 @@ fun FaceScreen(
                                             .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                                             .build()
                                         analysis.setAnalyzer(analysisExecutor) { proxy: ImageProxy ->
+                                            if (busy) {
+                                                proxy.close()
+                                                return@setAnalyzer
+                                            }
                                             val media = proxy.image
                                             if (media == null) {
                                                 proxy.close()
@@ -324,21 +422,24 @@ fun FaceScreen(
                                             imageCapture
                                         )
                                     } catch (e: Exception) {
-                                        status = errorText(e, "Could not start the camera")
+                                        setStatus(errorText(e, "Could not start the camera"), true)
                                     }
                                 }, mainExecutor)
                                 previewView
                             }
                         )
 
-                        // Green square overlay — same cue as the web app when face locks.
                         Box(
                             Modifier
                                 .align(Alignment.Center)
                                 .size(220.dp)
                                 .border(
                                     width = if (locked) 4.dp else 2.dp,
-                                    color = if (locked) AapColors.Success else AapColors.TextMuted.copy(alpha = 0.45f),
+                                    color = when {
+                                        statusError -> AapColors.Danger
+                                        locked -> AapColors.Success
+                                        else -> AapColors.TextMuted.copy(alpha = 0.45f)
+                                    },
                                     shape = RoundedCornerShape(16.dp)
                                 )
                         )
@@ -348,33 +449,47 @@ fun FaceScreen(
 
             Spacer(Modifier.height(14.dp))
 
+            val liveHint = when {
+                !hasCamera -> "Camera off"
+                busy -> status
+                statusError -> status
+                locked && autoPunch -> stringResource(R.string.hold_still)
+                locked -> "Face detected — hold still"
+                faceCount > 1 -> "More than one face in frame"
+                else -> stringResource(R.string.face_detecting)
+            }
+
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     Modifier
                         .size(10.dp)
                         .clip(RoundedCornerShape(50))
-                        .background(if (locked) AapColors.Success else AapColors.TextMuted)
+                        .background(
+                            when {
+                                statusError -> AapColors.Danger
+                                locked -> AapColors.Success
+                                else -> AapColors.TextMuted
+                            }
+                        )
                 )
                 Spacer(Modifier.size(10.dp))
                 Text(
-                    when {
-                        !hasCamera -> "Camera off"
-                        busy -> status
-                        locked && autoPunch -> stringResource(R.string.hold_still)
-                        locked -> "Face detected — hold still"
-                        faceCount > 1 -> "More than one face in frame"
-                        else -> stringResource(R.string.face_detecting)
-                    },
+                    liveHint,
                     style = MaterialTheme.typography.titleMedium,
-                    color = if (locked) AapColors.Success else AapColors.TextMuted
+                    color = when {
+                        statusError -> AapColors.Danger
+                        locked -> AapColors.Success
+                        else -> AapColors.TextMuted
+                    }
                 )
             }
 
             Spacer(Modifier.height(6.dp))
             Text(
-                if (autoPunch) stringResource(R.string.face_auto_hint) else status,
+                if (statusError || busy || selfTest) status
+                else stringResource(R.string.face_auto_hint),
                 style = MaterialTheme.typography.bodyMedium,
-                color = AapColors.TextMuted
+                color = if (statusError) AapColors.Danger else AapColors.TextMuted
             )
             if (selfTest && capturedBytes > 0) {
                 Text(
@@ -386,7 +501,6 @@ fun FaceScreen(
 
             Spacer(Modifier.height(14.dp))
 
-            // Punch / register: no button — auto fires. Self-test keeps a Capture button.
             if (selfTest) {
                 Button(
                     onClick = { capture() },
@@ -419,6 +533,25 @@ fun FaceScreen(
                 Box(Modifier.fillMaxWidth().height(58.dp), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(color = AapColors.Yellow, strokeWidth = 3.dp)
                 }
+            } else if (statusError) {
+                Button(
+                    onClick = {
+                        statusError = false
+                        setStatus("Point the front camera at your face.")
+                        autoFired = false
+                        goodHits = 0
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(58.dp),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = AapColors.Yellow,
+                        contentColor = AapColors.Navy
+                    )
+                ) {
+                    Text("Try again", fontWeight = FontWeight.Bold)
+                }
             }
 
             Spacer(Modifier.height(22.dp))
@@ -439,10 +572,6 @@ private fun faceSubtitle(mode: String): String = when (mode) {
     else -> "Camera + face detection self-test"
 }
 
-/**
- * Full-res captures are several MB of base64, and the server ignores EXIF, so the frame is
- * rotated upright and shrunk before it goes over the wire.
- */
 private fun toJpegDataUrl(image: ImageProxy): String {
     val buffer = image.planes[0].buffer
     val bytes = ByteArray(buffer.remaining())
@@ -466,10 +595,10 @@ private fun toJpegDataUrl(image: ImageProxy): String {
     }
 
     val out = ByteArrayOutputStream()
-    upright.compress(Bitmap.CompressFormat.JPEG, 88, out)
+    upright.compress(Bitmap.CompressFormat.JPEG, 78, out)
     if (upright !== decoded) upright.recycle()
     decoded.recycle()
     return "data:image/jpeg;base64," + Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
 }
 
-private const val MAX_CAPTURE_SIDE = 720
+private const val MAX_CAPTURE_SIDE = 640

@@ -1,7 +1,6 @@
 package `in`.videh.filedtracker.nativeapp.compose
 
 import android.Manifest
-import android.location.Location
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -84,7 +83,6 @@ import `in`.videh.filedtracker.nativeapp.SessionStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.json.JSONArray
 import org.json.JSONObject
 
 @Composable
@@ -142,103 +140,12 @@ fun HomeScreen(
         }
     }
 
-    /** Runs the punch call once the face module has returned a descriptor + image. */
-    fun punch(punchIn: Boolean, descriptorJson: String, image: String) {
-        busy = true
-        say(if (punchIn) "Punching in…" else "Punching out…")
-        scope.launch {
-            try {
-                val act = activity ?: throw IllegalStateException("App is not ready.")
-                val loc: Location = awaitLocation(act)
-                SecurityHelper.assertSecureForPunch(context, loc)
-                val descriptor = parseFacePayload(descriptorJson).first
-                val res = withContext(Dispatchers.IO) {
-                    val api = ApiClient(context)
-                    if (punchIn) {
-                        api.punchIn(loc.latitude, loc.longitude, loc.accuracy.toDouble(), descriptor, image)
-                    } else {
-                        api.punchOut(loc.latitude, loc.longitude, loc.accuracy.toDouble(), descriptor, image)
-                    }
-                }
-                if (punchIn) {
-                    val punchInAt = res.optJSONObject("attendance")?.optString("punchInAt", "").orEmpty()
-                    if (punchInAt.isNotBlank()) {
-                        FieldLocationService.start(
-                            context,
-                            SessionStore.apiBase(context),
-                            SessionStore.token(context),
-                            punchInAt
-                        )
-                        LocationHelper.requestBackgroundLocation(act)
-                    }
-                    say("Punched in. Route tracking is on.")
-                } else {
-                    FieldLocationService.stop(context)
-                    say("Punched out.")
-                }
-                reload()
-            } catch (e: Exception) {
-                say(errorText(e, "Punch failed"), true)
-            } finally {
-                busy = false
-            }
-        }
-    }
-
-    fun registerFace(payloadJson: String, image: String) {
-        busy = true
-        say("Saving face…")
-        scope.launch {
-            try {
-                val (descriptor, samples) = parseFacePayload(payloadJson)
-                withContext(Dispatchers.IO) {
-                    ApiClient(context).registerFace(descriptor, samples, image, false)
-                }
-                say("Face registered.")
-                reload()
-            } catch (e: Exception) {
-                say(errorText(e, "Face register failed"), true)
-            } finally {
-                busy = false
-            }
-        }
-    }
-
-    /** The Compose face screen leaves its descriptor on the bus and pops back here. */
-    val faceResult = FaceResultBus.pending
-    LaunchedEffect(faceResult) {
-        val result = FaceResultBus.take() ?: return@LaunchedEffect
-        when (result.mode) {
-            DashboardActivity.MODE_REGISTER -> registerFace(result.payloadJson, result.image)
-            DashboardActivity.MODE_PUNCH_IN -> punch(true, result.payloadJson, result.image)
-            DashboardActivity.MODE_PUNCH_OUT -> punch(false, result.payloadJson, result.image)
-        }
-    }
-
     fun openFace(mode: String) = onOpen(Routes.face(mode))
 
-    /** GPS fix + security scan happen before we open the face module, same as before. */
+    /** Open camera immediately — GPS + punch/register run on the face screen (errors stay there). */
     fun startPunch(mode: String) {
-        val act = activity ?: return
-        busy = true
-        say("Getting GPS…")
-        scope.launch {
-            try {
-                val loc = awaitLocation(act)
-                SecurityHelper.assertSecureForPunch(context, loc)
-                gpsText = String.format(
-                    java.util.Locale.US,
-                    "GPS %.5f, %.5f  ±%.0fm",
-                    loc.latitude, loc.longitude, loc.accuracy
-                )
-                say("")
-                openFace(mode)
-            } catch (e: Exception) {
-                say(errorText(e, "Could not verify GPS location."), true)
-            } finally {
-                busy = false
-            }
-        }
+        say("")
+        openFace(mode)
     }
 
     var pendingMode by remember { mutableStateOf<String?>(null) }
@@ -508,18 +415,6 @@ fun HomeScreen(
         }
         Spacer(Modifier.height(28.dp))
     }
-}
-
-/** Face payload is either `{descriptor, samples}` or a bare descriptor array. */
-private fun parseFacePayload(payloadJson: String): Pair<JSONArray, JSONArray> {
-    if (payloadJson.trim().startsWith("{")) {
-        val payload = JSONObject(payloadJson)
-        val descriptor = payload.getJSONArray("descriptor")
-        val samples = payload.optJSONArray("samples") ?: JSONArray().put(descriptor)
-        return descriptor to samples
-    }
-    val descriptor = JSONArray(payloadJson)
-    return descriptor to JSONArray().put(descriptor)
 }
 
 @Composable

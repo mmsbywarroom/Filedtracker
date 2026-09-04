@@ -79,10 +79,8 @@ class ComposeMainActivity : AppCompatActivity() {
                             FaceScreen(
                                 mode = entry.arguments?.getString("mode") ?: FACE_MODE_CHECK,
                                 onBack = { nav.popBackStack() },
-                                onFinished = { descriptorJson, image, mode ->
-                                    FaceResultBus.pending = FaceResult(descriptorJson, image, mode)
-                                    nav.popBackStack()
-                                }
+                                // Close camera only after punch / register succeeds.
+                                onSuccess = { nav.popBackStack() }
                             )
                         }
                     }
