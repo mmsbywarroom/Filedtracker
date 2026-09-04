@@ -214,6 +214,10 @@ struct HomeView: View {
             if punchedIn, let pin = open?.string("punchInAt") {
                 LocationTracker.shared.start(apiBase: SessionStore.apiBase, token: SessionStore.token, punchInAt: pin)
             }
+            try? await ApiClient.reportLocationPermission(
+                foreground: gps.fix.hasWhenInUse,
+                background: gps.fix.hasAlways
+            )
         } catch {
             say(error.localizedDescription, error: true)
         }

@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "locationForeground" BOOLEAN;
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "locationBackground" BOOLEAN;
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "locationPermAt" TIMESTAMP(3);
+ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "locationPermPlatform" TEXT;

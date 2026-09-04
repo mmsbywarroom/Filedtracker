@@ -264,4 +264,26 @@ public final class ApiClient {
             throw new IOException(e);
         }
     }
+
+    /** Report Always / While-using location permission for admin audit. */
+    public void reportLocationPermission(boolean foreground, boolean background) throws IOException, ApiError {
+        JSONObject body = new JSONObject();
+        try {
+            body.put("foreground", foreground);
+            body.put("background", background);
+            body.put("platform", "android");
+        } catch (Exception e) {
+            throw new IOException(e);
+        }
+        Request req = authReq("/api/me/location-permission")
+                .post(RequestBody.create(body.toString(), JSON))
+                .build();
+        try (Response res = http.newCall(req).execute()) {
+            readJson(res);
+        } catch (ApiError e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IOException(e);
+        }
+    }
 }

@@ -66,6 +66,14 @@ enum ApiClient {
         try await authed(path: "/api/face/describe", method: "POST", body: ["image": imageDataUrl])
     }
 
+    static func reportLocationPermission(foreground: Bool, background: Bool) async throws {
+        _ = try await authed(path: "/api/me/location-permission", method: "POST", body: [
+            "foreground": foreground,
+            "background": background,
+            "platform": "ios",
+        ])
+    }
+
     private static func postPublic(path: String, body: [String: Any]) async throws -> [String: Any] {
         try await send(url: AppConfig.apiBase + path, method: "POST", token: nil, body: body)
     }

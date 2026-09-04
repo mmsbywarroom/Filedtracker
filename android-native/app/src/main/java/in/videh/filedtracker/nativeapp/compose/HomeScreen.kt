@@ -303,6 +303,16 @@ fun HomeScreen(
         reload()
         // Admin audit: log VPN / spoof apps even outside a punch.
         withContext(Dispatchers.IO) {
+            try {
+                val act = activity
+                if (act != null) {
+                    ApiClient(context).reportLocationPermission(
+                        LocationHelper.hasFineLocation(act),
+                        LocationHelper.hasBackgroundLocation(act)
+                    )
+                }
+            } catch (_: Exception) {
+            }
             if (SecurityHelper.isVpnActive(context)) {
                 SecurityReporter.report(context, "vpn", "detected", "VPN active on device", null, null)
             }

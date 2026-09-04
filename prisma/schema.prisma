@@ -42,6 +42,13 @@ model User {
   /// Relaxed face match for turban/pagri — eyes, nose, mouth, beard; not forehead
   usesTurban          Boolean  @default(false)
   isActive            Boolean  @default(true)
+  /// Native app: While using / When In Use location
+  locationForeground  Boolean?
+  /// Native app: Allow all the time / Always location (needed for 30-min FLAG)
+  locationBackground  Boolean?
+  locationPermAt      DateTime?
+  /// android | ios
+  locationPermPlatform String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
   attendances         Attendance[]
