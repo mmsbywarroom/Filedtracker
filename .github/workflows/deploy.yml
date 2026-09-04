@@ -112,13 +112,25 @@ jobs:
               sudo dnf install -y cronie
             fi
             sudo mkdir -p /etc/cron.d
-            echo '15 */6 * * * root /opt/filedtracker/disk-cleanup.sh >> /var/log/filedtracker-cleanup.log 2>&1' | sudo tee /etc/cron.d/filedtracker-cleanup >/dev/null
+            # Every 6 hours: light cleanup. Daily 21:00 UTC (~2:30am IST): deep cleanup.
+            printf '%s\n' \
+              '15 */6 * * * root /opt/filedtracker/disk-cleanup.sh >> /var/log/filedtracker-cleanup.log 2>&1' \
+              '0 21 * * * root /opt/filedtracker/disk-cleanup.sh --daily >> /var/log/filedtracker-cleanup.log 2>&1' \
+              | sudo tee /etc/cron.d/filedtracker-cleanup >/dev/null
             sudo chmod 644 /etc/cron.d/filedtracker-cleanup
             echo '*/15 * * * * root /opt/filedtracker/auto-punch-out.sh >> /var/log/filedtracker-auto-punch.log 2>&1' | sudo tee /etc/cron.d/filedtracker-auto-punch >/dev/null
             sudo chmod 644 /etc/cron.d/filedtracker-auto-punch
             sudo systemctl enable --now crond
-            sudo /opt/filedtracker/disk-cleanup.sh >> /var/log/filedtracker-cleanup.log 2>&1 || true
+            # Install global Docker log rotation so container logs cannot fill the disk again
+            if [ ! -f /etc/docker/daemon.json ]; then
+              echo '{"log-driver":"json-file","log-opts":{"max-size":"10m","max-file":"3"}}' | sudo tee /etc/docker/daemon.json >/dev/null
+              sudo systemctl restart docker || true
+              cd /opt/filedtracker && sudo docker compose -f docker-compose.prod.yml up -d || true
+            fi
+            sudo /opt/filedtracker/disk-cleanup.sh --daily >> /var/log/filedtracker-cleanup.log 2>&1 || true
             sudo /opt/filedtracker/auto-punch-out.sh >> /var/log/filedtracker-auto-punch.log 2>&1 || true
             echo "=== disk after deploy ==="
             df -h /
             sudo docker compose -f docker-compose.prod.yml ps
+            echo "=== cron installed ==="
+            cat /etc/cron.d/filedtracker-cleanup || true
