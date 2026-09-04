@@ -338,9 +338,9 @@ export default function AttendanceModulePage() {
     downloadCsv(`attendance-${date}`, exportHeaders, exportRows);
   }
 
-  async function openFlagDetail(userId: string, name: string) {
+  async function openFlagDetail(userId: string, name: string, opts?: { showAll?: boolean }) {
     setFlagBusy(userId);
-    setFlagShowAll(false);
+    setFlagShowAll(!!opts?.showAll);
     try {
       const params = new URLSearchParams({ userId, date });
       const res = await fetch(`/api/admin/daily-attendance/interval-snapshots?${params}`);
@@ -712,19 +712,28 @@ export default function AttendanceModulePage() {
                       <span className="text-xs text-navy/35">—</span>
                     )}
                     {(r.nativeSessionCount || 0) > 0 ? (
-                      <p className="mt-1 text-[10px] text-navy/45">
-                        30-min checks: {r.intervalSnapCount || 0}
-                        {(r.maxIntervalSnaps || 0) > 0 ? ` (max ${r.maxIntervalSnaps})` : ""}
-                      </p>
+                      <button
+                        type="button"
+                        disabled={flagBusy === r.userId}
+                        onClick={() => void openFlagDetail(r.userId, r.name, { showAll: true })}
+                        className="mt-1 block text-left text-[10px] font-semibold text-navy/55 underline decoration-navy/25 underline-offset-2 hover:text-navy disabled:opacity-50"
+                        title="Har 30-min check ke coordinates dekho"
+                      >
+                        {flagBusy === r.userId
+                          ? "Loading…"
+                          : `30-min checks: ${r.intervalSnapCount || 0}${
+                              (r.maxIntervalSnaps || 0) > 0 ? ` (max ${r.maxIntervalSnaps})` : ""
+                            }`}
+                      </button>
                     ) : null}
                     {r.flagged && r.flagSameCount ? (
                       <button
                         type="button"
                         disabled={flagBusy === r.userId}
-                        onClick={() => void openFlagDetail(r.userId, r.name)}
+                        onClick={() => void openFlagDetail(r.userId, r.name, { showAll: false })}
                         className="mt-1 text-[10px] font-semibold text-violet-700 underline decoration-violet-300 underline-offset-2 hover:text-violet-900 disabled:opacity-50"
                       >
-                        {flagBusy === r.userId ? "Loading…" : `${r.flagSameCount} same checks`}
+                        {flagBusy === r.userId ? "Loading…" : `${r.flagSameCount} same location`}
                       </button>
                     ) : null}
                   </td>
