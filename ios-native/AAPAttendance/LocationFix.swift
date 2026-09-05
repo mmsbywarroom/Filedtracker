@@ -18,7 +18,7 @@ enum LocationFixError: LocalizedError {
     }
 }
 
-final class LocationFix: NSObject, CLLocationManagerDelegate {
+final class LocationFix: NSObject, CLLocationManagerDelegate, @unchecked Sendable {
     private let manager = CLLocationManager()
     private var continuation: CheckedContinuation<CLLocation, Error>?
     private var authContinuation: CheckedContinuation<Void, Error>?

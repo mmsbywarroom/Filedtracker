@@ -89,7 +89,7 @@ enum ApiClient {
         if !stored.isEmpty, !bases.contains(stored) {
             bases.insert(stored, at: 0)
         }
-        try await sendFailover(path: path, method: method, token: SessionStore.token, body: body, bases: bases)
+        return try await sendFailover(path: path, method: method, token: SessionStore.token, body: body, bases: bases)
     }
 
     private static func sendFailover(
