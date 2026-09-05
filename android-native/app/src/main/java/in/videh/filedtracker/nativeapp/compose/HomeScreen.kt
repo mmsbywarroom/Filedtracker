@@ -117,7 +117,7 @@ fun HomeScreen(
     var updateVersionName by remember { mutableStateOf("") }
 
     val bootstrapped = user != null || HomeDashboardCache.bootstrapped
-    val faceRegistered = user?.stringOrNull("faceRegisteredAt") != null
+    val faceRegistered = user.hasFaceRegistered()
     val punchedIn = openSession != null
 
     fun say(text: String, error: Boolean = false) {
@@ -427,25 +427,44 @@ fun HomeScreen(
 
         Spacer(Modifier.height(18.dp))
 
-        if (bootstrapped && !faceRegistered && !updateRequired) {
-            RegisterFaceCard(busy = busy, onRegister = { openFace(DashboardActivity.MODE_REGISTER) })
-            Spacer(Modifier.height(18.dp))
-        }
-
-        if (loading && !bootstrapped) {
-            Box(Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = AapColors.Yellow)
+        // Punch / register always stay visible after first successful load — never hide during refresh.
+        if (!updateRequired) {
+            if (bootstrapped && !faceRegistered && !punchedIn) {
+                RegisterFaceCard(busy = busy, onRegister = { openFace(DashboardActivity.MODE_REGISTER) })
+                Spacer(Modifier.height(18.dp))
             }
-        } else if (bootstrapped && !updateRequired && (faceRegistered || punchedIn)) {
-            PunchButton(
-                punchedIn = punchedIn,
-                busy = busy || refreshing,
-                onClick = {
-                    requestPunch(
-                        if (punchedIn) DashboardActivity.MODE_PUNCH_OUT else DashboardActivity.MODE_PUNCH_IN
-                    )
+
+            if (loading && !bootstrapped) {
+                Box(Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = AapColors.Yellow)
                 }
-            )
+            } else if (bootstrapped && (faceRegistered || punchedIn)) {
+                PunchButton(
+                    punchedIn = punchedIn,
+                    busy = busy,
+                    onClick = {
+                        requestPunch(
+                            if (punchedIn) DashboardActivity.MODE_PUNCH_OUT else DashboardActivity.MODE_PUNCH_IN
+                        )
+                    }
+                )
+            } else if (!loading && !bootstrapped) {
+                // Network failed cold start — still offer punch path using register or retry.
+                PunchButton(
+                    punchedIn = false,
+                    busy = busy,
+                    onClick = {
+                        say("Loading profile… tap refresh if this fails.", true)
+                        scope.launch {
+                            try {
+                                reload(silent = false)
+                            } catch (_: CancellationException) {
+                            } catch (_: Exception) {
+                            }
+                        }
+                    }
+                )
+            }
         }
 
         AnimatedVisibility(

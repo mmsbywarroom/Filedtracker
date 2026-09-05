@@ -24,7 +24,13 @@ struct HomeView: View {
     @State private var printsOpen = false
     @State private var lastPunchLoc: CLLocation?
 
-    private var faceRegistered: Bool { user?.string("faceRegisteredAt") != nil }
+    private var faceRegistered: Bool {
+        guard let v = user?["faceRegisteredAt"] else { return false }
+        if v is NSNull { return false }
+        if let s = v as? String { return !s.isEmpty && s != "null" }
+        if let n = v as? NSNumber { return n.doubleValue > 0 }
+        return true
+    }
     private var punchedIn: Bool { open != nil }
 
     var body: some View {
@@ -44,7 +50,7 @@ struct HomeView: View {
                             .padding(.top, 8)
                     }
                 }
-                if !loading && !faceRegistered {
+                if !loading && !faceRegistered && !punchedIn {
                     AapCard {
                         Text(LocaleStore.t("Register your face", "ਆਪਣਾ ਚਿਹਰਾ ਰਜਿਸਟਰ ਕਰੋ"))
                             .font(.title3.weight(.semibold)).foregroundColor(AapTheme.textPrimary)
@@ -63,7 +69,7 @@ struct HomeView: View {
                         .padding(.top, 8)
                     }
                 }
-                if loading {
+                if loading && user == nil && open == nil {
                     ProgressView().tint(AapTheme.yellow).frame(maxWidth: .infinity).padding(40)
                 } else if faceRegistered || punchedIn {
                     Button(action: requestPunch) {

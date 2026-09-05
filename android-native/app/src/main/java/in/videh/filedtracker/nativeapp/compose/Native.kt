@@ -111,6 +111,15 @@ fun JSONObject.stringOrNull(key: String): String? {
     return v.ifBlank { null }
 }
 
+/** True when the user already enrolled a face (string ISO or numeric timestamp). */
+fun JSONObject?.hasFaceRegistered(): Boolean {
+    val u = this ?: return false
+    if (!u.has("faceRegisteredAt") || u.isNull("faceRegisteredAt")) return false
+    val s = u.optString("faceRegisteredAt", "")
+    if (s.isNotBlank() && s != "null") return true
+    return u.optLong("faceRegisteredAt", 0L) > 0L
+}
+
 fun JSONObject.doubleOrNull(key: String): Double? {
     if (!has(key) || isNull(key)) return null
     val v = optDouble(key, Double.NaN)

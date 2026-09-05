@@ -20,7 +20,10 @@ function NativeFaceInner() {
   const turban = params.get("turban") === "1";
 
   return (
-    <main className="min-h-screen bg-sand p-4">
+    <main className="min-h-screen bg-[#0A1628] p-4 text-white">
+      <p className="mb-3 text-center text-sm text-white/70">
+        {mode === "register" ? "Register face — hold still" : "Hold still — auto punch"}
+      </p>
       <FaceCapture
         mode={mode}
         turbanMode={turban}
@@ -39,7 +42,7 @@ function NativeFaceInner() {
       />
       <button
         type="button"
-        className="mt-4 w-full rounded-xl py-3 text-sm text-navy/50"
+        className="mt-4 w-full rounded-xl py-3 text-sm text-white/50"
         onClick={() => window.NativeFaceBridge?.onFaceCancel?.()}
       >
         Cancel
@@ -50,7 +53,7 @@ function NativeFaceInner() {
 
 export default function NativeFacePage() {
   return (
-    <Suspense fallback={<main className="min-h-screen bg-sand p-6 text-sm text-navy/60">Loading camera…</main>}>
+    <Suspense fallback={<main className="min-h-screen bg-[#0A1628] p-6 text-sm text-white/60">Loading camera…</main>}>
       <NativeFaceInner />
     </Suspense>
   );

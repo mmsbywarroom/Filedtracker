@@ -19,10 +19,7 @@ struct RootView: View {
         ZStack {
             AapTheme.navyDeep.ignoresSafeArea()
             if loggedIn {
-                // Web dashboard: client-side face match (same speed as website).
-                // Native HomeView kept in project for future; punch UX is web again.
-                WebShellView(onLoggedOut: { loggedIn = false })
-                    .ignoresSafeArea()
+                HomeView(onLoggedOut: { loggedIn = false })
             } else {
                 LoginView(onLoggedIn: { loggedIn = true })
             }

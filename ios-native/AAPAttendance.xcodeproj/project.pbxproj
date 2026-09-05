@@ -29,6 +29,7 @@
 		A10000000000000000000014 /* LocaleStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000015 /* LocaleStore.swift */; };
 		A10000000000000000000015 /* LocationFix.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000016 /* LocationFix.swift */; };
 		A10000000000000000000016 /* WebShellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000017 /* WebShellView.swift */; };
+		A10000000000000000000017 /* NativeFaceWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000018 /* NativeFaceWebView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -55,6 +56,7 @@
 		A20000000000000000000015 /* LocaleStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocaleStore.swift; sourceTree = "<group>"; };
 		A20000000000000000000016 /* LocationFix.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationFix.swift; sourceTree = "<group>"; };
 		A20000000000000000000017 /* WebShellView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebShellView.swift; sourceTree = "<group>"; };
+		A20000000000000000000018 /* NativeFaceWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeFaceWebView.swift; sourceTree = "<group>"; };
 		A30000000000000000000001 /* AAPAttendance.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AAPAttendance.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -87,6 +89,7 @@
 				A2000000000000000000000F /* LoginView.swift */,
 				A20000000000000000000010 /* HomeView.swift */,
 				A20000000000000000000014 /* FaceCaptureView.swift */,
+				A20000000000000000000018 /* NativeFaceWebView.swift */,
 				A20000000000000000000011 /* MapRouteView.swift */,
 				A20000000000000000000012 /* LeaveView.swift */,
 				A20000000000000000000013 /* FootprintsView.swift */,
@@ -193,6 +196,7 @@
 				A1000000000000000000000E /* LoginView.swift in Sources */,
 				A1000000000000000000000F /* HomeView.swift in Sources */,
 				A10000000000000000000013 /* FaceCaptureView.swift in Sources */,
+				A10000000000000000000017 /* NativeFaceWebView.swift in Sources */,
 				A10000000000000000000010 /* MapRouteView.swift in Sources */,
 				A10000000000000000000011 /* LeaveView.swift in Sources */,
 				A10000000000000000000012 /* FootprintsView.swift in Sources */,
@@ -253,7 +257,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOLS = NO;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = 33AW34RHHQ;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = AAPAttendance/Info.plist;
@@ -261,7 +265,7 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.business";
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				MARKETING_VERSION = 1.3.1;
+				MARKETING_VERSION = 1.4.0;
 				PRODUCT_BUNDLE_IDENTIFIER = in.videh.filedtracker.attendance;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -278,7 +282,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOLS = NO;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEVELOPMENT_TEAM = 33AW34RHHQ;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = AAPAttendance/Info.plist;
@@ -286,7 +290,7 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.business";
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				MARKETING_VERSION = 1.3.1;
+				MARKETING_VERSION = 1.4.0;
 				PRODUCT_BUNDLE_IDENTIFIER = in.videh.filedtracker.attendance;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";

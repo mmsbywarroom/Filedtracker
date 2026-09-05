@@ -1,30 +1,15 @@
-import AVFoundation
 import SwiftUI
-import UIKit
-import Vision
 
+/// Fast punch/register: on-device face-api WebView (no server Matching face…).
 struct FaceCaptureView: View {
     let mode: FaceMode
     var onFinished: ([String: Any], String, FaceMode) -> Void
 
     @Environment(\.dismiss) private var dismiss
-    @State private var faceCount = 0
-    @State private var goodHits = 0
-    @State private var status = "Point the front camera at your face."
-    @State private var busy = false
-    @State private var autoFired = false
-    @State private var hasCamera = AVCaptureDevice.authorizationStatus(for: .video) == .authorized
-    @State private var captureTick = 0
+    @State private var status = "Hold still — matching on device…"
+    @State private var failed = false
 
     private var selfTest: Bool { mode == .check }
-    private var autoPunch: Bool { !selfTest }
-    private var needHits: Int { mode == .register ? 4 : 2 }
-    private var locked: Bool { faceCount == 1 }
-    private var frameColor: Color {
-        if busy { return AapTheme.yellow }
-        if locked { return AapTheme.success }
-        return AapTheme.textMuted.opacity(0.45)
-    }
 
     var body: some View {
         AapScreenScaffold(
@@ -32,69 +17,38 @@ struct FaceCaptureView: View {
             subtitle: subtitle,
             onBack: { dismiss() }
         ) {
-            VStack(spacing: 12) {
+            if selfTest {
+                Text("Camera self-test uses the native preview.")
+                    .foregroundColor(AapTheme.textMuted)
+                    .padding()
+                // Keep a minimal self-test path without server describe.
+                Button("Done") { dismiss() }
+                    .padding()
+            } else {
                 ZStack {
-                    CameraPreview(
-                        isBusy: busy,
-                        captureTick: captureTick,
-                        onFaces: { count in
-                            faceCount = count
-                            if count == 1 { goodHits += 1 } else { goodHits = 0 }
+                    NativeFaceWebView(
+                        mode: mode,
+                        onCaptured: { descriptorJson, image in
+                            let payload = parsePayload(descriptorJson)
+                            onFinished(payload, image, mode)
+                            dismiss()
                         },
-                        onJpeg: { data in
-                            handleJpeg(data)
-                        },
-                        onCaptureFailed: {
-                            // Buffer missing — allow another auto-attempt instead of freezing.
-                            autoFired = false
-                            goodHits = 0
-                            busy = false
-                            status = "Could not capture — hold still and try again."
+                        onCancel: {
+                            failed = true
+                            status = "Cancelled — try again."
+                            dismiss()
                         }
                     )
-                    .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-                    RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .stroke(frameColor, lineWidth: 5)
-                }
-                .aspectRatio(3 / 4, contentMode: .fit)
-                .padding(.horizontal, 20)
+                    .ignoresSafeArea(edges: .bottom)
 
-                Text(busy && autoPunch ? "Hold still — matching…" : status)
-                    .font(.subheadline)
-                    .foregroundColor(AapTheme.textMuted)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 24)
-
-                if selfTest {
-                    Button {
-                        captureTick += 1
-                    } label: {
-                        Text("Capture")
-                            .fontWeight(.bold)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 52)
-                            .background(AapTheme.yellow)
-                            .foregroundColor(AapTheme.navy)
-                            .clipShape(RoundedRectangle(cornerRadius: 16))
+                    if failed {
+                        Text(status)
+                            .font(.subheadline)
+                            .foregroundColor(AapTheme.danger)
+                            .padding()
                     }
-                    .disabled(busy || !hasCamera)
-                    .padding(.horizontal, 20)
-                }
-                Spacer(minLength: 8)
-            }
-        }
-        .onAppear {
-            AVCaptureDevice.requestAccess(for: .video) { ok in
-                DispatchQueue.main.async {
-                    hasCamera = ok
-                    if !ok { status = "Camera permission is required for face capture." }
                 }
             }
-        }
-        .onChange(of: goodHits) { hits in
-            guard autoPunch, hasCamera, !busy, !autoFired, hits >= needHits else { return }
-            autoFired = true
-            captureTick += 1
         }
     }
 
@@ -109,161 +63,18 @@ struct FaceCaptureView: View {
 
     private var subtitle: String {
         switch mode {
-        case .register: return "Hold still — auto capture"
+        case .register: return "On-device face match"
         case .punchIn, .punchOut: return "Hold still — auto punch"
         case .check: return "Camera self-test"
         }
     }
 
-    private func handleJpeg(_ data: Data) {
-        let dataUrl = "data:image/jpeg;base64," + data.base64EncodedString()
-        if selfTest {
-            busy = false
-            autoFired = false
-            status = "Camera and face detection are working (\(dataUrl.count) chars encoded)."
-            return
-        }
-        busy = true
-        status = "Matching face…"
-        Task {
-            do {
-                let payload = try await ApiClient.describeFace(imageDataUrl: dataUrl, fast: true)
-                if payload.doubles("descriptor").isEmpty {
-                    throw ApiError(
-                        statusCode: 0,
-                        message: "Hold still — eyes, nose and chin clearly in the frame, then try again."
-                    )
-                }
-                onFinished(payload, dataUrl, mode)
-                dismiss()
-            } catch {
-                status = error.localizedDescription
-                autoFired = false
-                goodHits = 0
-                busy = false
-            }
-        }
+    private func parsePayload(_ json: String) -> [String: Any] {
+        guard let data = json.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data)
+        else { return [:] }
+        if let dict = obj as? [String: Any] { return dict }
+        if let arr = obj as? [Any] { return ["descriptor": arr] }
+        return [:]
     }
-}
-
-private struct CameraPreview: UIViewRepresentable {
-    var isBusy: Bool
-    var captureTick: Int
-    var onFaces: (Int) -> Void
-    var onJpeg: (Data) -> Void
-    var onCaptureFailed: () -> Void
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(onFaces: onFaces, onJpeg: onJpeg, onCaptureFailed: onCaptureFailed)
-    }
-
-    func makeUIView(context: Context) -> PreviewView {
-        let view = PreviewView()
-        context.coordinator.attach(to: view)
-        return view
-    }
-
-    func updateUIView(_ uiView: PreviewView, context: Context) {
-        context.coordinator.onFaces = onFaces
-        context.coordinator.onJpeg = onJpeg
-        context.coordinator.onCaptureFailed = onCaptureFailed
-        context.coordinator.busy = isBusy
-        if captureTick != context.coordinator.lastTick {
-            context.coordinator.lastTick = captureTick
-            if captureTick > 0 { context.coordinator.captureStill() }
-        }
-    }
-
-    static func dismantleUIView(_ uiView: PreviewView, coordinator: Coordinator) {
-        coordinator.stop()
-    }
-
-    final class Coordinator: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
-        var onFaces: (Int) -> Void
-        var onJpeg: (Data) -> Void
-        var onCaptureFailed: () -> Void
-        var busy = false
-        var lastTick = 0
-        private let session = AVCaptureSession()
-        private let queue = DispatchQueue(label: "aap.face.camera")
-        private var lastBuffer: CVPixelBuffer?
-        private var lastCount = -1
-
-        init(
-            onFaces: @escaping (Int) -> Void,
-            onJpeg: @escaping (Data) -> Void,
-            onCaptureFailed: @escaping () -> Void
-        ) {
-            self.onFaces = onFaces
-            self.onJpeg = onJpeg
-            self.onCaptureFailed = onCaptureFailed
-        }
-
-        func attach(to view: PreviewView) {
-            session.sessionPreset = .medium
-            guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front),
-                  let input = try? AVCaptureDeviceInput(device: device),
-                  session.canAddInput(input)
-            else { return }
-            session.addInput(input)
-            let output = AVCaptureVideoDataOutput()
-            output.alwaysDiscardsLateVideoFrames = true
-            output.setSampleBufferDelegate(self, queue: queue)
-            if session.canAddOutput(output) { session.addOutput(output) }
-            if let conn = output.connection(with: .video) {
-                conn.videoOrientation = .portrait
-                if conn.isVideoMirroringSupported { conn.isVideoMirrored = true }
-            }
-            view.previewLayer.session = session
-            view.previewLayer.videoGravity = .resizeAspectFill
-            queue.async { self.session.startRunning() }
-        }
-
-        func stop() {
-            queue.async { self.session.stopRunning() }
-        }
-
-        func captureStill() {
-            queue.async {
-                guard let buffer = self.lastBuffer else {
-                    DispatchQueue.main.async { self.onCaptureFailed() }
-                    return
-                }
-                let ci = CIImage(cvPixelBuffer: buffer)
-                let ctx = CIContext()
-                guard let cg = ctx.createCGImage(ci, from: ci.extent) else {
-                    DispatchQueue.main.async { self.onCaptureFailed() }
-                    return
-                }
-                let image = UIImage(cgImage: cg)
-                guard let data = image.jpegData(compressionQuality: 0.65) else {
-                    DispatchQueue.main.async { self.onCaptureFailed() }
-                    return
-                }
-                DispatchQueue.main.async { self.onJpeg(data) }
-            }
-        }
-
-        func captureOutput(
-            _ output: AVCaptureOutput,
-            didOutput sampleBuffer: CMSampleBuffer,
-            from connection: AVCaptureConnection
-        ) {
-            guard !busy, let pixel = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
-            lastBuffer = pixel
-            let handler = VNImageRequestHandler(cvPixelBuffer: pixel, orientation: .leftMirrored, options: [:])
-            let request = VNDetectFaceRectanglesRequest()
-            try? handler.perform([request])
-            let count = request.results?.count ?? 0
-            if count != lastCount {
-                lastCount = count
-            }
-            DispatchQueue.main.async { self.onFaces(count) }
-        }
-    }
-}
-
-final class PreviewView: UIView {
-    override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
-    var previewLayer: AVCaptureVideoPreviewLayer { layer as! AVCaptureVideoPreviewLayer }
 }
