@@ -39,6 +39,21 @@ workflows:
             --certificate-key=@env:CERTIFICATE_PRIVATE_KEY
           keychain add-certificates
           xcode-project use-profiles
+      - name: Set iOS build number (must exceed last TestFlight upload)
+        script: |
+          set -e
+          cd "$CM_BUILD_DIR/ios-native"
+          # Info.plist uses $(CURRENT_PROJECT_VERSION). Last rejected upload was CFBundleVersion 4.
+          BUILD_NO=8
+          if [ -n "${APP_STORE_APPLE_ID:-}" ]; then
+            LATEST=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID" 2>/dev/null || true)
+            if [[ "${LATEST:-}" =~ ^[0-9]+$ ]] && [ "$LATEST" -ge "$BUILD_NO" ]; then
+              BUILD_NO=$((LATEST + 1))
+            fi
+          fi
+          echo "CFBundleVersion -> $BUILD_NO"
+          agvtool new-version -all "$BUILD_NO"
+          agvtool new-marketing-version 1.4.0
       - name: Build IPA for App Store / TestFlight
         script: |
           xcode-project build-ipa \
