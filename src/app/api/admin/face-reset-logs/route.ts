@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/auth";
+import { requireSuperAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isSuperAdmin } from "@/lib/hierarchy";
 
 export async function GET(req: Request) {
-  const s = await requireAdmin();
+  const s = await requireSuperAdmin();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!isSuperAdmin(s.admin)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 

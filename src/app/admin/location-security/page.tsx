@@ -8,21 +8,24 @@ type Row = {
   employeeName: string;
   mobileNumber: string;
   designation: string;
-  department: string;
+  department?: string;
   team: string;
-  assemblyName: string;
+  assemblyName?: string;
   attendanceSessionId: string | null;
   punchId: string;
-  punchType: string;
+  punchType?: string;
   punchInAt: string | null;
   punchOutAt: string | null;
-  deviceModel: string;
-  appInstallationId: string;
+  deviceModel?: string;
+  appInstallationId?: string;
   securityStatus: string;
   riskScore: number;
   mockLocationEventCount: number;
-  firstSuspiciousAt: string | null;
-  lastSuspiciousAt: string | null;
+  firstMockAt?: string | null;
+  lastMockAt?: string | null;
+  firstSuspiciousAt?: string | null;
+  lastSuspiciousAt?: string | null;
+  supportingOnly?: boolean;
 };
 
 type DetailPayload = {
@@ -84,7 +87,7 @@ function statusLabel(s: string) {
 export default function LocationSecurityAdminPage() {
   const [from, setFrom] = useState(todayIst());
   const [to, setTo] = useState(todayIst());
-  const [status, setStatus] = useState("");
+  const [view, setView] = useState<"mock" | "all">("mock");
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(false);
   const [detail, setDetail] = useState<DetailPayload | null>(null);
@@ -94,8 +97,7 @@ export default function LocationSecurityAdminPage() {
     setLoading(true);
     setErr("");
     try {
-      const q = new URLSearchParams({ from, to });
-      if (status) q.set("status", status);
+      const q = new URLSearchParams({ from, to, view });
       const res = await fetch(`/api/admin/location-security?${q}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed");
@@ -123,16 +125,27 @@ export default function LocationSecurityAdminPage() {
     else setErr(data.error || "Failed to load timeline");
   }
 
+  const isMockView = view === "mock";
+
   return (
     <div className="space-y-4 p-4 md:p-6">
       <div>
-        <h1 className="text-xl font-semibold text-navy">Location integrity (silent evidence)</h1>
+        <h1 className="text-xl font-semibold text-navy">
+          {isMockView ? "Fake GPS / mock location sessions" : "All security activity (supporting)"}
+        </h1>
         <p className="mt-1 max-w-3xl text-sm text-navy/60">
-          Punch In/Out is never blocked by these signals. Primary fake-location evidence is{" "}
-          <strong>DIRECT OS MOCK SIGNAL</strong>: “Android OS reported this location as mock” (
-          <code>LocationCompat.isMock</code>) — not automatic legal proof of fraud. App is distributed as a
-          direct/sideloaded APK (not Play Store): Play Integrity is optional/supporting only. Identity fields
-          are admin-only (joined from User / Attendance — not duplicated into security tables).
+          {isMockView ? (
+            <>
+              Main list shows <strong>only</strong> attendance sessions with direct Android OS mock evidence (
+              <code>isMock=true</code> / <code>MOCK_LOCATION_OS_SIGNAL</code>). VPN, Play Integrity, or heuristic-only
+              cases are excluded. Status is always <strong>DIRECT OS MOCK SIGNAL</strong>. Punch is never blocked;
+              employees are never warned.
+            </>
+          ) : (
+            <>
+              Supporting-only activity (VPN / Integrity / heuristics) without direct mock GPS. Not proof of fake GPS.
+            </>
+          )}
         </p>
       </div>
 
@@ -146,13 +159,14 @@ export default function LocationSecurityAdminPage() {
           <input type="date" className="mt-1 block rounded border px-2 py-1" value={to} onChange={(e) => setTo(e.target.value)} />
         </label>
         <label className="text-xs text-navy/60">
-          Status
-          <select className="mt-1 block rounded border px-2 py-1" value={status} onChange={(e) => setStatus(e.target.value)}>
-            <option value="">All</option>
-            <option value="DIRECT_MOCK_SIGNAL">DIRECT OS MOCK SIGNAL</option>
-            <option value="HIGH_RISK">HIGH_RISK</option>
-            <option value="WATCH">WATCH</option>
-            <option value="NORMAL">NORMAL</option>
+          List
+          <select
+            className="mt-1 block rounded border px-2 py-1"
+            value={view}
+            onChange={(e) => setView(e.target.value === "all" ? "all" : "mock")}
+          >
+            <option value="mock">Mock GPS only (main)</option>
+            <option value="all">All security activity (optional)</option>
           </select>
         </label>
         <button type="button" onClick={() => void load()} className="rounded-lg bg-navy px-4 py-2 text-sm text-white">
@@ -176,15 +190,20 @@ export default function LocationSecurityAdminPage() {
               <th className="px-3 py-2">Punch In</th>
               <th className="px-3 py-2">Punch Out</th>
               <th className="px-3 py-2">Mock Events</th>
+              {isMockView && (
+                <>
+                  <th className="px-3 py-2">First Mock Detected</th>
+                  <th className="px-3 py-2">Last Mock Detected</th>
+                </>
+              )}
               <th className="px-3 py-2">Risk</th>
               <th className="px-3 py-2">Status</th>
-              <th className="px-3 py-2">Last Detected</th>
-              <th className="px-3 py-2" />
+              <th className="px-3 py-2">Timeline</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={`${r.punchId}-${r.attendanceSessionId || ""}`} className="border-t border-navy/5">
+              <tr key={`${r.punchId}-${r.attendanceSessionId || ""}-${r.lastMockAt || r.lastSuspiciousAt || ""}`} className="border-t border-navy/5">
                 <td className="px-3 py-2">
                   <div className="font-medium text-navy">{r.employeeName || "—"}</div>
                   <div className="text-xs text-navy/45">{r.team || r.assemblyName || "—"}</div>
@@ -194,13 +213,18 @@ export default function LocationSecurityAdminPage() {
                 <td className="px-3 py-2 whitespace-nowrap text-xs">{whenIst(r.punchInAt)}</td>
                 <td className="px-3 py-2 whitespace-nowrap text-xs">{whenIst(r.punchOutAt)}</td>
                 <td className="px-3 py-2 font-semibold">{r.mockLocationEventCount}</td>
+                {isMockView && (
+                  <>
+                    <td className="px-3 py-2 whitespace-nowrap text-xs">{whenIst(r.firstMockAt || r.firstSuspiciousAt)}</td>
+                    <td className="px-3 py-2 whitespace-nowrap text-xs">{whenIst(r.lastMockAt || r.lastSuspiciousAt)}</td>
+                  </>
+                )}
                 <td className="px-3 py-2 font-semibold">{r.riskScore}</td>
                 <td className="px-3 py-2">
                   <span className={`rounded-full px-2 py-0.5 text-xs ${statusCls(r.securityStatus)}`}>
                     {statusLabel(r.securityStatus)}
                   </span>
                 </td>
-                <td className="px-3 py-2 whitespace-nowrap text-xs">{whenIst(r.lastSuspiciousAt)}</td>
                 <td className="px-3 py-2">
                   <button type="button" className="text-teal underline" onClick={() => void openSession(r)}>
                     Timeline
@@ -210,8 +234,10 @@ export default function LocationSecurityAdminPage() {
             ))}
             {!rows.length && !loading && (
               <tr>
-                <td colSpan={10} className="px-3 py-8 text-center text-navy/40">
-                  No integrity sessions yet for this range.
+                <td colSpan={isMockView ? 11 : 9} className="px-3 py-8 text-center text-navy/40">
+                  {isMockView
+                    ? "No direct mock-GPS sessions in this range."
+                    : "No supporting-only security activity in this range."}
                 </td>
               </tr>
             )}
@@ -261,7 +287,7 @@ export default function LocationSecurityAdminPage() {
                   <span className="text-xs">Mock events {detail.session?.mockLocationEventCount ?? 0}</span>
                 </div>
                 <div className="mt-1 text-xs text-navy/55">
-                  First suspicious: {whenIst(detail.session?.firstSuspiciousAt)} · Last:{" "}
+                  First mock: {whenIst(detail.session?.firstSuspiciousAt)} · Last:{" "}
                   {whenIst(detail.session?.lastSuspiciousAt)}
                 </div>
                 <div className="mt-1 text-xs text-navy/55">

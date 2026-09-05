@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/auth";
+import { requireSuperAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { remainingEtaSeconds, RALLY_REACHED_METERS, isRallyNoMove } from "@/lib/rallyGeo";
 import { resolveRally, rallyDateYmd } from "@/lib/rallies";
@@ -29,7 +29,7 @@ function bump(map: Map<string, Agg>, key: string) {
 }
 
 export async function GET(req: Request) {
-  const s = await requireAdmin();
+  const s = await requireSuperAdmin();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const rallyId = new URL(req.url).searchParams.get("rallyId");
   const rally = await resolveRally(rallyId);

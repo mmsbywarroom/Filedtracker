@@ -236,16 +236,18 @@ public class DashboardActivity extends AppCompatActivity {
                                 JSONArray descriptor = new JSONArray(descriptorJson);
                                 ApiClient api = new ApiClient(DashboardActivity.this);
                                 JSONObject res;
-                                if (punchIn) {
+                                    if (punchIn) {
                                     res = api.punchIn(loc.getLatitude(), loc.getLongitude(), (double) loc.getAccuracy(), descriptor, image);
                                     JSONObject att = res.optJSONObject("attendance");
                                     String punchInAt = att != null ? att.optString("punchInAt", "") : "";
+                                    String attendanceId = att != null ? att.optString("id", "") : "";
                                     if (!punchInAt.isEmpty()) {
                                         FieldLocationService.start(
                                                 DashboardActivity.this,
                                                 SessionStore.apiBase(DashboardActivity.this),
                                                 SessionStore.token(DashboardActivity.this),
-                                                punchInAt
+                                                punchInAt,
+                                                attendanceId
                                         );
                                         runOnUiThread(() -> LocationHelper.requestBackgroundLocation(DashboardActivity.this));
                                     }

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/auth";
+import { requireSuperAdmin } from "@/lib/auth";
 import { clientSourceLabel } from "@/lib/clientSource";
 import { prisma } from "@/lib/prisma";
 import { reviewScopeWhere } from "@/lib/hierarchy";
@@ -12,7 +12,7 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 export async function GET(req: Request) {
-  const s = await requireAdmin();
+  const s = await requireSuperAdmin();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { searchParams } = new URL(req.url);

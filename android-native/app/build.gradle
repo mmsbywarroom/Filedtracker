@@ -26,8 +26,8 @@ android {
         applicationId "in.videh.filedtracker.native"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 33
-        versionName "1.4.1"
+        versionCode 34
+        versionName "1.4.2"
         manifestPlaceholders = [MAPS_API_KEY: mapsApiKey]
         // Not a secret — Cloud project number for StandardIntegrityManager.prepareIntegrityToken
         buildConfigField "long", "PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER", "${playIntegrityCloudProjectNumber}L"

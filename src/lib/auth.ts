@@ -182,3 +182,10 @@ export async function requireAdmin() {
   };
   return { ...s, admin: scope };
 }
+
+/** Super admin only — Rally, Logs, Salary register, Holidays, etc. */
+export async function requireSuperAdmin() {
+  const s = await requireAdmin();
+  if (!s || !s.admin.isSuper) return null;
+  return s;
+}

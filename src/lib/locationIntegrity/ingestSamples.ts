@@ -27,6 +27,20 @@ function parseTs(v: unknown): Date {
   return new Date();
 }
 
+/** Prefer client attendanceId; else attach to currently open punch session. */
+export async function resolveAttendanceSessionId(
+  userId: string,
+  attendanceId?: string | null
+): Promise<string | null> {
+  if (attendanceId && attendanceId.trim()) return attendanceId.trim();
+  const open = await prisma.attendance.findFirst({
+    where: { userId, punchOutAt: null },
+    orderBy: { punchInAt: "desc" },
+    select: { id: true },
+  });
+  return open?.id || null;
+}
+
 export async function upsertDeviceInstall(opts: {
   userId: string;
   appInstallationId: string;
@@ -64,6 +78,136 @@ export async function upsertDeviceInstall(opts: {
   });
 }
 
+/**
+ * Recount mock evidence for a punch/attendance session and persist summary.
+ * Whenever isMock evidence exists → mockLocationDetected, DIRECT_MOCK_SIGNAL, recalculated risk.
+ */
+export async function refreshSecuritySummaryFromEvidence(opts: {
+  userId: string;
+  attendanceId?: string | null;
+  punchId?: string | null;
+  punchType?: string;
+  appInstallationId?: string;
+  vpnActive?: boolean;
+  playIntegrityStatus?: string;
+  playIntegrityFailed?: boolean;
+  playIntegrityStrongTamper?: boolean;
+  sensorMismatchCount?: number;
+}) {
+  const attendanceId = opts.attendanceId || null;
+  let punchId = (opts.punchId || "").trim();
+
+  if (!punchId && attendanceId) {
+    const existing = await prisma.attendanceSecuritySummary.findFirst({
+      where: { userId: opts.userId, attendanceId },
+      orderBy: { createdAt: "desc" },
+      select: { punchId: true },
+    });
+    punchId = existing?.punchId || `att_${attendanceId}`;
+  }
+  if (!punchId) return null;
+
+  const sessionOr: Array<{ punchId: string } | { attendanceId: string }> = [{ punchId }];
+  if (attendanceId) sessionOr.push({ attendanceId });
+
+  const [mockSamples, mockEvents, events] = await Promise.all([
+    prisma.attendanceLocationSample.findMany({
+      where: { userId: opts.userId, isMock: true, OR: sessionOr },
+      select: { sampleId: true, locationTimestamp: true },
+      take: 500,
+    }),
+    prisma.attendanceSecurityEvent.findMany({
+      where: {
+        userId: opts.userId,
+        eventType: "MOCK_LOCATION_OS_SIGNAL",
+        OR: sessionOr,
+      },
+      select: { eventId: true, eventTimestamp: true },
+      take: 500,
+    }),
+    prisma.attendanceSecurityEvent.findMany({
+      where: { userId: opts.userId, OR: sessionOr },
+      select: { eventType: true, vpnActive: true },
+      take: 300,
+    }),
+  ]);
+
+  // Unique mock evidence count (samples + OS-signal events, prefer sample count + events without double-count by id prefix)
+  const mockSampleIds = new Set(mockSamples.map((s) => s.sampleId));
+  const extraMockEvents = mockEvents.filter((e) => {
+    const sid = e.eventId.startsWith("ev_mock_") ? e.eventId.slice("ev_mock_".length) : "";
+    return !sid || !mockSampleIds.has(sid);
+  });
+  const directMockSampleCount = mockSampleIds.size + extraMockEvents.length;
+
+  const impossibleTravelCount = events.filter((e) => e.eventType === "IMPOSSIBLE_TRAVEL").length;
+  const teleportPatternCount = impossibleTravelCount >= 2 ? impossibleTravelCount - 1 : 0;
+  const sensorMismatchCount =
+    opts.sensorMismatchCount ??
+    events.filter((e) => e.eventType === "SENSOR_LOCATION_MISMATCH").length;
+  const vpnActive = Boolean(opts.vpnActive) || events.some((e) => e.vpnActive);
+
+  const risk = computeRiskScore({
+    directMockSampleCount,
+    playIntegrityFailed: Boolean(opts.playIntegrityFailed),
+    playIntegrityStrongTamper: Boolean(opts.playIntegrityStrongTamper),
+    impossibleTravelCount,
+    teleportPatternCount,
+    sensorMismatchCount,
+    vpnActive,
+  });
+
+  // Hard guarantee: any direct OS mock → DIRECT_MOCK_SIGNAL + mockLocationDetected
+  const securityStatus =
+    directMockSampleCount > 0 ? ("DIRECT_MOCK_SIGNAL" as const) : risk.securityStatus;
+  const mockLocationDetected = directMockSampleCount > 0;
+
+  await prisma.attendanceSecuritySummary.upsert({
+    where: { punchId },
+    create: {
+      userId: opts.userId,
+      attendanceId,
+      punchId,
+      punchType: opts.punchType || "session",
+      attendanceStatus: "SUCCESS",
+      appInstallationId: (opts.appInstallationId || "").slice(0, 128),
+      mockLocationDetected,
+      directMockSampleCount,
+      playIntegrityStatus: opts.playIntegrityStatus || "NOT_CHECKED",
+      vpnActive,
+      impossibleTravelDetected: impossibleTravelCount > 0,
+      sensorMismatchDetected: sensorMismatchCount > 0,
+      riskScore: risk.riskScore,
+      securityStatus,
+      reasonsJson: JSON.stringify(risk.reasons),
+    },
+    update: {
+      attendanceId: attendanceId || undefined,
+      mockLocationDetected,
+      directMockSampleCount,
+      playIntegrityStatus: opts.playIntegrityStatus || undefined,
+      vpnActive,
+      impossibleTravelDetected: impossibleTravelCount > 0,
+      sensorMismatchDetected: sensorMismatchCount > 0,
+      riskScore: risk.riskScore,
+      securityStatus,
+      reasonsJson: JSON.stringify(risk.reasons),
+      ...(opts.appInstallationId
+        ? { appInstallationId: opts.appInstallationId.slice(0, 128) }
+        : {}),
+    },
+  });
+
+  return {
+    ...risk,
+    mockLocationDetected,
+    directMockSampleCount,
+    securityStatus,
+    punchId,
+    attendanceId,
+  };
+}
+
 export async function ingestLocationSamples(opts: {
   userId: string;
   attendanceId?: string | null;
@@ -87,6 +231,9 @@ export async function ingestLocationSamples(opts: {
     });
   }
 
+  const attendanceId = await resolveAttendanceSessionId(opts.userId, opts.attendanceId);
+  const punchId = opts.punchId?.trim() || null;
+
   let mockCount = 0;
   const accepted: string[] = [];
 
@@ -105,8 +252,8 @@ export async function ingestLocationSamples(opts: {
         data: {
           sampleId,
           userId: opts.userId,
-          attendanceId: opts.attendanceId || null,
-          punchId: opts.punchId || null,
+          attendanceId,
+          punchId,
           appInstallationId: installId,
           source: String(s.source || "background").slice(0, 40),
           lat,
@@ -134,8 +281,8 @@ export async function ingestLocationSamples(opts: {
           data: {
             eventId,
             userId: opts.userId,
-            attendanceId: opts.attendanceId || null,
-            punchId: opts.punchId || null,
+            attendanceId,
+            punchId,
             appInstallationId: installId,
             eventType: "MOCK_LOCATION_OS_SIGNAL",
             eventTimestamp: locationTimestamp,
@@ -163,7 +310,7 @@ export async function ingestLocationSamples(opts: {
   const recent = await prisma.attendanceLocationSample.findMany({
     where: {
       userId: opts.userId,
-      ...(opts.attendanceId ? { attendanceId: opts.attendanceId } : {}),
+      ...(attendanceId ? { attendanceId } : {}),
       locationTimestamp: { gte: new Date(Date.now() - 6 * 60 * 60 * 1000) },
     },
     orderBy: { locationTimestamp: "asc" },
@@ -188,8 +335,8 @@ export async function ingestLocationSamples(opts: {
         data: {
           eventId,
           userId: opts.userId,
-          attendanceId: opts.attendanceId || null,
-          punchId: opts.punchId || null,
+          attendanceId,
+          punchId,
           appInstallationId: installId,
           eventType: "IMPOSSIBLE_TRAVEL",
           eventTimestamp: new Date(j.to.atMs),
@@ -212,9 +359,25 @@ export async function ingestLocationSamples(opts: {
     }
   }
 
-  return { accepted: accepted.length, mockCount, impossibleTravelCount: jumps.length };
+  // Always refresh summary when mock evidence arrives (mid-session or punch).
+  if (mockCount > 0 || punchId) {
+    try {
+      await refreshSecuritySummaryFromEvidence({
+        userId: opts.userId,
+        attendanceId,
+        punchId,
+        appInstallationId: installId,
+        vpnActive: opts.samples.some((s) => Boolean(s.vpnActive)),
+      });
+    } catch {
+      // never affect attendance
+    }
+  }
+
+  return { accepted: accepted.length, mockCount, impossibleTravelCount: jumps.length, attendanceId };
 }
 
+/** @deprecated name kept — delegates to refreshSecuritySummaryFromEvidence */
 export async function upsertPunchSecuritySummary(opts: {
   userId: string;
   attendanceId?: string | null;
@@ -227,73 +390,5 @@ export async function upsertPunchSecuritySummary(opts: {
   playIntegrityStrongTamper?: boolean;
   sensorMismatchCount?: number;
 }) {
-  const samples = await prisma.attendanceLocationSample.findMany({
-    where: {
-      userId: opts.userId,
-      OR: [{ punchId: opts.punchId }, ...(opts.attendanceId ? [{ attendanceId: opts.attendanceId }] : [])],
-    },
-    select: { isMock: true },
-    take: 200,
-  });
-  const directMockSampleCount = samples.filter((s) => s.isMock).length;
-
-  const events = await prisma.attendanceSecurityEvent.findMany({
-    where: {
-      userId: opts.userId,
-      OR: [{ punchId: opts.punchId }, ...(opts.attendanceId ? [{ attendanceId: opts.attendanceId }] : [])],
-    },
-    select: { eventType: true },
-    take: 300,
-  });
-
-  const impossibleTravelCount = events.filter((e) => e.eventType === "IMPOSSIBLE_TRAVEL").length;
-  const teleportPatternCount = impossibleTravelCount >= 2 ? impossibleTravelCount - 1 : 0;
-  const sensorMismatchCount =
-    opts.sensorMismatchCount ??
-    events.filter((e) => e.eventType === "SENSOR_LOCATION_MISMATCH").length;
-
-  const risk = computeRiskScore({
-    directMockSampleCount,
-    playIntegrityFailed: Boolean(opts.playIntegrityFailed),
-    playIntegrityStrongTamper: Boolean(opts.playIntegrityStrongTamper),
-    impossibleTravelCount,
-    teleportPatternCount,
-    sensorMismatchCount,
-    vpnActive: Boolean(opts.vpnActive),
-  });
-
-  await prisma.attendanceSecuritySummary.upsert({
-    where: { punchId: opts.punchId },
-    create: {
-      userId: opts.userId,
-      attendanceId: opts.attendanceId || null,
-      punchId: opts.punchId,
-      punchType: opts.punchType,
-      attendanceStatus: "SUCCESS",
-      appInstallationId: (opts.appInstallationId || "").slice(0, 128),
-      mockLocationDetected: risk.mockLocationDetected,
-      directMockSampleCount: risk.directMockSampleCount,
-      playIntegrityStatus: opts.playIntegrityStatus || "NOT_CHECKED",
-      vpnActive: Boolean(opts.vpnActive),
-      impossibleTravelDetected: impossibleTravelCount > 0,
-      sensorMismatchDetected: sensorMismatchCount > 0,
-      riskScore: risk.riskScore,
-      securityStatus: risk.securityStatus,
-      reasonsJson: JSON.stringify(risk.reasons),
-    },
-    update: {
-      attendanceId: opts.attendanceId || undefined,
-      mockLocationDetected: risk.mockLocationDetected,
-      directMockSampleCount: risk.directMockSampleCount,
-      playIntegrityStatus: opts.playIntegrityStatus || undefined,
-      vpnActive: Boolean(opts.vpnActive),
-      impossibleTravelDetected: impossibleTravelCount > 0,
-      sensorMismatchDetected: sensorMismatchCount > 0,
-      riskScore: risk.riskScore,
-      securityStatus: risk.securityStatus,
-      reasonsJson: JSON.stringify(risk.reasons),
-    },
-  });
-
-  return risk;
+  return refreshSecuritySummaryFromEvidence(opts);
 }

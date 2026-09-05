@@ -6,7 +6,23 @@ import { ReactNode, useEffect, useState } from "react";
 import { BrandMark } from "@/components/BrandMark";
 import { LangToggle, useLang } from "@/lib/i18n";
 
-const SUPER_ONLY = ["/admin/create", "/admin/admins", "/admin/face-reset-logs", "/admin/holidays"];
+/** Pages only Super Admin may open (nav + client redirect). APIs also enforce requireSuperAdmin. */
+const SUPER_ONLY = [
+  "/admin/create",
+  "/admin/admins",
+  "/admin/holidays",
+  "/admin/salary-register",
+  "/admin/rally-users",
+  "/admin/rally-live",
+  "/admin/rally-summary",
+  "/admin/gps-off",
+  "/admin/location-permissions",
+  "/admin/location-security",
+  "/admin/gps-spoof",
+  "/admin/security-violations",
+  "/admin/auto-punch-out",
+  "/admin/face-reset-logs",
+];
 
 export default function AdminShell({ children }: { children: ReactNode }) {
   const { t } = useLang();
@@ -60,50 +76,81 @@ export default function AdminShell({ children }: { children: ReactNode }) {
     { href: "/admin/records", label: t("dailyRecords"), match: (p: string) => p.startsWith("/admin/records"), group: "Attendance" },
     { href: "/admin/leaves", label: t("leaveModule"), match: (p: string) => p.startsWith("/admin/leaves"), group: "Attendance" },
     ...(isSuper
-      ? [{ href: "/admin/holidays", label: t("holidays"), match: (p: string) => p.startsWith("/admin/holidays"), group: "Attendance" }]
+      ? [
+          {
+            href: "/admin/holidays",
+            label: t("holidays"),
+            match: (p: string) => p.startsWith("/admin/holidays"),
+            group: "Attendance",
+          },
+          {
+            href: "/admin/salary-register",
+            label: t("salaryRegister"),
+            match: (p: string) => p.startsWith("/admin/salary-register"),
+            group: "Attendance",
+          },
+        ]
       : []),
-    {
-      href: "/admin/salary-register",
-      label: t("salaryRegister"),
-      match: (p: string) => p.startsWith("/admin/salary-register"),
-      group: "Attendance",
-    },
-    { href: "/admin/rally-users", label: t("rallyUsers"), match: (p: string) => p.startsWith("/admin/rally-users"), group: "Rally" },
-    { href: "/admin/rally-live", label: t("rallyLive"), match: (p: string) => p.startsWith("/admin/rally-live"), group: "Rally" },
-    { href: "/admin/rally-summary", label: t("rallySummary"), match: (p: string) => p.startsWith("/admin/rally-summary"), group: "Rally" },
-    { href: "/admin/gps-off", label: t("gpsOffLogs"), match: (p: string) => p.startsWith("/admin/gps-off"), group: "Logs" },
-    {
-      href: "/admin/location-permissions",
-      label: "Always location",
-      match: (p: string) => p.startsWith("/admin/location-permissions"),
-      group: "Logs",
-    },
-    {
-      href: "/admin/location-security",
-      label: "Location integrity",
-      match: (p: string) => p.startsWith("/admin/location-security"),
-      group: "Logs",
-    },
-    {
-      href: "/admin/gps-spoof",
-      label: t("gpsSpoofLogs"),
-      match: (p: string) => p.startsWith("/admin/gps-spoof"),
-      group: "Logs",
-    },
-    {
-      href: "/admin/security-violations",
-      label: t("securityViolationLogs"),
-      match: (p: string) => p.startsWith("/admin/security-violations"),
-      group: "Logs",
-    },
-    {
-      href: "/admin/auto-punch-out",
-      label: t("autoPunchOutLogs"),
-      match: (p: string) => p.startsWith("/admin/auto-punch-out"),
-      group: "Logs",
-    },
     ...(isSuper
       ? [
+          {
+            href: "/admin/rally-users",
+            label: t("rallyUsers"),
+            match: (p: string) => p.startsWith("/admin/rally-users"),
+            group: "Rally",
+          },
+          {
+            href: "/admin/rally-live",
+            label: t("rallyLive"),
+            match: (p: string) => p.startsWith("/admin/rally-live"),
+            group: "Rally",
+          },
+          {
+            href: "/admin/rally-summary",
+            label: t("rallySummary"),
+            match: (p: string) => p.startsWith("/admin/rally-summary"),
+            group: "Rally",
+          },
+        ]
+      : []),
+    ...(isSuper
+      ? [
+          {
+            href: "/admin/gps-off",
+            label: t("gpsOffLogs"),
+            match: (p: string) => p.startsWith("/admin/gps-off"),
+            group: "Logs",
+          },
+          {
+            href: "/admin/location-permissions",
+            label: "Always location",
+            match: (p: string) => p.startsWith("/admin/location-permissions"),
+            group: "Logs",
+          },
+          {
+            href: "/admin/location-security",
+            label: "Fake GPS (mock)",
+            match: (p: string) => p.startsWith("/admin/location-security"),
+            group: "Logs",
+          },
+          {
+            href: "/admin/gps-spoof",
+            label: t("gpsSpoofLogs"),
+            match: (p: string) => p.startsWith("/admin/gps-spoof"),
+            group: "Logs",
+          },
+          {
+            href: "/admin/security-violations",
+            label: t("securityViolationLogs"),
+            match: (p: string) => p.startsWith("/admin/security-violations"),
+            group: "Logs",
+          },
+          {
+            href: "/admin/auto-punch-out",
+            label: t("autoPunchOutLogs"),
+            match: (p: string) => p.startsWith("/admin/auto-punch-out"),
+            group: "Logs",
+          },
           {
             href: "/admin/face-reset-logs",
             label: t("faceResetLogs"),

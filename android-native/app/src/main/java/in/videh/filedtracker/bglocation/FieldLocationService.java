@@ -89,8 +89,14 @@ public class FieldLocationService extends Service {
     };
 
     public static void start(Context ctx, String apiBase, String token, String punchInAt) {
+        start(ctx, apiBase, token, punchInAt, null);
+    }
+
+    public static void start(
+            Context ctx, String apiBase, String token, String punchInAt, String attendanceId
+    ) {
         try {
-            TrackingPrefs.saveSession(ctx, apiBase, token, punchInAt);
+            TrackingPrefs.saveSession(ctx, apiBase, token, punchInAt, attendanceId);
             startExisting(ctx);
             IntervalAlarms.scheduleNext(ctx);
         } catch (Exception e) {
@@ -368,7 +374,7 @@ public class FieldLocationService extends Service {
                     SecurityHelper.isVpnActive(this)
             ));
             in.videh.filedtracker.nativeapp.SecurityEvidenceUploader.enqueueSamples(
-                    this, batch, null, null);
+                    this, batch, null, TrackingPrefs.attendanceId(this));
             if (mock) {
                 Log.i(TAG, "silent mock OS signal uploaded source=" + source);
             }

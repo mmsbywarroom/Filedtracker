@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import Papa from "papaparse";
-import { requireAdmin } from "@/lib/auth";
+import { requireSuperAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { normalizePhone } from "@/lib/security";
 import { pickCsv, RALLY_CSV_MAP } from "@/lib/rallyUserFields";
 
 export async function POST(req: Request) {
-  const s = await requireAdmin();
+  const s = await requireSuperAdmin();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const form = await req.formData();
   const file = form.get("file");

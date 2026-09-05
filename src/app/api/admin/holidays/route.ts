@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireAdmin } from "@/lib/auth";
+import { requireSuperAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { DESIGNATIONS, isSuperAdmin } from "@/lib/hierarchy";
 import { istDayBounds } from "@/lib/dailyAttendance";
@@ -24,7 +24,7 @@ function jsonHoliday(h: { id: string; date: Date; reason: string; designations: 
 }
 
 export async function GET(req: Request) {
-  const s = await requireAdmin();
+  const s = await requireSuperAdmin();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const q = new URL(req.url).searchParams;
   const year = Number(q.get("year")) || new Date().getFullYear();
@@ -45,7 +45,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const s = await requireAdmin();
+  const s = await requireSuperAdmin();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!isSuperAdmin(s.admin)) return NextResponse.json({ error: "Super admin only." }, { status: 403 });
   const parsed = schema.safeParse(await req.json().catch(() => null));
@@ -72,7 +72,7 @@ export async function POST(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  const s = await requireAdmin();
+  const s = await requireSuperAdmin();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!isSuperAdmin(s.admin)) return NextResponse.json({ error: "Super admin only." }, { status: 403 });
   const date = new URL(req.url).searchParams.get("date") || "";

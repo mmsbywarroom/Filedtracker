@@ -9,6 +9,7 @@ public final class TrackingPrefs {
     private static final String KEY_API = "api_base";
     private static final String KEY_TOKEN = "auth_token";
     private static final String KEY_PUNCH_IN = "punch_in_at";
+    private static final String KEY_ATTENDANCE_ID = "attendance_id";
     private static final String KEY_SENT_SLOTS = "sent_slots";
 
     private TrackingPrefs() {}
@@ -18,6 +19,12 @@ public final class TrackingPrefs {
     }
 
     public static void saveSession(Context ctx, String apiBase, String token, String punchInAt) {
+        saveSession(ctx, apiBase, token, punchInAt, null);
+    }
+
+    public static void saveSession(
+            Context ctx, String apiBase, String token, String punchInAt, String attendanceId
+    ) {
         String base = apiBase;
         if (base != null && base.contains("filed.videh.co.in")) {
             base = in.videh.filedtracker.nativeapp.AppConfig.API_BASE;
@@ -27,8 +34,20 @@ public final class TrackingPrefs {
                 .putString(KEY_API, base)
                 .putString(KEY_TOKEN, token)
                 .putString(KEY_PUNCH_IN, punchInAt)
+                .putString(KEY_ATTENDANCE_ID, attendanceId == null ? "" : attendanceId)
                 .putString(KEY_SENT_SLOTS, "")
                 .apply();
+    }
+
+    /** Update attendance id without resetting 30-min slots (e.g. after punch response). */
+    public static void setAttendanceId(Context ctx, String attendanceId) {
+        if (attendanceId == null || attendanceId.isEmpty()) return;
+        prefs(ctx).edit().putString(KEY_ATTENDANCE_ID, attendanceId).apply();
+    }
+
+    public static String attendanceId(Context ctx) {
+        String id = prefs(ctx).getString(KEY_ATTENDANCE_ID, "");
+        return id == null ? "" : id;
     }
 
     public static void clear(Context ctx) {

@@ -263,13 +263,15 @@ fun FaceScreen(
                             val att = res.optJSONObject("attendance")
                             HomeDashboardCache.applyPunchIn(att)
                             val punchInAt = att?.optString("punchInAt", "").orEmpty()
+                            val attendanceId = att?.optString("id", "").orEmpty()
                             if (punchInAt.isNotBlank()) {
                                 withContext(Dispatchers.IO) {
                                     FieldLocationService.start(
                                         context,
                                         SessionStore.apiBase(context),
                                         SessionStore.token(context),
-                                        punchInAt
+                                        punchInAt,
+                                        attendanceId
                                     )
                                 }
                                 try {

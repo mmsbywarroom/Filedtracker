@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireAdmin } from "@/lib/auth";
+import { requireSuperAdmin } from "@/lib/auth";
 import { grantGpsBypass, istDayEnd } from "@/lib/gpsAntiSpoof";
 import { reviewScopeWhere } from "@/lib/hierarchy";
 import { prisma } from "@/lib/prisma";
@@ -12,7 +12,7 @@ const schema = z.object({
 });
 
 export async function POST(req: Request) {
-  const s = await requireAdmin();
+  const s = await requireSuperAdmin();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const parsed = schema.safeParse(await req.json().catch(() => null));

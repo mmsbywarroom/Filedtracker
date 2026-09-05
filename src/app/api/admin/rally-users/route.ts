@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/auth";
+import { requireSuperAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { normalizePhone } from "@/lib/security";
 import { rallyUserFields } from "@/lib/rallyUserFields";
 
 export async function GET(req: Request) {
-  const s = await requireAdmin();
+  const s = await requireSuperAdmin();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const q = new URL(req.url).searchParams.get("q")?.trim() || "";
   const rallyId = new URL(req.url).searchParams.get("rallyId") || "";
@@ -28,7 +28,7 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const s = await requireAdmin();
+  const s = await requireSuperAdmin();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const parsed = rallyUserFields.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Fill required user fields." }, { status: 400 });
@@ -49,7 +49,7 @@ export async function POST(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  const s = await requireAdmin();
+  const s = await requireSuperAdmin();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const body = (await req.json().catch(() => null)) as { ids?: string[]; all?: boolean; rallyId?: string } | null;
   if (body?.all) {

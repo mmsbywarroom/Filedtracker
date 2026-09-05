@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/auth";
+import { requireSuperAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { remainingEtaSeconds, formatEta, RALLY_REACHED_METERS, isRallyNoMove } from "@/lib/rallyGeo";
 import { resolveRally } from "@/lib/rallies";
@@ -17,7 +17,7 @@ function matchGroup(u: { zone: string; district: string; acName: string; vehicle
 }
 
 export async function GET(req: Request) {
-  const s = await requireAdmin();
+  const s = await requireSuperAdmin();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const q = new URL(req.url).searchParams;
   const metric = (q.get("metric") || "users") as Metric;

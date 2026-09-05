@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireAdmin } from "@/lib/auth";
+import { requireSuperAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { istDateString, istDayBounds } from "@/lib/dailyAttendance";
 import { rallyDateYmd } from "@/lib/rallies";
@@ -34,7 +34,7 @@ function jsonRally(r: {
 }
 
 export async function GET() {
-  const s = await requireAdmin();
+  const s = await requireSuperAdmin();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const rallies = await prisma.rally.findMany({
     orderBy: [{ scheduledDate: "desc" }, { createdAt: "desc" }],
@@ -44,7 +44,7 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const s = await requireAdmin();
+  const s = await requireSuperAdmin();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const body = schema.safeParse(await req.json().catch(() => null));
   if (!body.success) {

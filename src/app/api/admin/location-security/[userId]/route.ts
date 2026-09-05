@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/auth";
+import { requireSuperAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 type Ctx = { params: { userId: string } };
 
 /** Admin-only employee identity + full integrity timeline/evidence. */
 export async function GET(req: Request, ctx: Ctx) {
-  const s = await requireAdmin();
+  const s = await requireSuperAdmin();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const userId = ctx.params.userId;
@@ -94,22 +94,42 @@ export async function GET(req: Request, ctx: Ctx) {
   const mockEvents = events.filter(
     (e) => e.eventType === "MOCK_LOCATION_OS_SIGNAL" || e.isMock
   );
+  const mockSampleCount = samples.filter((s) => s.isMock).length;
+  const mockLocationEventCount = Math.max(mockSampleCount, mockEvents.length);
   const firstSuspiciousAt = mockEvents.length
     ? mockEvents.reduce(
         (min, e) => (e.eventTimestamp < min ? e.eventTimestamp : min),
         mockEvents[0].eventTimestamp
       )
-    : summaries.find((x) => x.securityStatus !== "NORMAL")?.createdAt || null;
+    : samples
+        .filter((s) => s.isMock)
+        .reduce<Date | null>((min, s) => {
+          if (!min || s.locationTimestamp < min) return s.locationTimestamp;
+          return min;
+        }, null);
   const lastSuspiciousAt = mockEvents.length
     ? mockEvents.reduce(
         (max, e) => (e.eventTimestamp > max ? e.eventTimestamp : max),
         mockEvents[0].eventTimestamp
       )
-    : summaries.find((x) => x.securityStatus !== "NORMAL")?.updatedAt || null;
+    : samples
+        .filter((s) => s.isMock)
+        .reduce<Date | null>((max, s) => {
+          if (!max || s.locationTimestamp > max) return s.locationTimestamp;
+          return max;
+        }, null);
 
   const primaryAttendance = attendance[0] || null;
   const primarySummary = summaries[0] || null;
   const primaryDevice = devices[0] || null;
+  const securityStatus =
+    mockLocationEventCount > 0
+      ? "DIRECT_MOCK_SIGNAL"
+      : primarySummary?.securityStatus || "NORMAL";
+  const riskScore =
+    mockLocationEventCount > 0
+      ? Math.max(primarySummary?.riskScore || 0, 100)
+      : primarySummary?.riskScore || 0;
 
   return NextResponse.json({
     employee: {
@@ -144,12 +164,9 @@ export async function GET(req: Request, ctx: Ctx) {
       punchType: primarySummary?.punchType || null,
       punchInAt: primaryAttendance?.punchInAt?.toISOString() || null,
       punchOutAt: primaryAttendance?.punchOutAt?.toISOString() || null,
-      securityStatus: primarySummary?.securityStatus || "NORMAL",
-      riskScore: primarySummary?.riskScore || 0,
-      mockLocationEventCount: Math.max(
-        primarySummary?.directMockSampleCount || 0,
-        mockEvents.length
-      ),
+      securityStatus,
+      riskScore,
+      mockLocationEventCount,
       firstSuspiciousAt: firstSuspiciousAt ? firstSuspiciousAt.toISOString() : null,
       lastSuspiciousAt: lastSuspiciousAt ? lastSuspiciousAt.toISOString() : null,
       deviceModel: primaryDevice

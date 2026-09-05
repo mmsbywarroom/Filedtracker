@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/auth";
+import { requireSuperAdmin } from "@/lib/auth";
 import { GPS_SPOOF_FLAG_LABELS, type GpsSpoofFlag } from "@/lib/gpsAntiSpoof";
 import { reviewScopeWhere } from "@/lib/hierarchy";
 import { prisma } from "@/lib/prisma";
@@ -14,7 +14,7 @@ function dedupeLatestPerUser<T extends { userId: string; createdAt: Date }>(rows
 }
 
 export async function GET(req: Request) {
-  const s = await requireAdmin();
+  const s = await requireSuperAdmin();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { searchParams } = new URL(req.url);
@@ -115,7 +115,7 @@ export async function GET(req: Request) {
 
 /** Permanently delete all spoof logs in admin scope (one-time cleanup). */
 export async function DELETE() {
-  const s = await requireAdmin();
+  const s = await requireSuperAdmin();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const scoped = await prisma.user.findMany({

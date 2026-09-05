@@ -193,7 +193,8 @@ private suspend fun completeFaceAction(
                             context,
                             SessionStore.apiBase(context),
                             SessionStore.token(context),
-                            punchInAt
+                            punchInAt,
+                            attendanceId
                         )
                     }
                     try {
