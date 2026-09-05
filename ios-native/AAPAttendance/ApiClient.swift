@@ -63,10 +63,11 @@ enum ApiClient {
         ])
     }
 
-    static func describeFace(imageDataUrl: String) async throws -> [String: Any] {
+    static func describeFace(imageDataUrl: String, fast: Bool = true) async throws -> [String: Any] {
         try await authed(path: "/api/face/describe", method: "POST", body: [
             "image": imageDataUrl,
             "relaxed": true,
+            "fast": fast,
         ])
     }
 
@@ -100,12 +101,25 @@ enum ApiClient {
         if let body {
             req.httpBody = try JSONSerialization.data(withJSONObject: body)
         }
-        let (data, res) = try await URLSession.shared.data(for: req)
+        let data: Data
+        let res: URLResponse
+        do {
+            (data, res) = try await URLSession.shared.data(for: req)
+        } catch {
+            let msg = error.localizedDescription.lowercased()
+            if msg.contains("timed out") || msg.contains("timeout") {
+                throw ApiError(statusCode: 408, message: "Network timeout. Check internet and try again.")
+            }
+            if msg.contains("connection") || msg.contains("offline") || msg.contains("internet") {
+                throw ApiError(statusCode: 0, message: "Network interrupted. Check internet and try again.")
+            }
+            throw ApiError(statusCode: 0, message: "Network error. Check internet and try again.")
+        }
         let code = (res as? HTTPURLResponse)?.statusCode ?? 0
         let raw = String(data: data, encoding: .utf8) ?? ""
         let json = (try? JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
         if !(200..<300).contains(code) {
-            let msg = (json["error"] as? String) ?? (raw.isEmpty ? "Request failed (\(code))" : raw)
+            let msg = (json["error"] as? String) ?? (raw.isEmpty ? "Request failed (\(code)). Try again." : raw)
             throw ApiError(statusCode: code, message: msg)
         }
         return json

@@ -43,6 +43,13 @@ struct FaceCaptureView: View {
                         },
                         onJpeg: { data in
                             handleJpeg(data)
+                        },
+                        onCaptureFailed: {
+                            // Buffer missing — allow another auto-attempt instead of freezing.
+                            autoFired = false
+                            goodHits = 0
+                            busy = false
+                            status = "Could not capture — hold still and try again."
                         }
                     )
                     .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
@@ -120,7 +127,7 @@ struct FaceCaptureView: View {
         status = "Matching face…"
         Task {
             do {
-                let payload = try await ApiClient.describeFace(imageDataUrl: dataUrl)
+                let payload = try await ApiClient.describeFace(imageDataUrl: dataUrl, fast: true)
                 if payload.doubles("descriptor").isEmpty {
                     throw ApiError(
                         statusCode: 0,
@@ -144,8 +151,11 @@ private struct CameraPreview: UIViewRepresentable {
     var captureTick: Int
     var onFaces: (Int) -> Void
     var onJpeg: (Data) -> Void
+    var onCaptureFailed: () -> Void
 
-    func makeCoordinator() -> Coordinator { Coordinator(onFaces: onFaces, onJpeg: onJpeg) }
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onFaces: onFaces, onJpeg: onJpeg, onCaptureFailed: onCaptureFailed)
+    }
 
     func makeUIView(context: Context) -> PreviewView {
         let view = PreviewView()
@@ -156,6 +166,7 @@ private struct CameraPreview: UIViewRepresentable {
     func updateUIView(_ uiView: PreviewView, context: Context) {
         context.coordinator.onFaces = onFaces
         context.coordinator.onJpeg = onJpeg
+        context.coordinator.onCaptureFailed = onCaptureFailed
         context.coordinator.busy = isBusy
         if captureTick != context.coordinator.lastTick {
             context.coordinator.lastTick = captureTick
@@ -170,6 +181,7 @@ private struct CameraPreview: UIViewRepresentable {
     final class Coordinator: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
         var onFaces: (Int) -> Void
         var onJpeg: (Data) -> Void
+        var onCaptureFailed: () -> Void
         var busy = false
         var lastTick = 0
         private let session = AVCaptureSession()
@@ -177,9 +189,14 @@ private struct CameraPreview: UIViewRepresentable {
         private var lastBuffer: CVPixelBuffer?
         private var lastCount = -1
 
-        init(onFaces: @escaping (Int) -> Void, onJpeg: @escaping (Data) -> Void) {
+        init(
+            onFaces: @escaping (Int) -> Void,
+            onJpeg: @escaping (Data) -> Void,
+            onCaptureFailed: @escaping () -> Void
+        ) {
             self.onFaces = onFaces
             self.onJpeg = onJpeg
+            self.onCaptureFailed = onCaptureFailed
         }
 
         func attach(to view: PreviewView) {
@@ -208,12 +225,21 @@ private struct CameraPreview: UIViewRepresentable {
 
         func captureStill() {
             queue.async {
-                guard let buffer = self.lastBuffer else { return }
+                guard let buffer = self.lastBuffer else {
+                    DispatchQueue.main.async { self.onCaptureFailed() }
+                    return
+                }
                 let ci = CIImage(cvPixelBuffer: buffer)
                 let ctx = CIContext()
-                guard let cg = ctx.createCGImage(ci, from: ci.extent) else { return }
+                guard let cg = ctx.createCGImage(ci, from: ci.extent) else {
+                    DispatchQueue.main.async { self.onCaptureFailed() }
+                    return
+                }
                 let image = UIImage(cgImage: cg)
-                guard let data = image.jpegData(compressionQuality: 0.72) else { return }
+                guard let data = image.jpegData(compressionQuality: 0.65) else {
+                    DispatchQueue.main.async { self.onCaptureFailed() }
+                    return
+                }
                 DispatchQueue.main.async { self.onJpeg(data) }
             }
         }

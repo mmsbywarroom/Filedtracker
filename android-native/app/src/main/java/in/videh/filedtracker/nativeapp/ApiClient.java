@@ -20,18 +20,26 @@ public final class ApiClient {
 
     /** Shared client — connection reuse keeps punch / OTP fast. */
     private static final OkHttpClient SHARED = new OkHttpClient.Builder()
-            .connectTimeout(10, TimeUnit.SECONDS)
-            .readTimeout(25, TimeUnit.SECONDS)
-            .writeTimeout(25, TimeUnit.SECONDS)
-            .callTimeout(35, TimeUnit.SECONDS)
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(55, TimeUnit.SECONDS)
+            .writeTimeout(55, TimeUnit.SECONDS)
+            .callTimeout(65, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
             .build();
 
     private static final OkHttpClient OTP = SHARED.newBuilder()
-            .connectTimeout(10, TimeUnit.SECONDS)
-            .readTimeout(20, TimeUnit.SECONDS)
-            .writeTimeout(20, TimeUnit.SECONDS)
-            .callTimeout(25, TimeUnit.SECONDS)
+            .connectTimeout(12, TimeUnit.SECONDS)
+            .readTimeout(25, TimeUnit.SECONDS)
+            .writeTimeout(25, TimeUnit.SECONDS)
+            .callTimeout(30, TimeUnit.SECONDS)
+            .build();
+
+    /** Longer timeouts for face describe (cold model load). */
+    private static final OkHttpClient FACE = SHARED.newBuilder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(55, TimeUnit.SECONDS)
+            .writeTimeout(55, TimeUnit.SECONDS)
+            .callTimeout(65, TimeUnit.SECONDS)
             .build();
 
     public static class ApiError extends Exception {
@@ -59,7 +67,7 @@ public final class ApiClient {
                 .addHeader("Authorization", "Bearer " + token)
                 .addHeader("X-Client-Source", "native")
                 .addHeader("Content-Type", "application/json")
-                .addHeader("User-Agent", "AAPAttendanceNative/1.3.5");
+                .addHeader("User-Agent", "AAPAttendanceNative/1.3.6");
     }
 
     /** Public — no auth. Used for force-update gate. */
@@ -119,8 +127,22 @@ public final class ApiClient {
                 }
                 throw new ApiError(res.code(), msg.isEmpty() ? "Could not send OTP. Check network and try again." : msg);
             }
+        } catch (ApiError e) {
+            throw e;
         } catch (java.net.SocketTimeoutException e) {
             throw new ApiError(408, "Network timeout. Check internet and try again.");
+        } catch (java.io.InterruptedIOException e) {
+            throw new ApiError(408, "Network interrupted. Try again.");
+        } catch (IOException e) {
+            String m = e.getMessage() != null ? e.getMessage() : "";
+            if (m.toLowerCase().contains("connection abort")
+                    || m.toLowerCase().contains("connection reset")
+                    || m.toLowerCase().contains("broken pipe")
+                    || m.toLowerCase().contains("unreachable")
+                    || m.toLowerCase().contains("failed to connect")) {
+                throw new ApiError(0, "Network interrupted. Check internet and try again.");
+            }
+            throw new ApiError(0, "Could not send OTP. Check network and try again.");
         }
     }
 
@@ -287,11 +309,12 @@ public final class ApiClient {
         try {
             body.put("image", imageDataUrl);
             body.put("relaxed", true);
+            body.put("fast", true);
         } catch (Exception e) {
             throw new IOException(e);
         }
         Request req = authReq("/api/face/describe").post(RequestBody.create(body.toString(), JSON)).build();
-        try (Response res = http.newCall(req).execute()) {
+        try (Response res = FACE.newCall(req).execute()) {
             return readJson(res);
         } catch (ApiError e) {
             throw e;

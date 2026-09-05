@@ -215,11 +215,20 @@ fun FaceScreen(
                     }
 
                     DashboardActivity.MODE_PUNCH_IN, DashboardActivity.MODE_PUNCH_OUT -> {
+                        setStatus("Matching face…")
+                        // Describe first (clear errors), then punch with descriptor — avoids heavy
+                        // face-api on /api/attendance which caused opaque 500s under load.
+                        val descriptor = withContext(Dispatchers.IO) {
+                            val res = api.describeFace(dataUrl)
+                            res.optJSONArray("descriptor")
+                                ?: throw IllegalStateException(
+                                    "Hold still — eyes, nose and chin clearly in the frame, then try again."
+                                )
+                        }
                         setStatus(
                             if (mode == DashboardActivity.MODE_PUNCH_IN) "Punching in…"
                             else "Punching out…"
                         )
-                        // One round-trip: server describes photo + matches registered face.
                         val loc = withContext(Dispatchers.IO) {
                             val warm = cachedLoc ?: awaitLocation(act)
                             try {
@@ -236,7 +245,7 @@ fun FaceScreen(
                                     loc.latitude,
                                     loc.longitude,
                                     loc.accuracy.toDouble(),
-                                    null,
+                                    descriptor,
                                     dataUrl
                                 )
                             } else {
@@ -244,7 +253,7 @@ fun FaceScreen(
                                     loc.latitude,
                                     loc.longitude,
                                     loc.accuracy.toDouble(),
-                                    null,
+                                    descriptor,
                                     dataUrl
                                 )
                             }

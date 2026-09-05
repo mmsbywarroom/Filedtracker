@@ -126,5 +126,19 @@ fun errorText(e: Throwable, fallback: String): String {
     val msg = e.message?.trim().orEmpty()
     if (msg.contains("coroutine scope left the composition", ignoreCase = true)) return ""
     if (msg.contains("Job was cancelled", ignoreCase = true)) return ""
+    val lower = msg.lowercase()
+    if (lower.contains("connection abort")
+        || lower.contains("connection reset")
+        || lower.contains("broken pipe")
+        || lower.contains("software caused")
+    ) {
+        return "Network interrupted. Check internet and try again."
+    }
+    if (lower.contains("timeout") || lower.contains("timed out")) {
+        return "Network timeout. Check internet and try again."
+    }
+    if (lower.contains("request failed (500)") || msg == "Request failed (500)") {
+        return "Server busy. Please try again in a moment."
+    }
     return msg.ifBlank { fallback }
 }

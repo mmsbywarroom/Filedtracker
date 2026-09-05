@@ -22,6 +22,7 @@ struct HomeView: View {
     @State private var mapOpen = false
     @State private var leaveOpen = false
     @State private var printsOpen = false
+    @State private var lastPunchLoc: CLLocation?
 
     private var faceRegistered: Bool { user?.string("faceRegisteredAt") != nil }
     private var punchedIn: Bool { open != nil }
@@ -237,11 +238,12 @@ struct HomeView: View {
                 if SecurityHelper.isMockLocation(loc) {
                     TrackingApi.postSecurityEvent(type: "mock_gps", action: "detected", detail: "Fake GPS", lat: loc.coordinate.latitude, lng: loc.coordinate.longitude)
                 }
+                lastPunchLoc = loc
                 gpsText = String(format: "GPS %.5f, %.5f  ±%.0fm", loc.coordinate.latitude, loc.coordinate.longitude, loc.horizontalAccuracy)
                 say("")
                 route = punchedIn ? .punchOut : .punchIn
             } catch {
-                say(error.localizedDescription, error: true)
+                say(friendlyLocationError(error), error: true)
             }
             busy = false
         }
@@ -261,7 +263,14 @@ struct HomeView: View {
             case .punchIn, .punchOut:
                 let punchIn = mode == .punchIn
                 say(punchIn ? "Punching in…" : "Punching out…")
-                let loc = try await gps.fix.current()
+                // Reuse GPS from pre-punch when still fresh — avoids second hang / permission race.
+                let loc: CLLocation
+                if let cached = lastPunchLoc, Date().timeIntervalSince(cached.timestamp) < 90 {
+                    loc = cached
+                } else {
+                    loc = try await gps.fix.current()
+                    lastPunchLoc = loc
+                }
                 if punchIn {
                     let res = try await ApiClient.punchIn(lat: loc.coordinate.latitude, lng: loc.coordinate.longitude, accuracy: loc.horizontalAccuracy, descriptor: descriptor, image: image)
                     let punchInAt = res.obj("attendance")?.string("punchInAt") ?? ""
@@ -280,9 +289,23 @@ struct HomeView: View {
             }
             await reload()
         } catch {
-            say(error.localizedDescription, error: true)
+            say(friendlyLocationError(error), error: true)
         }
         busy = false
+    }
+
+    private func friendlyLocationError(_ error: Error) -> String {
+        if let loc = error as? LocationFixError {
+            return loc.localizedDescription
+        }
+        if let cl = error as? CLError, cl.code == .denied {
+            return LocationFixError.denied.localizedDescription
+        }
+        let msg = error.localizedDescription
+        if msg.contains("kCLErrorDomain") || msg.contains("error 1") {
+            return LocationFixError.denied.localizedDescription
+        }
+        return msg
     }
 }
 

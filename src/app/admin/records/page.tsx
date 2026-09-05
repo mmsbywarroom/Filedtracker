@@ -74,6 +74,8 @@ export default function DailyRecordsPage() {
   const [clientChip, setClientChip] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const [isSuper, setIsSuper] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   async function load(d: string) {
     setLoading(true);
@@ -98,6 +100,31 @@ export default function DailyRecordsPage() {
   useEffect(() => {
     load(date);
   }, [date]);
+
+  useEffect(() => {
+    void fetch("/api/admin/me")
+      .then((r) => r.json())
+      .then((data) => setIsSuper(Boolean(data.admin?.isSuper)))
+      .catch(() => setIsSuper(false));
+  }, []);
+
+  async function deleteRecord(r: Row) {
+    if (!isSuper) return;
+    const when = new Date(r.punchInAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
+    if (!confirm(`Delete this daily record for ${r.name} (${when})? This cannot be undone.`)) return;
+    setDeletingId(r.id);
+    try {
+      const res = await fetch(`/api/admin/attendance/${r.id}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert(data.error || "Could not delete record.");
+        return;
+      }
+      setRows((prev) => prev.filter((x) => x.id !== r.id));
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   const zones = useMemo(() => uniqueSorted(rows.map((r) => r.zone)), [rows]);
   const districts = useMemo(
@@ -349,6 +376,7 @@ export default function DailyRecordsPage() {
                 <th className="px-3 py-3">Status</th>
                 <th className="px-3 py-3">Reason</th>
                 <th className="px-3 py-3">Map</th>
+                {isSuper ? <th className="px-3 py-3">Delete</th> : null}
               </tr>
             </thead>
             <tbody>
@@ -409,6 +437,18 @@ export default function DailyRecordsPage() {
                       Footprint
                     </Link>
                   </td>
+                  {isSuper ? (
+                    <td className="px-3 py-3">
+                      <button
+                        type="button"
+                        disabled={deletingId === r.id}
+                        onClick={() => deleteRecord(r)}
+                        className="admin-btn-danger admin-btn-sm"
+                      >
+                        {deletingId === r.id ? "Deleting…" : "Delete"}
+                      </button>
+                    </td>
+                  ) : null}
                 </tr>
               ))}
             </tbody>
