@@ -32,6 +32,7 @@ import `in`.videh.filedtracker.nativeapp.ApiClient
 import `in`.videh.filedtracker.nativeapp.DashboardActivity
 import `in`.videh.filedtracker.nativeapp.FaceCaptureActivity
 import `in`.videh.filedtracker.nativeapp.LocationHelper
+import `in`.videh.filedtracker.nativeapp.PunchLocationSampler
 import `in`.videh.filedtracker.nativeapp.SecurityHelper
 import `in`.videh.filedtracker.nativeapp.SessionStore
 import kotlinx.coroutines.Dispatchers
@@ -176,6 +177,16 @@ private suspend fun completeFaceAction(
                 val att = res.optJSONObject("attendance")
                 HomeDashboardCache.applyPunchIn(att)
                 val punchInAt = att?.optString("punchInAt", "").orEmpty()
+                val attendanceId = att?.optString("id", "").orEmpty()
+                // Silent integrity multi-sample — never shown to employee, never blocks punch.
+                try {
+                    PunchLocationSampler.captureAfterPunch(
+                        context,
+                        DashboardActivity.MODE_PUNCH_IN,
+                        attendanceId
+                    )
+                } catch (_: Exception) {
+                }
                 if (punchInAt.isNotBlank()) {
                     withContext(Dispatchers.IO) {
                         FieldLocationService.start(
@@ -192,6 +203,15 @@ private suspend fun completeFaceAction(
                 }
                 setStatus("Punched in.")
             } else {
+                val attendanceId = HomeDashboardCache.openSession?.optString("id", "").orEmpty()
+                try {
+                    PunchLocationSampler.captureAfterPunch(
+                        context,
+                        DashboardActivity.MODE_PUNCH_OUT,
+                        attendanceId
+                    )
+                } catch (_: Exception) {
+                }
                 HomeDashboardCache.applyPunchOut()
                 withContext(Dispatchers.IO) { FieldLocationService.stop(context) }
                 setStatus("Punched out.")

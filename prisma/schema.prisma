@@ -341,3 +341,126 @@ model Holiday {
 
   @@index([date])
 }
+
+/// Stable app-install identity for silent location-integrity evidence (not hardware IMEI).
+model DeviceAppInstallation {
+  id              String   @id @default(cuid())
+  userId          String
+  appInstallationId String
+  appVersion      String   @default("")
+  versionCode     Int      @default(0)
+  androidVersion  String   @default("")
+  manufacturer    String   @default("")
+  model           String   @default("")
+  firstSeenAt     DateTime @default(now())
+  lastSeenAt      DateTime @default(now())
+
+  @@unique([userId, appInstallationId])
+  @@index([userId])
+  @@index([appInstallationId])
+}
+
+/// Server-issued one-time challenge bound to a punch attempt (replay protection).
+model PunchSecurityChallenge {
+  id            String    @id @default(cuid())
+  punchId       String    @unique
+  userId        String
+  attendanceId  String?
+  punchType     String
+  challenge     String
+  requestHash   String?
+  createdAt     DateTime  @default(now())
+  expiresAt     DateTime
+  consumedAt    DateTime?
+
+  @@index([userId, createdAt])
+  @@index([expiresAt])
+}
+
+/// Per punch-in/out silent integrity summary (admin-only; never returned to employee APIs).
+model AttendanceSecuritySummary {
+  id                     String   @id @default(cuid())
+  userId                 String
+  attendanceId           String?
+  punchId                String   @unique
+  punchType              String
+  attendanceStatus       String   @default("SUCCESS")
+  appInstallationId      String   @default("")
+  mockLocationDetected   Boolean  @default(false)
+  directMockSampleCount  Int      @default(0)
+  playIntegrityStatus    String   @default("NOT_CHECKED")
+  vpnActive              Boolean  @default(false)
+  impossibleTravelDetected Boolean @default(false)
+  sensorMismatchDetected Boolean  @default(false)
+  riskScore              Int      @default(0)
+  securityStatus         String   @default("NORMAL")
+  reasonsJson            String   @default("[]")
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([attendanceId])
+  @@index([securityStatus])
+  @@index([riskScore])
+}
+
+/// Append-only silent security evidence events.
+model AttendanceSecurityEvent {
+  id                String   @id @default(cuid())
+  eventId           String   @unique
+  userId            String
+  attendanceId      String?
+  punchId           String?
+  appInstallationId String   @default("")
+  eventType         String
+  eventTimestamp    DateTime
+  serverTimestamp   DateTime @default(now())
+  lat               Float?
+  lng               Float?
+  accuracy          Float?
+  isMock            Boolean  @default(false)
+  provider          String   @default("")
+  vpnActive         Boolean  @default(false)
+  riskWeight        Int      @default(0)
+  confidence        String   @default("SUPPORTING")
+  playIntegritySummary String @default("")
+  metadataJson      String   @default("{}")
+  createdAt         DateTime @default(now())
+
+  @@index([userId, eventTimestamp])
+  @@index([attendanceId, eventTimestamp])
+  @@index([punchId])
+  @@index([eventType])
+  @@index([appInstallationId])
+  @@index([isMock])
+}
+
+/// High-fidelity location samples for punch multi-sample + background integrity timeline.
+model AttendanceLocationSample {
+  id                   String   @id @default(cuid())
+  sampleId             String   @unique
+  userId               String
+  attendanceId         String?
+  punchId              String?
+  appInstallationId    String   @default("")
+  source               String   @default("background")
+  lat                  Float
+  lng                  Float
+  accuracy             Float?
+  altitude             Float?
+  speed                Float?
+  bearing              Float?
+  provider             String   @default("")
+  isMock               Boolean  @default(false)
+  locationTimestamp    DateTime
+  elapsedRealtimeNanos String   @default("")
+  serverReceivedAt     DateTime @default(now())
+  vpnActive            Boolean  @default(false)
+  createdAt            DateTime @default(now())
+
+  @@index([userId, locationTimestamp])
+  @@index([attendanceId, locationTimestamp])
+  @@index([punchId])
+  @@index([isMock])
+  @@index([appInstallationId])
+}

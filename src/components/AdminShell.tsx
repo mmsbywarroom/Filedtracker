@@ -79,6 +79,12 @@ export default function AdminShell({ children }: { children: ReactNode }) {
       group: "Logs",
     },
     {
+      href: "/admin/location-security",
+      label: "Location integrity",
+      match: (p: string) => p.startsWith("/admin/location-security"),
+      group: "Logs",
+    },
+    {
       href: "/admin/gps-spoof",
       label: t("gpsSpoofLogs"),
       match: (p: string) => p.startsWith("/admin/gps-spoof"),

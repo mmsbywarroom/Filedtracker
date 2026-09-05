@@ -144,11 +144,7 @@ public final class SecurityHelper {
     }
 
     public static boolean isMockLocation(Location loc) {
-        if (loc == null) return true;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            return loc.isMock();
-        }
-        return loc.isFromMockProvider();
+        return LocationIntegrity.isMock(loc);
     }
 
     public static boolean isGpsDisabled(Context ctx) {

@@ -41,6 +41,8 @@ public class FieldLocationService extends Service {
     private static final long HEARTBEAT_MS = 120_000L;
     private static final long LOC_INTERVAL_MS = 20_000L;
     private static final long HOURLY_SECURITY_MS = 60 * 60 * 1000L;
+    /** Silent isMock evidence during active punch session (~30 min). Immediate on mock. */
+    private static final long SESSION_INTEGRITY_MS = 30 * 60 * 1000L;
 
     private Handler handler;
     private FusedLocationProviderClient fused;
@@ -48,6 +50,7 @@ public class FieldLocationService extends Service {
     private volatile Location lastLoc;
     private long lastHeartbeatAt = 0L;
     private long lastHourlySecurityAt = 0L;
+    private long lastIntegritySampleAt = 0L;
     private int gpsFailStreak = 0;
     private PowerManager.WakeLock wakeLock;
     private final JSONArray mapProbes = new JSONArray();
@@ -260,7 +263,8 @@ public class FieldLocationService extends Service {
             gpsFailStreak = 0;
             if (SecurityHelper.isMockLocation(loc)) {
                 SecurityHelper.reportPunchEvidence(this, loc);
-                // Do not stop — keep recording so Attendance FLAG can catch fixed fake GPS.
+                // Do not stop — keep recording; never warn employee / never block attendance.
+                uploadSilentIntegritySample(loc, "background_mock");
             }
             maybeHourlySecurityCheck(loc);
             try {
@@ -311,7 +315,7 @@ public class FieldLocationService extends Service {
             return;
         }
 
-        // 30-min FLAG snapshots (native/iOS). VPN security logs are separate (hourly).
+        // 30-min FLAG snapshots + silent isMock integrity evidence (admin-only).
         long now = System.currentTimeMillis();
         int dueSlot = IntervalScheduler.findDueSlot(
                 punchInMs,
@@ -323,8 +327,10 @@ public class FieldLocationService extends Service {
             if (loc == null) return;
             if (SecurityHelper.isMockLocation(loc)) {
                 SecurityHelper.reportPunchEvidence(this, loc);
-                // Continue — 30-min snapshots still record so FLAG can catch fixed coords.
+                // Continue — never warn employee / never block attendance.
             }
+            // Fresh location + LocationCompat.isMock every ~30 min while punched in.
+            uploadSilentIntegritySample(loc, dueSlot > 0 ? "session_30m" : "session_check");
             long ts = System.currentTimeMillis();
             maybeHourlySecurityCheck(loc);
             if (ts - lastHeartbeatAt >= HEARTBEAT_MS) {
@@ -342,6 +348,33 @@ public class FieldLocationService extends Service {
                 IntervalAlarms.scheduleNext(this);
             }
         });
+    }
+
+    /**
+     * Silent admin evidence: evaluate LocationCompat.isMock via SecurityHelper, upload server-side.
+     * Immediate when mock; otherwise ~every 30 minutes during active session.
+     */
+    private void uploadSilentIntegritySample(Location loc, String source) {
+        if (loc == null) return;
+        try {
+            boolean mock = SecurityHelper.isMockLocation(loc);
+            long now = System.currentTimeMillis();
+            if (!mock && now - lastIntegritySampleAt < SESSION_INTEGRITY_MS) return;
+            lastIntegritySampleAt = now;
+            org.json.JSONArray batch = new org.json.JSONArray();
+            batch.put(in.videh.filedtracker.nativeapp.LocationIntegrity.sampleFrom(
+                    loc,
+                    source,
+                    SecurityHelper.isVpnActive(this)
+            ));
+            in.videh.filedtracker.nativeapp.SecurityEvidenceUploader.enqueueSamples(
+                    this, batch, null, null);
+            if (mock) {
+                Log.i(TAG, "silent mock OS signal uploaded source=" + source);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "silent integrity sample", e);
+        }
     }
 
     /** Once per hour while punched in: log VPN / fake-GPS app names for admin. */

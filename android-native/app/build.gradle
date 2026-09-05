@@ -3,14 +3,19 @@ apply plugin: 'org.jetbrains.kotlin.android'
 apply plugin: 'org.jetbrains.kotlin.plugin.compose'
 
 def mapsApiKey = ""
+def playIntegrityCloudProjectNumber = "0"
 def localProps = rootProject.file("local.properties")
 if (localProps.exists()) {
     def props = new Properties()
     localProps.withInputStream { props.load(it) }
     mapsApiKey = props.getProperty("MAPS_API_KEY", "")
+    playIntegrityCloudProjectNumber = props.getProperty("PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER", "0")
 }
 if (!mapsApiKey) {
     mapsApiKey = System.getenv("MAPS_API_KEY") ?: ""
+}
+if (System.getenv("PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER")) {
+    playIntegrityCloudProjectNumber = System.getenv("PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER")
 }
 
 android {
@@ -21,9 +26,11 @@ android {
         applicationId "in.videh.filedtracker.native"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 32
-        versionName "1.4.0"
+        versionCode 33
+        versionName "1.4.1"
         manifestPlaceholders = [MAPS_API_KEY: mapsApiKey]
+        // Not a secret — Cloud project number for StandardIntegrityManager.prepareIntegrityToken
+        buildConfigField "long", "PLAY_INTEGRITY_CLOUD_PROJECT_NUMBER", "${playIntegrityCloudProjectNumber}L"
     }
 
     buildTypes {
@@ -39,6 +46,7 @@ android {
 
     buildFeatures {
         compose true
+        buildConfig true
     }
 
     compileOptions {
@@ -87,4 +95,6 @@ dependencies {
     implementation "androidx.camera:camera-view:$cameraxVersion"
     // Play Services delivers the model — keeps APK much smaller than bundled ML Kit.
     implementation "com.google.android.gms:play-services-mlkit-face-detection:$mlkitFaceVersion"
+    // Silent location integrity — Standard Play Integrity API (official stable)
+    implementation "com.google.android.play:integrity:1.6.0"
 }
