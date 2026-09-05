@@ -23,4 +23,4 @@ RUN npx prisma generate && NODE_OPTIONS=--max-old-space-size=4096 npm run build 
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 ENV NODE_ENV=production
-CMD ["sh", "-c", "npx prisma migrate deploy && npx tsx prisma/seed.ts && npx next start -H 0.0.0.0 -p 3000"]
+CMD ["sh", "-c", "if [ \"$SKIP_DB_BOOTSTRAP\" != \"1\" ]; then npx prisma migrate deploy && npx tsx prisma/seed.ts; fi; npx next start -H 0.0.0.0 -p 3000"]

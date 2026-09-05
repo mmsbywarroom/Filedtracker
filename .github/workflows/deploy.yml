@@ -112,13 +112,19 @@ jobs:
             rm -f filedtracker.tar.gz
             sudo docker compose -f docker-compose.prod.yml up -d --pull never 2>/dev/null \
               || sudo docker compose -f docker-compose.prod.yml up -d
-            # Always inject geofence polygons (also in image when .dockerignore allows data/boundaries).
+            # Install nginx split light/heavy routing (OTP stays up when face is busy)
+            if [ -f /opt/filedtracker/deploy/nginx.conf ]; then
+              sudo cp -f /opt/filedtracker/deploy/nginx.conf /etc/nginx/conf.d/filedtracker.conf
+              sudo nginx -t && sudo systemctl reload nginx || true
+            fi
+            # Always inject geofence polygons into both app containers
             sudo mkdir -p /opt/filedtracker/deploy/boundaries
             if [ -f /opt/filedtracker/deploy/boundaries/punjab-assemblies.geojson ]; then
-              sudo docker exec filedtracker-app-1 mkdir -p /app/data/boundaries
-              sudo docker cp /opt/filedtracker/deploy/boundaries/punjab-assemblies.geojson filedtracker-app-1:/app/data/boundaries/punjab-assemblies.geojson
-              sudo docker cp /opt/filedtracker/deploy/boundaries/punjab-chandigarh.geojson filedtracker-app-1:/app/data/boundaries/punjab-chandigarh.geojson
-              sudo docker exec filedtracker-app-1 ls -lh /app/data/boundaries/ || true
+              for c in filedtracker-app-1 filedtracker-app-heavy-1; do
+                sudo docker exec "$c" mkdir -p /app/data/boundaries 2>/dev/null || continue
+                sudo docker cp /opt/filedtracker/deploy/boundaries/punjab-assemblies.geojson "$c":/app/data/boundaries/punjab-assemblies.geojson
+                sudo docker cp /opt/filedtracker/deploy/boundaries/punjab-chandigarh.geojson "$c":/app/data/boundaries/punjab-chandigarh.geojson
+              done
             fi
             sudo docker image prune -f
             sudo cp -f /opt/filedtracker/deploy/disk-cleanup.sh /opt/filedtracker/disk-cleanup.sh || true

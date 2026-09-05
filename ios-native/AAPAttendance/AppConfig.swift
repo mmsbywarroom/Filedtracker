@@ -1,14 +1,16 @@
 import Foundation
 
 enum AppConfig {
-    /// Canonical TLS name (Let's Encrypt cert).
     static let apiHost = "filed.videh.co.in"
-    /// Elastic IP — bypasses stale DNS during EC2 IP migration.
-    static let apiBase = "https://13.234.95.134"
+    /// Preferred — same URL as the website.
+    static let apiBase = "https://filed.videh.co.in"
+    /// Elastic IP backup when DNS/domain fails.
+    static let apiBaseFallback = "https://13.234.95.134"
     static let userAgentSuffix = " AAPNative/1"
+
+    static var apiBases: [String] { [apiBase, apiBaseFallback] }
 }
 
-/// Accepts the filed.videh.co.in certificate when talking to the Elastic IP.
 final class TrustedHostSessionDelegate: NSObject, URLSessionDelegate {
     func urlSession(
         _ session: URLSession,
@@ -34,8 +36,8 @@ enum AppUrlSession {
     private static let delegate = TrustedHostSessionDelegate()
     static let shared: URLSession = {
         let cfg = URLSessionConfiguration.default
-        cfg.timeoutIntervalForRequest = 55
-        cfg.timeoutIntervalForResource = 90
+        cfg.timeoutIntervalForRequest = 25
+        cfg.timeoutIntervalForResource = 55
         return URLSession(configuration: cfg, delegate: delegate, delegateQueue: nil)
     }()
 }

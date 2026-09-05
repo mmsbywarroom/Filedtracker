@@ -18,23 +18,23 @@ import okhttp3.Response;
 public final class ApiClient {
     private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
 
-    /** Shared client — connection reuse keeps punch / OTP fast. */
     private static final OkHttpClient SHARED = AppConfig.okHttpBuilder()
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(55, TimeUnit.SECONDS)
-            .writeTimeout(55, TimeUnit.SECONDS)
-            .callTimeout(65, TimeUnit.SECONDS)
+            .connectTimeout(12, TimeUnit.SECONDS)
+            .readTimeout(45, TimeUnit.SECONDS)
+            .writeTimeout(45, TimeUnit.SECONDS)
+            .callTimeout(50, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
             .build();
 
+    /** Shorter per-attempt timeout — failover to backup base quickly. */
     private static final OkHttpClient OTP = AppConfig.okHttpBuilder()
-            .connectTimeout(12, TimeUnit.SECONDS)
-            .readTimeout(25, TimeUnit.SECONDS)
-            .writeTimeout(25, TimeUnit.SECONDS)
-            .callTimeout(30, TimeUnit.SECONDS)
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(20, TimeUnit.SECONDS)
+            .writeTimeout(20, TimeUnit.SECONDS)
+            .callTimeout(22, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
             .build();
 
-    /** Longer timeouts for face describe (cold model load). */
     private static final OkHttpClient FACE = AppConfig.okHttpBuilder()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(55, TimeUnit.SECONDS)
@@ -61,22 +61,77 @@ public final class ApiClient {
         this.http = SHARED;
     }
 
-    private Request.Builder authReq(String path) {
-        return new Request.Builder()
-                .url(apiBase + path)
-                .addHeader("Authorization", "Bearer " + token)
-                .addHeader("X-Client-Source", "native")
-                .addHeader("Content-Type", "application/json")
-                .addHeader("User-Agent", "AAPAttendanceNative/1.3.7");
+    private static boolean isTransportFailure(Exception e) {
+        if (e instanceof ApiError) return false;
+        if (e instanceof java.net.SocketTimeoutException) return true;
+        if (e instanceof java.io.InterruptedIOException) return true;
+        if (e instanceof IOException) return true;
+        return false;
     }
 
-    /** Public — no auth. Used for force-update gate. */
+    private static ApiError asNetworkError(Exception e, String fallback) {
+        String m = e.getMessage() != null ? e.getMessage().toLowerCase() : "";
+        if (e instanceof java.net.SocketTimeoutException
+                || m.contains("timeout")
+                || m.contains("timed out")) {
+            return new ApiError(408, "Network timeout. Check internet and try again.");
+        }
+        if (m.contains("connection abort")
+                || m.contains("connection reset")
+                || m.contains("broken pipe")
+                || m.contains("unreachable")
+                || m.contains("failed to connect")) {
+            return new ApiError(0, "Network interrupted. Check internet and try again.");
+        }
+        return new ApiError(0, fallback);
+    }
+
+    /** Try domain then Elastic IP (and any preferred base). */
+    private static Response executeFailover(OkHttpClient client, String path, String method, RequestBody body)
+            throws IOException, ApiError {
+        Exception last = null;
+        for (String base : AppConfig.apiBases(AppConfig.API_BASE)) {
+            Request.Builder b = new Request.Builder()
+                    .url(base + path)
+                    .addHeader("X-Client-Source", "native")
+                    .addHeader("Content-Type", "application/json")
+                    .addHeader("User-Agent", "AAPAttendanceNative/1.3.8");
+            if ("GET".equals(method)) b.get();
+            else b.method(method, body);
+            try {
+                return client.newCall(b.build()).execute();
+            } catch (Exception e) {
+                last = e;
+                if (!isTransportFailure(e)) break;
+            }
+        }
+        throw asNetworkError(last != null ? last : new IOException("unreachable"), "Network error. Try again.");
+    }
+
+    private Response executeAuthFailover(String path, String method, RequestBody body)
+            throws IOException, ApiError {
+        Exception last = null;
+        for (String base : AppConfig.apiBases(apiBase)) {
+            Request.Builder b = new Request.Builder()
+                    .url(base + path)
+                    .addHeader("Authorization", "Bearer " + token)
+                    .addHeader("X-Client-Source", "native")
+                    .addHeader("Content-Type", "application/json")
+                    .addHeader("User-Agent", "AAPAttendanceNative/1.3.8");
+            if ("GET".equals(method)) b.get();
+            else b.method(method, body);
+            try {
+                return http.newCall(b.build()).execute();
+            } catch (Exception e) {
+                last = e;
+                if (!isTransportFailure(e)) break;
+            }
+        }
+        throw asNetworkError(last != null ? last : new IOException("unreachable"), "Network error. Try again.");
+    }
+
     public static JSONObject getAppVersion() throws IOException, ApiError {
-        Request req = new Request.Builder()
-                .url(AppConfig.API_BASE + "/api/app/version")
-                .get()
-                .build();
-        try (Response res = SHARED.newCall(req).execute()) {
+        try (Response res = executeFailover(SHARED, "/api/app/version", "GET", null)) {
             String body = res.body() != null ? res.body().string() : "";
             if (!res.isSuccessful()) {
                 throw new ApiError(res.code(), "Could not check for updates");
@@ -84,7 +139,7 @@ public final class ApiClient {
             return new JSONObject(body);
         } catch (ApiError e) {
             throw e;
-        } catch (Exception e) {
+        } catch (JSONException e) {
             throw new IOException(e);
         }
     }
@@ -114,35 +169,19 @@ public final class ApiClient {
         } catch (Exception e) {
             throw new IOException(e);
         }
-        Request req = new Request.Builder()
-                .url(AppConfig.API_BASE + "/api/auth/otp/request")
-                .post(RequestBody.create(body.toString(), JSON))
-                .build();
-        try (Response res = OTP.newCall(req).execute()) {
+        try (Response res =
+                executeFailover(OTP, "/api/auth/otp/request", "POST", RequestBody.create(body.toString(), JSON))) {
             if (!res.isSuccessful()) {
                 String msg = res.body() != null ? res.body().string() : "";
                 try {
                     msg = new JSONObject(msg).optString("error", msg);
                 } catch (Exception ignored) {
                 }
-                throw new ApiError(res.code(), msg.isEmpty() ? "Could not send OTP. Check network and try again." : msg);
+                throw new ApiError(
+                        res.code(), msg.isEmpty() ? "Could not send OTP. Check network and try again." : msg);
             }
         } catch (ApiError e) {
             throw e;
-        } catch (java.net.SocketTimeoutException e) {
-            throw new ApiError(408, "Network timeout. Check internet and try again.");
-        } catch (java.io.InterruptedIOException e) {
-            throw new ApiError(408, "Network interrupted. Try again.");
-        } catch (IOException e) {
-            String m = e.getMessage() != null ? e.getMessage() : "";
-            if (m.toLowerCase().contains("connection abort")
-                    || m.toLowerCase().contains("connection reset")
-                    || m.toLowerCase().contains("broken pipe")
-                    || m.toLowerCase().contains("unreachable")
-                    || m.toLowerCase().contains("failed to connect")) {
-                throw new ApiError(0, "Network interrupted. Check internet and try again.");
-            }
-            throw new ApiError(0, "Could not send OTP. Check network and try again.");
         }
     }
 
@@ -154,11 +193,8 @@ public final class ApiClient {
         } catch (Exception e) {
             throw new IOException(e);
         }
-        Request req = new Request.Builder()
-                .url(AppConfig.API_BASE + "/api/auth/otp/verify")
-                .post(RequestBody.create(body.toString(), JSON))
-                .build();
-        try (Response res = OTP.newCall(req).execute()) {
+        try (Response res =
+                executeFailover(OTP, "/api/auth/otp/verify", "POST", RequestBody.create(body.toString(), JSON))) {
             String raw = res.body() != null ? res.body().string() : "";
             if (!res.isSuccessful()) {
                 String msg = raw;
@@ -169,14 +205,11 @@ public final class ApiClient {
                 throw new ApiError(res.code(), msg.isEmpty() ? "OTP verification failed" : msg);
             }
             return new JSONObject(raw);
-        } catch (java.net.SocketTimeoutException e) {
-            throw new ApiError(408, "Network timeout. Check internet and try again.");
         }
     }
 
     public JSONObject getMe() throws IOException, ApiError {
-        Request req = authReq("/api/me").get().build();
-        try (Response res = http.newCall(req).execute()) {
+        try (Response res = executeAuthFailover("/api/me", "GET", null)) {
             return readJson(res);
         } catch (ApiError e) {
             throw e;
@@ -186,8 +219,7 @@ public final class ApiClient {
     }
 
     public JSONObject getAttendance() throws IOException, ApiError {
-        Request req = authReq("/api/attendance").get().build();
-        try (Response res = http.newCall(req).execute()) {
+        try (Response res = executeAuthFailover("/api/attendance", "GET", null)) {
             return readJson(res);
         } catch (ApiError e) {
             throw e;
@@ -199,8 +231,8 @@ public final class ApiClient {
     public JSONObject punchIn(double lat, double lng, Double accuracy, JSONArray descriptor, String image)
             throws IOException, ApiError {
         JSONObject body = punchBody(lat, lng, accuracy, descriptor, image);
-        Request req = authReq("/api/attendance").post(RequestBody.create(body.toString(), JSON)).build();
-        try (Response res = http.newCall(req).execute()) {
+        try (Response res =
+                executeAuthFailover("/api/attendance", "POST", RequestBody.create(body.toString(), JSON))) {
             return readJson(res);
         } catch (ApiError e) {
             throw e;
@@ -214,8 +246,8 @@ public final class ApiClient {
     public JSONObject punchOut(double lat, double lng, Double accuracy, JSONArray descriptor, String image)
             throws IOException, ApiError {
         JSONObject body = punchBody(lat, lng, accuracy, descriptor, image);
-        Request req = authReq("/api/attendance/punch-out").post(RequestBody.create(body.toString(), JSON)).build();
-        try (Response res = http.newCall(req).execute()) {
+        try (Response res = executeAuthFailover(
+                "/api/attendance/punch-out", "POST", RequestBody.create(body.toString(), JSON))) {
             return readJson(res);
         } catch (ApiError e) {
             throw e;
@@ -233,7 +265,6 @@ public final class ApiClient {
             body.put("lat", lat);
             body.put("lng", lng);
             if (accuracy != null) body.put("accuracy", accuracy);
-            // Native may omit descriptor — server describes the photo once and matches registered face.
             if (descriptor != null && descriptor.length() > 0) body.put("descriptor", descriptor);
             body.put("image", image);
         } catch (Exception e) {
@@ -243,8 +274,7 @@ public final class ApiClient {
     }
 
     public JSONObject getLeave() throws IOException, ApiError {
-        Request req = authReq("/api/leave").get().build();
-        try (Response res = http.newCall(req).execute()) {
+        try (Response res = executeAuthFailover("/api/leave", "GET", null)) {
             return readJson(res);
         } catch (ApiError e) {
             throw e;
@@ -262,8 +292,8 @@ public final class ApiClient {
         } catch (Exception e) {
             throw new IOException(e);
         }
-        Request req = authReq("/api/leave").post(RequestBody.create(body.toString(), JSON)).build();
-        try (Response res = http.newCall(req).execute()) {
+        try (Response res =
+                executeAuthFailover("/api/leave", "POST", RequestBody.create(body.toString(), JSON))) {
             return readJson(res);
         } catch (ApiError e) {
             throw e;
@@ -273,8 +303,7 @@ public final class ApiClient {
     }
 
     public JSONObject getHistory() throws IOException, ApiError {
-        Request req = authReq("/api/attendance/history").get().build();
-        try (Response res = http.newCall(req).execute()) {
+        try (Response res = executeAuthFailover("/api/attendance/history", "GET", null)) {
             return readJson(res);
         } catch (ApiError e) {
             throw e;
@@ -294,8 +323,8 @@ public final class ApiClient {
         } catch (Exception e) {
             throw new IOException(e);
         }
-        Request req = authReq("/api/face/register").post(RequestBody.create(body.toString(), JSON)).build();
-        try (Response res = http.newCall(req).execute()) {
+        try (Response res = executeAuthFailover(
+                "/api/face/register", "POST", RequestBody.create(body.toString(), JSON))) {
             return readJson(res);
         } catch (ApiError e) {
             throw e;
@@ -313,16 +342,29 @@ public final class ApiClient {
         } catch (Exception e) {
             throw new IOException(e);
         }
-        Request req = authReq("/api/face/describe").post(RequestBody.create(body.toString(), JSON)).build();
-        try (Response res = FACE.newCall(req).execute()) {
-            return readJson(res);
-        } catch (ApiError e) {
-            throw e;
-        } catch (java.net.SocketTimeoutException e) {
-            throw new ApiError(408, "Face check timed out. Try again on a better network.");
-        } catch (Exception e) {
-            throw new IOException(e);
+        Exception last = null;
+        for (String base : AppConfig.apiBases(apiBase)) {
+            Request req = new Request.Builder()
+                    .url(base + "/api/face/describe")
+                    .addHeader("Authorization", "Bearer " + token)
+                    .addHeader("X-Client-Source", "native")
+                    .addHeader("Content-Type", "application/json")
+                    .addHeader("User-Agent", "AAPAttendanceNative/1.3.8")
+                    .post(RequestBody.create(body.toString(), JSON))
+                    .build();
+            try (Response res = FACE.newCall(req).execute()) {
+                return readJson(res);
+            } catch (ApiError e) {
+                throw e;
+            } catch (Exception e) {
+                last = e;
+                if (!isTransportFailure(e)) break;
+            }
         }
+        if (last instanceof java.net.SocketTimeoutException) {
+            throw new ApiError(408, "Face check timed out. Try again on a better network.");
+        }
+        throw asNetworkError(last != null ? last : new IOException("unreachable"), "Face check failed. Try again.");
     }
 
     public void reportLocationPermission(boolean foreground, boolean background) throws IOException, ApiError {
@@ -334,10 +376,8 @@ public final class ApiClient {
         } catch (Exception e) {
             throw new IOException(e);
         }
-        Request req = authReq("/api/me/location-permission")
-                .post(RequestBody.create(body.toString(), JSON))
-                .build();
-        try (Response res = http.newCall(req).execute()) {
+        try (Response res = executeAuthFailover(
+                "/api/me/location-permission", "POST", RequestBody.create(body.toString(), JSON))) {
             readJson(res);
         } catch (ApiError e) {
             throw e;

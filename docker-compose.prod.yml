@@ -1,4 +1,5 @@
 services:
+  # Light: login, OTP, website, version — stays responsive when face work is heavy
   app:
     image: filedtracker:latest
     pull_policy: never
@@ -6,13 +7,36 @@ services:
     env_file:
       - .env
     environment:
-      # Docker sets HOSTNAME=container-id; Next.js then binds only there and nginx/wget hang.
       HOSTNAME: "0.0.0.0"
       PORT: "3000"
-      NODE_OPTIONS: --dns-result-order=ipv4first
+      NODE_OPTIONS: --dns-result-order=ipv4first --max-old-space-size=1536
       GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY}
+      FT_ROLE: light
     ports:
       - "3000:3000"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Heavy: face describe + punch — CPU-heavy work isolated from login
+  app-heavy:
+    image: filedtracker:latest
+    pull_policy: never
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      HOSTNAME: "0.0.0.0"
+      PORT: "3000"
+      NODE_OPTIONS: --dns-result-order=ipv4first --max-old-space-size=1536
+      GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY}
+      FT_ROLE: heavy
+      # Skip migrate/seed on heavy — light does it
+      SKIP_DB_BOOTSTRAP: "1"
+    ports:
+      - "3001:3000"
     logging:
       driver: json-file
       options:

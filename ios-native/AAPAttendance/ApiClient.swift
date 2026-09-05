@@ -80,21 +80,51 @@ enum ApiClient {
     }
 
     private static func postPublic(path: String, body: [String: Any]) async throws -> [String: Any] {
-        try await send(url: AppConfig.apiBase + path, method: "POST", token: nil, body: body)
+        try await sendFailover(path: path, method: "POST", token: nil, body: body, bases: AppConfig.apiBases)
     }
 
     private static func authed(path: String, method: String, body: [String: Any]? = nil) async throws -> [String: Any] {
-        try await send(url: SessionStore.apiBase + path, method: method, token: SessionStore.token, body: body)
+        var bases = AppConfig.apiBases
+        let stored = SessionStore.apiBase
+        if !stored.isEmpty, !bases.contains(stored) {
+            bases.insert(stored, at: 0)
+        }
+        try await sendFailover(path: path, method: method, token: SessionStore.token, body: body, bases: bases)
+    }
+
+    private static func sendFailover(
+        path: String,
+        method: String,
+        token: String?,
+        body: [String: Any]?,
+        bases: [String]
+    ) async throws -> [String: Any] {
+        var last: Error?
+        for base in bases {
+            do {
+                return try await send(url: base + path, method: method, token: token, body: body)
+            } catch let e as ApiError {
+                // Business / HTTP errors — do not try another host
+                throw e
+            } catch {
+                last = error
+            }
+        }
+        let msg = last?.localizedDescription.lowercased() ?? ""
+        if msg.contains("timed out") || msg.contains("timeout") {
+            throw ApiError(statusCode: 408, message: "Network timeout. Check internet and try again.")
+        }
+        throw ApiError(statusCode: 0, message: "Network error. Check internet and try again.")
     }
 
     private static func send(url: String, method: String, token: String?, body: [String: Any]?) async throws -> [String: Any] {
         guard let u = URL(string: url) else { throw ApiError(statusCode: 0, message: "Bad URL") }
         var req = URLRequest(url: u)
         req.httpMethod = method
-        req.timeoutInterval = 55
+        req.timeoutInterval = 22
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("native", forHTTPHeaderField: "X-Client-Source")
-        req.setValue("AAPAttendance/1.3.0 AAPNative/1", forHTTPHeaderField: "User-Agent")
+        req.setValue("AAPAttendance/1.3.8 AAPNative/1", forHTTPHeaderField: "User-Agent")
         if let token, !token.isEmpty {
             req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
@@ -108,12 +138,12 @@ enum ApiClient {
         } catch {
             let msg = error.localizedDescription.lowercased()
             if msg.contains("timed out") || msg.contains("timeout") {
-                throw ApiError(statusCode: 408, message: "Network timeout. Check internet and try again.")
+                throw error // let failover try next base
             }
             if msg.contains("connection") || msg.contains("offline") || msg.contains("internet") {
-                throw ApiError(statusCode: 0, message: "Network interrupted. Check internet and try again.")
+                throw error
             }
-            throw ApiError(statusCode: 0, message: "Network error. Check internet and try again.")
+            throw error
         }
         let code = (res as? HTTPURLResponse)?.statusCode ?? 0
         let raw = String(data: data, encoding: .utf8) ?? ""
