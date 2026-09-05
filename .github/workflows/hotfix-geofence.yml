@@ -1,0 +1,52 @@
+name: Hotfix geofence files
+
+# Fast path: copy boundary GeoJSON into the running container (no full image rebuild).
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "deploy/boundaries/**"
+      - ".github/workflows/hotfix-geofence.yml"
+
+jobs:
+  hotfix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Upload geofence files
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "deploy/boundaries/punjab-assemblies.geojson,deploy/boundaries/punjab-chandigarh.geojson"
+          target: /opt/filedtracker
+          overwrite: true
+
+      - name: Install into running container
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -e
+            cd /opt/filedtracker
+            sudo docker compose -f docker-compose.prod.yml up -d || true
+            # appleboy scp keeps relative paths under target
+            SRC_DIR=/opt/filedtracker/deploy/boundaries
+            if [ ! -f "$SRC_DIR/punjab-assemblies.geojson" ]; then
+              SRC_DIR=/opt/filedtracker/boundaries
+            fi
+            ls -lh "$SRC_DIR"
+            sudo docker exec filedtracker-app-1 mkdir -p /app/data/boundaries
+            sudo docker cp "$SRC_DIR/punjab-assemblies.geojson" filedtracker-app-1:/app/data/boundaries/punjab-assemblies.geojson
+            sudo docker cp "$SRC_DIR/punjab-chandigarh.geojson" filedtracker-app-1:/app/data/boundaries/punjab-chandigarh.geojson
+            sudo docker exec filedtracker-app-1 ls -lh /app/data/boundaries/
+            sudo docker compose -f docker-compose.prod.yml restart app
+            sleep 6
+            curl -sS --max-time 20 http://127.0.0.1:3000/api/app/version || true
+            echo
+            sudo docker compose -f docker-compose.prod.yml ps
