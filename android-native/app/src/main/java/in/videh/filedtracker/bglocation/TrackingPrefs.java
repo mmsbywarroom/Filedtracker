@@ -18,9 +18,13 @@ public final class TrackingPrefs {
     }
 
     public static void saveSession(Context ctx, String apiBase, String token, String punchInAt) {
+        String base = apiBase;
+        if (base != null && base.contains("filed.videh.co.in")) {
+            base = in.videh.filedtracker.nativeapp.AppConfig.API_BASE;
+        }
         prefs(ctx).edit()
                 .putBoolean(KEY_ACTIVE, true)
-                .putString(KEY_API, apiBase)
+                .putString(KEY_API, base)
                 .putString(KEY_TOKEN, token)
                 .putString(KEY_PUNCH_IN, punchInAt)
                 .putString(KEY_SENT_SLOTS, "")
