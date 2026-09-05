@@ -6,6 +6,9 @@ services:
     env_file:
       - .env
     environment:
+      # Docker sets HOSTNAME=container-id; Next.js then binds only there and nginx/wget hang.
+      HOSTNAME: "0.0.0.0"
+      PORT: "3000"
       NODE_OPTIONS: --dns-result-order=ipv4first
       GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY}
     ports:

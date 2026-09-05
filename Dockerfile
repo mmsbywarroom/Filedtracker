@@ -21,5 +21,6 @@ RUN npx prisma generate && NODE_OPTIONS=--max-old-space-size=4096 npm run build 
   && rm -rf /app/.next/cache /root/.npm /tmp/* \
   && npm prune --omit=dev
 ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
 ENV NODE_ENV=production
-CMD ["sh", "-c", "npx prisma migrate deploy && npx tsx prisma/seed.ts && npm start"]
+CMD ["sh", "-c", "npx prisma migrate deploy && npx tsx prisma/seed.ts && npx next start -H 0.0.0.0 -p 3000"]
