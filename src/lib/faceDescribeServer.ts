@@ -4,9 +4,20 @@ let patched = false;
 let modelsReady: Promise<void> | null = null;
 /** Serialize heavy face work so dashboard/OTP stay responsive on small EC2. */
 let faceChain: Promise<unknown> = Promise.resolve();
+let faceQueue = 0;
+const FACE_QUEUE_MAX = 2;
 
 function withFaceLock<T>(fn: () => Promise<T>): Promise<T> {
-  const run = faceChain.then(fn, fn);
+  if (faceQueue >= FACE_QUEUE_MAX) {
+    return Promise.resolve({
+      ok: false as const,
+      error: "Server busy matching faces. Wait 5 seconds and try again.",
+    }) as Promise<T>;
+  }
+  faceQueue += 1;
+  const run = faceChain.then(fn, fn).finally(() => {
+    faceQueue -= 1;
+  });
   faceChain = run.then(
     () => undefined,
     () => undefined
