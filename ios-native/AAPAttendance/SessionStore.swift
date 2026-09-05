@@ -17,7 +17,10 @@ enum SessionStore {
     static var apiBase: String {
         get {
             let v = defaults.string(forKey: apiBaseKey) ?? ""
-            return v.isEmpty ? AppConfig.apiBase : v
+            let base = v.isEmpty ? AppConfig.apiBase : v
+            // Migrate stored DNS hostname → Elastic IP while Google DNS is stale.
+            if base.contains("filed.videh.co.in") { return AppConfig.apiBase }
+            return base
         }
         set { defaults.set(newValue, forKey: apiBaseKey) }
     }

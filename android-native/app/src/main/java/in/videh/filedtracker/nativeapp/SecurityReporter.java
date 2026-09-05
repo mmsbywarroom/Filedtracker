@@ -63,7 +63,7 @@ public final class SecurityReporter {
                         .addHeader("Content-Type", "application/json")
                         .post(RequestBody.create(body.toString(), JSON))
                         .build();
-                OkHttpClient c = new OkHttpClient.Builder()
+                OkHttpClient c = AppConfig.okHttpBuilder()
                         .connectTimeout(20, TimeUnit.SECONDS)
                         .readTimeout(20, TimeUnit.SECONDS)
                         .build();

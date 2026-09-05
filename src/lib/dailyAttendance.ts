@@ -93,7 +93,18 @@ export function hoursWorkedOnDay(sessions: PunchRow[], asOf = new Date()) {
  * - after 10:30 and by 1:00 PM → half_day
  * - after 1:00 PM or no punch (after 1:00 PM) or early punch with <6h → absent
  * No punch before 1:00 PM is handled in resolveDayAttendanceStatus as pending.
+ *
+ * HALF_DAY_WAIVER_DATES: outage days — punch after 10:30 still counts toward Present
+ * (hours rules unchanged).
  */
+const HALF_DAY_WAIVER_DATES = new Set([
+  "2026-09-05", // server/DNS outage morning — do not mark half-day for late punch-in
+]);
+
+export function isHalfDayWaivedForDate(dateYmd: string) {
+  return HALF_DAY_WAIVER_DATES.has(dateYmd);
+}
+
 export function autoAttendanceStatus(opts: {
   firstPunchIn: Date | null;
   hours: number;
@@ -102,7 +113,9 @@ export function autoAttendanceStatus(opts: {
   if (!opts.hadPunch || !opts.firstPunchIn) return "absent";
   const mins = istMinutesOfDay(opts.firstPunchIn);
   if (mins > HALF_DAY_PUNCH_BEFORE_MINUTES) return "absent";
-  if (mins > PRESENT_PUNCH_BEFORE_MINUTES) return "half_day";
+  const punchDay = istDateString(opts.firstPunchIn);
+  const waiveHalfDay = isHalfDayWaivedForDate(punchDay);
+  if (mins > PRESENT_PUNCH_BEFORE_MINUTES && !waiveHalfDay) return "half_day";
   if (opts.hours >= PRESENT_MIN_HOURS) return "present";
   return "absent";
 }
@@ -133,6 +146,11 @@ export function autoReason(
   const sessionsNote =
     sessionCount > 1 ? ` · ${sessionCount} sessions combined` : "";
   if (status === "present") {
+    const punchDay = firstPunchIn ? istDateString(firstPunchIn) : "";
+    const waived = punchDay && isHalfDayWaivedForDate(punchDay);
+    if (waived && istMinutesOfDay(firstPunchIn!) > PRESENT_PUNCH_BEFORE_MINUTES) {
+      return `First punch ${punchLabel} · ${hours.toFixed(1)}h on duty${sessionsNote} (10:30 half-day waived for outage day)`;
+    }
     return `First punch ${punchLabel} (by 10:30) · ${hours.toFixed(1)}h on duty${sessionsNote} (6–12h = present)`;
   }
   if (status === "half_day") {

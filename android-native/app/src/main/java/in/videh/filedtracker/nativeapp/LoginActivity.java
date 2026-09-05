@@ -72,9 +72,8 @@ public class LoginActivity extends AppCompatActivity {
                 try {
                     JSONObject res = ApiClient.verifyOtp(pendingPhone, otp);
                     String token = res.optString("token", "");
-                    String apiBase = res.optString("apiBaseUrl", AppConfig.API_BASE);
                     if (token.isEmpty()) throw new ApiClient.ApiError(401, "No session token returned.");
-                    SessionStore.save(LoginActivity.this, token, apiBase, pendingPhone, "");
+                    SessionStore.save(LoginActivity.this, token, AppConfig.API_BASE, pendingPhone, "");
                     runOnUiThread(() -> {
                         startActivity(new Intent(this, DashboardActivity.class));
                         finish();

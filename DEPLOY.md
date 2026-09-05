@@ -3,7 +3,7 @@
 Target:
 
 - GitHub: `https://github.com/mmsbywarroom/Filedtracker.git`
-- EC2 Mumbai (`ap-south-1`, `t3.micro`) — host stored in GitHub secret `EC2_HOST`
+- EC2 Mumbai (`ap-south-1`, `t3.medium`, Elastic IP `13.234.95.134`) — host stored in GitHub secret `EC2_HOST`
 - Domain: `https://filed.videh.co.in`
 - Database: PostgreSQL **on the same EC2** (Docker). Do not use RDS in `us-east-1` — too slow from Mumbai.
 
@@ -21,7 +21,7 @@ Inbound:
 
 **Never** open PostgreSQL port 5432 to the internet.
 
-## Disk / logs (important on t3.micro)
+## Disk / logs (important on t3.medium)
 
 `deploy/disk-cleanup.sh` runs:
 

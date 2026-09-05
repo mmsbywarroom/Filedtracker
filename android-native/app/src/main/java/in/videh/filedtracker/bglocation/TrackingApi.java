@@ -20,7 +20,7 @@ public final class TrackingApi {
     private static final String TAG = "FTTrackingApi";
     private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
     private static final ExecutorService IO = Executors.newFixedThreadPool(2);
-    private static final OkHttpClient HTTP = new OkHttpClient.Builder()
+    private static final OkHttpClient HTTP = in.videh.filedtracker.nativeapp.AppConfig.okHttpBuilder()
             .connectTimeout(12, TimeUnit.SECONDS)
             .readTimeout(20, TimeUnit.SECONDS)
             .writeTimeout(20, TimeUnit.SECONDS)

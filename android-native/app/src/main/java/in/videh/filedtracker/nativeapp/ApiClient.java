@@ -19,7 +19,7 @@ public final class ApiClient {
     private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
 
     /** Shared client — connection reuse keeps punch / OTP fast. */
-    private static final OkHttpClient SHARED = new OkHttpClient.Builder()
+    private static final OkHttpClient SHARED = AppConfig.okHttpBuilder()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(55, TimeUnit.SECONDS)
             .writeTimeout(55, TimeUnit.SECONDS)
@@ -27,7 +27,7 @@ public final class ApiClient {
             .retryOnConnectionFailure(true)
             .build();
 
-    private static final OkHttpClient OTP = SHARED.newBuilder()
+    private static final OkHttpClient OTP = AppConfig.okHttpBuilder()
             .connectTimeout(12, TimeUnit.SECONDS)
             .readTimeout(25, TimeUnit.SECONDS)
             .writeTimeout(25, TimeUnit.SECONDS)
@@ -35,7 +35,7 @@ public final class ApiClient {
             .build();
 
     /** Longer timeouts for face describe (cold model load). */
-    private static final OkHttpClient FACE = SHARED.newBuilder()
+    private static final OkHttpClient FACE = AppConfig.okHttpBuilder()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(55, TimeUnit.SECONDS)
             .writeTimeout(55, TimeUnit.SECONDS)
@@ -67,7 +67,7 @@ public final class ApiClient {
                 .addHeader("Authorization", "Bearer " + token)
                 .addHeader("X-Client-Source", "native")
                 .addHeader("Content-Type", "application/json")
-                .addHeader("User-Agent", "AAPAttendanceNative/1.3.6");
+                .addHeader("User-Agent", "AAPAttendanceNative/1.3.7");
     }
 
     /** Public — no auth. Used for force-update gate. */

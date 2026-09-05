@@ -104,7 +104,7 @@ enum ApiClient {
         let data: Data
         let res: URLResponse
         do {
-            (data, res) = try await URLSession.shared.data(for: req)
+            (data, res) = try await AppUrlSession.shared.data(for: req)
         } catch {
             let msg = error.localizedDescription.lowercased()
             if msg.contains("timed out") || msg.contains("timeout") {

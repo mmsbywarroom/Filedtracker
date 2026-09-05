@@ -36,7 +36,10 @@ public final class SessionStore {
 
     public static String apiBase(Context ctx) {
         String base = prefs(ctx).getString(KEY_API_BASE, AppConfig.API_BASE);
-        return base != null && !base.isEmpty() ? base : AppConfig.API_BASE;
+        if (base == null || base.isEmpty()) return AppConfig.API_BASE;
+        // Stale Google DNS still points filed.videh.co.in at the old EC2 IP — use Elastic IP.
+        if (base.contains("filed.videh.co.in")) return AppConfig.API_BASE;
+        return base;
     }
 
     public static String phone(Context ctx) {

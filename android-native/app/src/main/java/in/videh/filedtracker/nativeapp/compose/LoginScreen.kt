@@ -251,9 +251,9 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
                                     try {
                                         val res = withContext(Dispatchers.IO) { ApiClient.verifyOtp(phone, otp) }
                                         val token = res.optString("token", "")
-                                        val apiBase = res.optString("apiBaseUrl", AppConfig.API_BASE)
                                         if (token.isBlank()) throw IllegalStateException("No session token returned.")
-                                        SessionStore.save(context, token, apiBase, phone, "")
+                                        // Force Elastic IP base — server apiBaseUrl may still be the DNS hostname.
+                                        SessionStore.save(context, token, AppConfig.API_BASE, phone, "")
                                         onLoggedIn()
                                     } catch (e: Exception) {
                                         isError = true

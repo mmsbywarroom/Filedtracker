@@ -36,7 +36,11 @@ public final class TrackingPrefs {
     }
 
     public static String apiBase(Context ctx) {
-        return prefs(ctx).getString(KEY_API, "");
+        String base = prefs(ctx).getString(KEY_API, "");
+        if (base != null && base.contains("filed.videh.co.in")) {
+            return in.videh.filedtracker.nativeapp.AppConfig.API_BASE;
+        }
+        return base;
     }
 
     public static String token(Context ctx) {
