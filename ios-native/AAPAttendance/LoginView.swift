@@ -147,7 +147,7 @@ struct LoginView: View {
                     let res = try await ApiClient.verifyOtp(phone: phone, otp: otp)
                     let token = res.string("token") ?? ""
                     guard !token.isEmpty else { throw ApiError(statusCode: 0, message: "No session token returned.") }
-                    SessionStore.save(token: token, apiBase: res.string("apiBaseUrl") ?? AppConfig.apiBase, phone: phone)
+                    SessionStore.save(token: token, apiBase: AppConfig.apiBase, phone: phone)
                     onLoggedIn()
                 } catch {
                     isError = true

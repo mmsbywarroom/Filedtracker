@@ -2,6 +2,7 @@ package in.videh.filedtracker.nativeapp;
 
 import android.Manifest;
 import android.app.Activity;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.util.Log;
 import android.webkit.CookieManager;
@@ -9,6 +10,8 @@ import android.webkit.JavascriptInterface;
 
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+
+import in.videh.filedtracker.nativeapp.compose.ComposeMainActivity;
 
 import org.json.JSONObject;
 
@@ -27,11 +30,10 @@ public class NativeAppBridge {
     @JavascriptInterface
     public void saveSession(String token, String apiBase, String phone) {
         if (token == null || token.isEmpty()) return;
-        String base = apiBase != null && !apiBase.isEmpty() ? apiBase : AppConfig.API_BASE;
-        SessionStore.save(activity, token, base, phone != null ? phone : SessionStore.phone(activity), "");
+        SessionStore.save(activity, token, AppConfig.API_BASE, phone != null ? phone : SessionStore.phone(activity), "");
         CookieManager cm = CookieManager.getInstance();
         cm.setAcceptCookie(true);
-        cm.setCookie(base, "ft_user_session=" + token + "; Path=/; Secure; SameSite=Lax");
+        cm.setCookie(AppConfig.API_BASE, "ft_user_session=" + token + "; Path=/; Secure; SameSite=Lax");
         cm.flush();
     }
 
@@ -174,6 +176,10 @@ public class NativeAppBridge {
                 CookieManager cm = CookieManager.getInstance();
                 cm.removeAllCookies(null);
                 cm.flush();
+                Intent i = new Intent(activity, ComposeMainActivity.class);
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                activity.startActivity(i);
+                activity.finish();
             } catch (Exception e) {
                 Log.e(TAG, "clearSession failed", e);
             }

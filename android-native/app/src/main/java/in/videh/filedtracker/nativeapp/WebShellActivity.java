@@ -72,7 +72,8 @@ public class WebShellActivity extends AppCompatActivity {
             return windowInsets;
         });
 
-        apiBase = SessionStore.apiBase(this);
+        // Always load public domain in WebView (TLS + cookie + same fast face-api as website).
+        apiBase = AppConfig.API_BASE;
         injectSessionCookie();
 
         WebSettings settings = webView.getSettings();
@@ -288,7 +289,8 @@ public class WebShellActivity extends AppCompatActivity {
         CookieManager cm = CookieManager.getInstance();
         cm.setAcceptCookie(true);
         cm.setAcceptThirdPartyCookies(webView, true);
-        cm.setCookie(apiBase, "ft_user_session=" + token + "; Path=/; Secure; SameSite=Lax");
+        // Domain cookie — never pin session to Elastic IP host.
+        cm.setCookie(AppConfig.API_BASE, "ft_user_session=" + token + "; Path=/; Secure; SameSite=Lax");
         cm.flush();
     }
 

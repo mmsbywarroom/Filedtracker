@@ -45,11 +45,14 @@ final class WebShellViewController: UIViewController, WKNavigationDelegate, WKUI
     }
 
     private func loadApp() {
-        let path = "/dashboard"
-        guard let url = URL(string: apiBase + path) else { return }
+        // Always load the public domain in WebView (TLS + cookie domain).
+        let webBase = AppConfig.apiBase
+        guard let url = URL(string: webBase + "/dashboard") else { return }
         var req = URLRequest(url: url)
         req.cachePolicy = .reloadIgnoringLocalCacheData
-        webView.load(req)
+        setSessionCookie(token: SessionStore.token) {
+            self.webView.load(req)
+        }
     }
 
     private func pushInsets() {
@@ -105,10 +108,9 @@ final class WebShellViewController: UIViewController, WKNavigationDelegate, WKUI
         switch cmd {
         case "saveSession":
             let token = args["token"] as? String ?? ""
-            let base = args["apiBase"] as? String ?? AppConfig.apiBase
             let phone = args["phone"] as? String ?? ""
-            SessionStore.save(token: token, apiBase: base, phone: phone)
-            setSessionCookie(token: token, apiBase: SessionStore.apiBase)
+            SessionStore.save(token: token, apiBase: AppConfig.apiBase, phone: phone)
+            setSessionCookie(token: token)
         case "startTracking":
             LocationTracker.shared.start(
                 apiBase: args["apiBase"] as? String ?? SessionStore.apiBase,
@@ -137,7 +139,9 @@ final class WebShellViewController: UIViewController, WKNavigationDelegate, WKUI
             WKWebsiteDataStore.default().removeData(
                 ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(),
                 modifiedSince: Date(timeIntervalSince1970: 0)
-            ) {}
+            ) {
+                NotificationCenter.default.post(name: .ftLoggedOut, object: nil)
+            }
         case "exitApp":
             UIApplication.shared.perform(NSSelectorFromString("suspend"))
         default:
@@ -145,19 +149,26 @@ final class WebShellViewController: UIViewController, WKNavigationDelegate, WKUI
         }
     }
 
-    private func setSessionCookie(token: String, apiBase: String) {
-        guard !token.isEmpty, let host = URL(string: apiBase)?.host else { return }
+    private func setSessionCookie(token: String, completion: (() -> Void)? = nil) {
+        guard !token.isEmpty else {
+            completion?()
+            return
+        }
         let cookie = HTTPCookie(properties: [
-            .domain: host,
+            .domain: AppConfig.apiHost,
             .path: "/",
             .name: "ft_user_session",
             .value: token,
             .secure: "TRUE",
             .expires: Date().addingTimeInterval(60 * 60 * 24 * 14),
         ])
-        if let cookie {
-            HTTPCookieStorage.shared.setCookie(cookie)
-            webView.configuration.websiteDataStore.httpCookieStore.setCookie(cookie)
+        guard let cookie else {
+            completion?()
+            return
+        }
+        HTTPCookieStorage.shared.setCookie(cookie)
+        webView.configuration.websiteDataStore.httpCookieStore.setCookie(cookie) {
+            DispatchQueue.main.async { completion?() }
         }
     }
 

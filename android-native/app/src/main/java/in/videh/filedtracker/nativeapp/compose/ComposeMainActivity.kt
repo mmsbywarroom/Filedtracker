@@ -1,6 +1,7 @@
 package `in`.videh.filedtracker.nativeapp.compose
 
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.compose.setContent
@@ -25,63 +26,45 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import androidx.navigation.navArgument
 import `in`.videh.filedtracker.nativeapp.LocaleHelper
 import `in`.videh.filedtracker.nativeapp.SessionStore
+import `in`.videh.filedtracker.nativeapp.WebShellActivity
 
-/** Single Compose host for the whole field app — no WebView anywhere in this graph. */
+/**
+ * Compose login only. After OTP, open WebShell (web dashboard + client-side face punch).
+ * Legacy HomeScreen / FaceScreen remain in the project but are not on the punch path.
+ */
 class ComposeMainActivity : AppCompatActivity() {
 
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(LocaleHelper.wrap(newBase))
     }
 
+    private fun openWebDashboard() {
+        val i = Intent(this, WebShellActivity::class.java)
+        i.putExtra(WebShellActivity.EXTRA_PATH, "/dashboard")
+        startActivity(i)
+        finish()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val startDestination = if (SessionStore.isLoggedIn(this)) Routes.HOME else Routes.LOGIN
+        if (SessionStore.isLoggedIn(this)) {
+            openWebDashboard()
+            return
+        }
 
         setContent {
             AapTheme {
                 AapBackground {
                     val nav = rememberNavController()
-                    NavHost(navController = nav, startDestination = startDestination) {
+                    NavHost(navController = nav, startDestination = Routes.LOGIN) {
                         composable(Routes.LOGIN) {
-                            LoginScreen(
-                                onLoggedIn = {
-                                    nav.navigate(Routes.HOME) {
-                                        popUpTo(Routes.LOGIN) { inclusive = true }
-                                    }
-                                }
-                            )
-                        }
-                        composable(Routes.HOME) {
-                            HomeScreen(
-                                onOpen = { route -> nav.navigate(route) },
-                                onLoggedOut = {
-                                    nav.navigate(Routes.LOGIN) {
-                                        popUpTo(0) { inclusive = true }
-                                    }
-                                }
-                            )
-                        }
-                        composable(Routes.MAP) { MapScreen(onBack = { nav.popBackStack() }) }
-                        composable(Routes.LEAVE) { LeaveScreen(onBack = { nav.popBackStack() }) }
-                        composable(Routes.FOOTPRINTS) { FootprintsScreen(onBack = { nav.popBackStack() }) }
-                        composable(
-                            Routes.FACE,
-                            arguments = listOf(navArgument("mode") { type = NavType.StringType })
-                        ) { entry ->
-                            FaceScreen(
-                                mode = entry.arguments?.getString("mode") ?: FACE_MODE_CHECK,
-                                onBack = { nav.popBackStack() },
-                                // Close camera only after punch / register succeeds.
-                                onSuccess = { nav.popBackStack() }
-                            )
+                            LoginScreen(onLoggedIn = { openWebDashboard() })
                         }
                     }
                 }

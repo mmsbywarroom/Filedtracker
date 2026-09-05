@@ -95,7 +95,7 @@ public final class ApiClient {
                     .url(base + path)
                     .addHeader("X-Client-Source", "native")
                     .addHeader("Content-Type", "application/json")
-                    .addHeader("User-Agent", "AAPAttendanceNative/1.3.8");
+                    .addHeader("User-Agent", "AAPAttendanceNative/1.3.9");
             if ("GET".equals(method)) b.get();
             else b.method(method, body);
             try {
@@ -117,7 +117,7 @@ public final class ApiClient {
                     .addHeader("Authorization", "Bearer " + token)
                     .addHeader("X-Client-Source", "native")
                     .addHeader("Content-Type", "application/json")
-                    .addHeader("User-Agent", "AAPAttendanceNative/1.3.8");
+                    .addHeader("User-Agent", "AAPAttendanceNative/1.3.9");
             if ("GET".equals(method)) b.get();
             else b.method(method, body);
             try {
@@ -349,7 +349,7 @@ public final class ApiClient {
                     .addHeader("Authorization", "Bearer " + token)
                     .addHeader("X-Client-Source", "native")
                     .addHeader("Content-Type", "application/json")
-                    .addHeader("User-Agent", "AAPAttendanceNative/1.3.8")
+                    .addHeader("User-Agent", "AAPAttendanceNative/1.3.9")
                     .post(RequestBody.create(body.toString(), JSON))
                     .build();
             try (Response res = FACE.newCall(req).execute()) {

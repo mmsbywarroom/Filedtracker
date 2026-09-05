@@ -88,6 +88,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import org.json.JSONObject
 
 @Composable
@@ -155,12 +156,15 @@ fun HomeScreen(
         if (!silent && !bootstrapped) loading = true
         if (silent) refreshing = true
         try {
+            // Never leave the home screen stuck on "Loading…" / missing punch button.
             val payload = withContext(Dispatchers.IO) {
-                coroutineScope {
-                    val api = ApiClient(context)
-                    val meDeferred = async { api.getMe() }
-                    val attDeferred = async { api.getAttendance() }
-                    meDeferred.await() to attDeferred.await()
+                withTimeout(18_000) {
+                    coroutineScope {
+                        val api = ApiClient(context)
+                        val meDeferred = async { api.getMe() }
+                        val attDeferred = async { api.getAttendance() }
+                        meDeferred.await() to attDeferred.await()
+                    }
                 }
             }
             val u = payload.first.optJSONObject("user")
@@ -181,7 +185,12 @@ fun HomeScreen(
         } catch (e: Exception) {
             // Keep cached UI; only surface errors when we have nothing to show.
             if (!bootstrapped) {
-                val text = errorText(e, "Could not load dashboard")
+                val text = when {
+                    e is kotlinx.coroutines.TimeoutCancellationException ||
+                        (e.message?.contains("timed out", ignoreCase = true) == true) ->
+                        "Server is slow or busy. Tap refresh and try again."
+                    else -> errorText(e, "Could not load dashboard")
+                }
                 if (text.isNotBlank()) say(text, true)
             }
         } finally {
