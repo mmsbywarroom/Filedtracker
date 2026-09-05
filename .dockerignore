@@ -13,8 +13,12 @@ android-native
 ios-native
 codemagic.yaml
 
-# Local / export data
-data
+# Local / export data — keep assembly geofence polygons (required for punch)
+data/*
+!data/boundaries/
+data/boundaries/*
+!data/boundaries/punjab-assemblies.geojson
+!data/boundaries/punjab-chandigarh.geojson
 prisma/dev.db
 prisma/dev.db-journal
 *.csv

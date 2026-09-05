@@ -133,7 +133,15 @@ export function normalizeAssemblyName(raw: string) {
 function loadAssemblies() {
   if (cached) return cached;
   const path = join(process.cwd(), "data", "boundaries", "punjab-assemblies.geojson");
-  const data = JSON.parse(readFileSync(path, "utf8")) as GeoJson;
+  let raw: string;
+  try {
+    raw = readFileSync(path, "utf8");
+  } catch {
+    throw new Error(
+      "Assembly boundary map is missing on server. Contact admin (punjab-assemblies.geojson)."
+    );
+  }
+  const data = JSON.parse(raw) as GeoJson;
   const byNorm = new Map<string, Feature>();
   for (const f of data.features) {
     const key = normalizeAssemblyName(f.properties.acName);
@@ -290,7 +298,15 @@ function minDistanceToGeometryMeters(lat: number, lng: number, geometry: Geometr
 function loadPunjabChandigarh() {
   if (regionCache) return regionCache;
   const path = join(process.cwd(), "data", "boundaries", "punjab-chandigarh.geojson");
-  const data = JSON.parse(readFileSync(path, "utf8")) as {
+  let raw: string;
+  try {
+    raw = readFileSync(path, "utf8");
+  } catch {
+    throw new Error(
+      "Punjab/Chandigarh boundary map is missing on server. Contact admin (punjab-chandigarh.geojson)."
+    );
+  }
+  const data = JSON.parse(raw) as {
     features: { geometry: Geometry }[];
   };
   regionCache = { geometries: data.features.map((f) => f.geometry) };
