@@ -90,7 +90,7 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
         message = "Sending OTP…"
         scope.launch {
             try {
-                withContext(Dispatchers.IO) { ApiClient.requestOtp(phone) }
+                withContext(Dispatchers.IO) { ApiClient.requestOtp(context, phone) }
                 otpSent = true
                 message = context.getString(R.string.otp_sms_hint)
             } catch (e: Exception) {

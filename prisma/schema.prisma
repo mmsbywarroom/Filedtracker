@@ -85,6 +85,29 @@ model OtpChallenge {
   @@index([phone])
 }
 
+/// Append-only OTP request forensic log (who/what requested SMS). Never cascade-delete.
+model OtpRequestLog {
+  id                 String   @id @default(cuid())
+  phone              String
+  /// sent | blocked_cooldown | blocked_hourly | blocked_ip | blocked_unknown | blocked_disabled | sms_failed
+  outcome            String
+  detail             String   @default("")
+  ip                 String   @default("")
+  userAgent          String   @default("")
+  clientSource       String   @default("web")
+  appInstallationId  String   @default("")
+  androidId          String   @default("")
+  appVersion         String   @default("")
+  manufacturer       String   @default("")
+  model              String   @default("")
+  createdAt          DateTime @default(now())
+
+  @@index([phone, createdAt])
+  @@index([ip, createdAt])
+  @@index([appInstallationId, createdAt])
+  @@index([createdAt])
+}
+
 model Attendance {
   id            String   @id @default(cuid())
   userId        String

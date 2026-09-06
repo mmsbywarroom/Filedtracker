@@ -21,6 +21,7 @@ const SUPER_ONLY = [
   "/admin/security-violations",
   "/admin/auto-punch-out",
   "/admin/face-reset-logs",
+  "/admin/otp-logs",
 ];
 
 export default function AdminShell({ children }: { children: ReactNode }) {
@@ -148,6 +149,12 @@ export default function AdminShell({ children }: { children: ReactNode }) {
             href: "/admin/face-reset-logs",
             label: t("faceResetLogs"),
             match: (p: string) => p.startsWith("/admin/face-reset-logs"),
+            group: "Logs",
+          },
+          {
+            href: "/admin/otp-logs",
+            label: "OTP request logs",
+            match: (p: string) => p.startsWith("/admin/otp-logs"),
             group: "Logs",
           },
         ]

@@ -8,7 +8,23 @@ struct ApiError: LocalizedError {
 
 enum ApiClient {
     static func requestOtp(phone: String) async throws {
-        _ = try await postPublic(path: "/api/auth/otp/request", body: ["phone": phone])
+        let clientId: String = {
+            let key = "ft_ios_client_id"
+            if let existing = UserDefaults.standard.string(forKey: key), !existing.isEmpty {
+                return existing
+            }
+            let id = "ios_" + UUID().uuidString.replacingOccurrences(of: "-", with: "")
+            UserDefaults.standard.set(id, forKey: key)
+            return id
+        }()
+        _ = try await postPublic(path: "/api/auth/otp/request", body: [
+            "phone": phone,
+            "appInstallationId": clientId,
+            "clientId": clientId,
+            "manufacturer": "Apple",
+            "model": "iOS",
+            "appVersion": (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "",
+        ])
     }
 
     static func verifyOtp(phone: String, otp: String) async throws -> [String: Any] {

@@ -47,19 +47,29 @@ export default function HomePage() {
     setBusy(true);
     setError("");
     try {
+      let clientId = "";
+      try {
+        clientId = localStorage.getItem("ft_web_client_id") || "";
+        if (!clientId) {
+          clientId = `web_${crypto.randomUUID?.() || `${Date.now()}_${Math.random().toString(16).slice(2)}`}`;
+          localStorage.setItem("ft_web_client_id", clientId);
+        }
+      } catch {
+        clientId = "";
+      }
       const res = await fetch("/api/auth/otp/request", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone }),
+        body: JSON.stringify({ phone, appInstallationId: clientId, clientId }),
       });
       const data = await res.json();
       if (!res.ok) {
         setError(data.error || "Could not send OTP");
-        if (res.status === 429) setCooldownSec(45);
+        if (res.status === 429) setCooldownSec(Number(data.cooldownSec) || 90);
         return;
       }
       setStep("otp");
-      setCooldownSec(45);
+      setCooldownSec(Number(data.cooldownSec) || 90);
     } catch {
       setError("Could not send OTP. Check network and try again.");
     } finally {

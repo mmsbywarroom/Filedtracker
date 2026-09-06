@@ -43,7 +43,7 @@ public class LoginActivity extends AppCompatActivity {
             statusText.setText("Sending OTP…");
             io.execute(() -> {
                 try {
-                    ApiClient.requestOtp(phone);
+                    ApiClient.requestOtp(LoginActivity.this, phone);
                     runOnUiThread(() -> {
                         sendOtpBtn.setEnabled(true);
                         statusText.setText("OTP sent to +91 " + phone);

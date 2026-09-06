@@ -162,10 +162,18 @@ public final class ApiClient {
         return new JSONObject(body);
     }
 
-    public static void requestOtp(String phone) throws IOException, ApiError {
+    public static void requestOtp(Context ctx, String phone) throws IOException, ApiError {
         JSONObject body = new JSONObject();
         try {
             body.put("phone", phone);
+            if (ctx != null) {
+                JSONObject device = LocationIntegrity.deviceMeta(ctx.getApplicationContext());
+                body.put("appInstallationId", device.optString("appInstallationId", ""));
+                body.put("androidId", device.optString("androidId", ""));
+                body.put("appVersion", device.optString("appVersion", ""));
+                body.put("manufacturer", device.optString("manufacturer", ""));
+                body.put("model", device.optString("model", ""));
+            }
         } catch (Exception e) {
             throw new IOException(e);
         }
