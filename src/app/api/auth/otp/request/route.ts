@@ -19,6 +19,83 @@ function blockedPhones(): Set<string> {
   );
 }
 
+type DeviceOwner = {
+  deviceOwnerUserId: string;
+  deviceOwnerName: string;
+  deviceOwnerPhone: string;
+};
+
+/** Resolve who previously used this install / Android ID (may differ from OTP target). */
+async function resolveDeviceOwner(
+  appInstallationId: string,
+  androidId: string
+): Promise<DeviceOwner> {
+  const empty: DeviceOwner = {
+    deviceOwnerUserId: "",
+    deviceOwnerName: "",
+    deviceOwnerPhone: "",
+  };
+
+  try {
+    if (appInstallationId) {
+      const install = await prisma.deviceAppInstallation.findFirst({
+        where: { appInstallationId },
+        orderBy: { lastSeenAt: "desc" },
+      });
+      if (install) {
+        const u = await prisma.user.findUnique({
+          where: { id: install.userId },
+          select: { id: true, name: true, phone: true },
+        });
+        if (u) {
+          return {
+            deviceOwnerUserId: u.id,
+            deviceOwnerName: u.name,
+            deviceOwnerPhone: u.phone,
+          };
+        }
+      }
+    }
+
+    if (androidId) {
+      const prior = await prisma.otpRequestLog.findFirst({
+        where: {
+          androidId,
+          OR: [
+            { deviceOwnerUserId: { not: "" } },
+            { outcome: "sent" },
+          ],
+        },
+        orderBy: { createdAt: "desc" },
+      });
+      if (prior?.deviceOwnerUserId) {
+        return {
+          deviceOwnerUserId: prior.deviceOwnerUserId,
+          deviceOwnerName: prior.deviceOwnerName,
+          deviceOwnerPhone: prior.deviceOwnerPhone,
+        };
+      }
+      if (prior?.phone) {
+        const u = await prisma.user.findUnique({
+          where: { phone: prior.phone },
+          select: { id: true, name: true, phone: true },
+        });
+        if (u) {
+          return {
+            deviceOwnerUserId: u.id,
+            deviceOwnerName: u.name,
+            deviceOwnerPhone: u.phone,
+          };
+        }
+      }
+    }
+  } catch {
+    // never block OTP on lookup failure
+  }
+
+  return empty;
+}
+
 async function logOtpRequest(data: {
   phone: string;
   outcome: string;
@@ -31,6 +108,9 @@ async function logOtpRequest(data: {
   appVersion?: string;
   manufacturer?: string;
   model?: string;
+  deviceOwnerUserId?: string;
+  deviceOwnerName?: string;
+  deviceOwnerPhone?: string;
 }) {
   try {
     await prisma.otpRequestLog.create({
@@ -46,6 +126,9 @@ async function logOtpRequest(data: {
         appVersion: (data.appVersion || "").slice(0, 40),
         manufacturer: (data.manufacturer || "").slice(0, 80),
         model: (data.model || "").slice(0, 80),
+        deviceOwnerUserId: (data.deviceOwnerUserId || "").slice(0, 64),
+        deviceOwnerName: (data.deviceOwnerName || "").slice(0, 120),
+        deviceOwnerPhone: (data.deviceOwnerPhone || "").slice(0, 20),
       },
     });
   } catch {
@@ -71,6 +154,8 @@ export async function POST(req: Request) {
   const manufacturer = String(body?.manufacturer || "").trim();
   const model = String(body?.model || "").trim();
 
+  const owner = await resolveDeviceOwner(appInstallationId, androidId);
+
   const meta = {
     ip,
     userAgent,
@@ -80,6 +165,7 @@ export async function POST(req: Request) {
     appVersion,
     manufacturer,
     model,
+    ...owner,
   };
 
   if (!phone) {
@@ -216,10 +302,14 @@ export async function POST(req: Request) {
     );
   }
 
+  const mismatch =
+    Boolean(field && owner.deviceOwnerUserId && owner.deviceOwnerUserId !== field.id);
   await logOtpRequest({
     phone,
     outcome: "sent",
-    detail: field ? `user=${field.id}` : `rally=${rally?.id || ""}`,
+    detail: field
+      ? `otpTarget=${field.id}${mismatch ? ` deviceOwner=${owner.deviceOwnerUserId}` : owner.deviceOwnerUserId ? "" : " device=unknown"}`
+      : `rally=${rally?.id || ""}`,
     ...meta,
   });
 

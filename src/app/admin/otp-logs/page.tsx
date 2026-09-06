@@ -16,13 +16,17 @@ type Row = {
   appVersion: string;
   manufacturer: string;
   model: string;
+  deviceOwnerUserId: string;
+  deviceOwnerName: string;
+  deviceOwnerPhone: string;
+  deviceOwnerMismatch?: boolean;
   createdAt: string;
   employeeId: string | null;
   employeeName: string | null;
   designation: string | null;
   zone: string | null;
-  district: string | null;
   assemblyName: string | null;
+  district: string | null;
 };
 
 function todayIst() {
@@ -68,8 +72,8 @@ export default function OtpLogsAdminPage() {
       `otp-logs_${from}_to_${to}.csv`,
       [
         "When",
-        "Phone",
-        "Employee",
+        "OTP phone",
+        "OTP employee",
         "Designation",
         "Zone",
         "District",
@@ -82,6 +86,9 @@ export default function OtpLogsAdminPage() {
         "AndroidId",
         "Device",
         "AppVersion",
+        "Device owner name",
+        "Device owner phone",
+        "Device mismatch",
         "UserAgent",
       ],
       rows.map((r) => [
@@ -100,6 +107,9 @@ export default function OtpLogsAdminPage() {
         r.androidId,
         `${r.manufacturer} ${r.model}`.trim(),
         r.appVersion,
+        r.deviceOwnerName || "",
+        r.deviceOwnerPhone || "",
+        r.deviceOwnerMismatch ? "YES" : "",
         r.userAgent,
       ])
     );
@@ -110,8 +120,8 @@ export default function OtpLogsAdminPage() {
       <div>
         <h1 className="text-xl font-semibold text-navy">OTP request logs</h1>
         <p className="mt-1 max-w-3xl text-sm text-navy/60">
-          Forensic log of who requested OTP SMS: IP, device install ID, Android ID, user-agent. Super admin only.
-          Limits: ~90s cooldown, max 3 OTP/hour per number.
+          Forensic log: kis number pe OTP, kis device ID se request, aur pehle se known ho to kiska device.
+          Super admin only. Limits: ~90s cooldown, max 3 OTP/hour per number. Needs APK 1.4.3+ for Android ID.
         </p>
       </div>
 
@@ -149,10 +159,11 @@ export default function OtpLogsAdminPage() {
           <thead className="bg-sand/60 text-xs uppercase text-navy/50">
             <tr>
               <th className="px-3 py-2">When</th>
-              <th className="px-3 py-2">Phone / User</th>
+              <th className="px-3 py-2">OTP phone / User</th>
               <th className="px-3 py-2">Outcome</th>
               <th className="px-3 py-2">IP</th>
-              <th className="px-3 py-2">Device / Install</th>
+              <th className="px-3 py-2">Device ID</th>
+              <th className="px-3 py-2">Device owner</th>
               <th className="px-3 py-2">Client</th>
             </tr>
           </thead>
@@ -181,6 +192,21 @@ export default function OtpLogsAdminPage() {
                   <div>v{r.appVersion || "—"}</div>
                 </td>
                 <td className="px-3 py-2 text-xs">
+                  {r.deviceOwnerName || r.deviceOwnerPhone ? (
+                    <>
+                      <div className={`font-medium ${r.deviceOwnerMismatch ? "text-rose-700" : ""}`}>
+                        {r.deviceOwnerName || "—"}
+                        {r.deviceOwnerMismatch ? " (mismatch)" : ""}
+                      </div>
+                      <div className="font-mono">{r.deviceOwnerPhone || "—"}</div>
+                    </>
+                  ) : (
+                    <div className="text-navy/40">
+                      {r.appInstallationId || r.androidId ? "Unknown (new / not punched yet)" : "No device ID (old APK)"}
+                    </div>
+                  )}
+                </td>
+                <td className="px-3 py-2 text-xs">
                   <div>{r.clientSource}</div>
                   <div className="max-w-[220px] break-all text-navy/45">{r.userAgent || "—"}</div>
                 </td>
@@ -188,7 +214,7 @@ export default function OtpLogsAdminPage() {
             ))}
             {!rows.length && !loading && (
               <tr>
-                <td colSpan={6} className="px-3 py-8 text-center text-navy/40">
+                <td colSpan={7} className="px-3 py-8 text-center text-navy/40">
                   No OTP request logs in this range.
                 </td>
               </tr>

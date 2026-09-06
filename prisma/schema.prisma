@@ -100,11 +100,17 @@ model OtpRequestLog {
   appVersion         String   @default("")
   manufacturer       String   @default("")
   model              String   @default("")
+  /// Known owner of this physical/install ID (from prior punches), may differ from OTP target phone.
+  deviceOwnerUserId  String   @default("")
+  deviceOwnerName    String   @default("")
+  deviceOwnerPhone   String   @default("")
   createdAt          DateTime @default(now())
 
   @@index([phone, createdAt])
   @@index([ip, createdAt])
   @@index([appInstallationId, createdAt])
+  @@index([androidId, createdAt])
+  @@index([deviceOwnerUserId, createdAt])
   @@index([createdAt])
 }
 
