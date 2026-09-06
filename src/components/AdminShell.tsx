@@ -18,7 +18,6 @@ const SUPER_ONLY = [
   "/admin/gps-off",
   "/admin/location-permissions",
   "/admin/location-security",
-  "/admin/gps-spoof",
   "/admin/security-violations",
   "/admin/auto-punch-out",
   "/admin/face-reset-logs",
@@ -131,12 +130,6 @@ export default function AdminShell({ children }: { children: ReactNode }) {
             href: "/admin/location-security",
             label: "Fake GPS (mock)",
             match: (p: string) => p.startsWith("/admin/location-security"),
-            group: "Logs",
-          },
-          {
-            href: "/admin/gps-spoof",
-            label: t("gpsSpoofLogs"),
-            match: (p: string) => p.startsWith("/admin/gps-spoof"),
             group: "Logs",
           },
           {

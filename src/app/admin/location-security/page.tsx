@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { downloadCsv, uniqueSorted } from "@/lib/reportExport";
 
 type Row = {
   employeeId: string;
@@ -9,8 +10,11 @@ type Row = {
   mobileNumber: string;
   designation: string;
   department?: string;
-  team: string;
+  team?: string;
   assemblyName?: string;
+  zone?: string;
+  district?: string;
+  cluster?: string;
   attendanceSessionId: string | null;
   punchId: string;
   punchType?: string;
@@ -21,6 +25,7 @@ type Row = {
   securityStatus: string;
   riskScore: number;
   mockLocationEventCount: number;
+  mockLocationDetected?: boolean;
   firstMockAt?: string | null;
   lastMockAt?: string | null;
   firstSuspiciousAt?: string | null;
@@ -63,6 +68,8 @@ type DetailPayload = {
   attendance?: unknown[];
 };
 
+type SummaryFilter = "" | "mock" | "open" | "closed" | "highRisk";
+
 function todayIst() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 }
@@ -93,15 +100,25 @@ export default function LocationSecurityAdminPage() {
   const [detail, setDetail] = useState<DetailPayload | null>(null);
   const [err, setErr] = useState("");
 
+  const [q, setQ] = useState("");
+  const [zone, setZone] = useState("");
+  const [district, setDistrict] = useState("");
+  const [assembly, setAssembly] = useState("");
+  const [designation, setDesignation] = useState("");
+  /** Default true on mock view — only sessions with mockLocationDetected. */
+  const [mockDetectedOnly, setMockDetectedOnly] = useState(true);
+  const [summaryFilter, setSummaryFilter] = useState<SummaryFilter>("");
+
   async function load() {
     setLoading(true);
     setErr("");
     try {
-      const q = new URLSearchParams({ from, to, view });
-      const res = await fetch(`/api/admin/location-security?${q}`);
+      const params = new URLSearchParams({ from, to, view });
+      const res = await fetch(`/api/admin/location-security?${params}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed");
       setRows(data.rows || []);
+      setSummaryFilter("");
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed");
     } finally {
@@ -114,18 +131,189 @@ export default function LocationSecurityAdminPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const isMockView = view === "mock";
+
+  const zones = useMemo(() => uniqueSorted(rows.map((r) => r.zone)), [rows]);
+  const districts = useMemo(
+    () => uniqueSorted(rows.filter((r) => !zone || r.zone === zone).map((r) => r.district)),
+    [rows, zone]
+  );
+  const assemblies = useMemo(
+    () =>
+      uniqueSorted(
+        rows
+          .filter((r) => (!zone || r.zone === zone) && (!district || r.district === district))
+          .map((r) => r.assemblyName)
+      ),
+    [rows, zone, district]
+  );
+  const designations = useMemo(() => uniqueSorted(rows.map((r) => r.designation)), [rows]);
+
+  const filtered = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    return rows.filter((r) => {
+      const isMock = Boolean(r.mockLocationDetected) || r.securityStatus === "DIRECT_MOCK_SIGNAL" || (r.mockLocationEventCount || 0) > 0;
+      if (mockDetectedOnly && !isMock) return false;
+      if (zone && (r.zone || "") !== zone) return false;
+      if (district && (r.district || "") !== district) return false;
+      if (assembly && (r.assemblyName || "") !== assembly) return false;
+      if (designation && (r.designation || "") !== designation) return false;
+      if (summaryFilter === "mock" && !isMock) return false;
+      if (summaryFilter === "open" && r.punchOutAt) return false;
+      if (summaryFilter === "closed" && !r.punchOutAt) return false;
+      if (summaryFilter === "highRisk" && (r.riskScore || 0) < 150) return false;
+      if (needle) {
+        const hay = [
+          r.employeeName,
+          r.mobileNumber,
+          r.designation,
+          r.zone,
+          r.district,
+          r.assemblyName,
+          r.attendanceSessionId,
+          r.punchId,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        if (!hay.includes(needle)) return false;
+      }
+      return true;
+    });
+  }, [rows, q, zone, district, assembly, designation, mockDetectedOnly, summaryFilter]);
+
+  const summary = useMemo(() => {
+    const mockSessions = rows.filter(
+      (r) => Boolean(r.mockLocationDetected) || r.securityStatus === "DIRECT_MOCK_SIGNAL" || (r.mockLocationEventCount || 0) > 0
+    ).length;
+    const openSessions = rows.filter((r) => !r.punchOutAt).length;
+    const closedSessions = rows.filter((r) => Boolean(r.punchOutAt)).length;
+    const highRisk = rows.filter((r) => (r.riskScore || 0) >= 150).length;
+    const totalMockEvents = rows.reduce((n, r) => n + (r.mockLocationEventCount || 0), 0);
+    const employees = new Set(rows.map((r) => r.employeeId)).size;
+    return {
+      totalSessions: rows.length,
+      mockSessions,
+      openSessions,
+      closedSessions,
+      highRisk,
+      totalMockEvents,
+      employees,
+      showing: filtered.length,
+    };
+  }, [rows, filtered.length]);
+
+  function toggleSummary(next: SummaryFilter) {
+    setSummaryFilter((cur) => (cur === next ? "" : next));
+    if (next === "mock") setMockDetectedOnly(true);
+  }
+
   async function openSession(row: Row) {
     setDetail(null);
-    const q = new URLSearchParams();
-    if (row.attendanceSessionId) q.set("attendanceSessionId", row.attendanceSessionId);
-    if (row.punchId) q.set("punchId", row.punchId);
-    const res = await fetch(`/api/admin/location-security/${row.employeeId}?${q}`);
+    const params = new URLSearchParams();
+    if (row.attendanceSessionId) params.set("attendanceSessionId", row.attendanceSessionId);
+    if (row.punchId) params.set("punchId", row.punchId);
+    const res = await fetch(`/api/admin/location-security/${row.employeeId}?${params}`);
     const data = await res.json();
     if (res.ok) setDetail(data);
     else setErr(data.error || "Failed to load timeline");
   }
 
-  const isMockView = view === "mock";
+  function exportCsv() {
+    const headers = [
+      "Name",
+      "Mobile",
+      "Designation",
+      "Zone",
+      "District",
+      "Assembly",
+      "Punch In",
+      "Punch Out",
+      "Mock Events",
+      "First Mock Detected",
+      "Last Mock Detected",
+      "Risk",
+      "Status",
+      "mockLocationDetected",
+      "Attendance Session ID",
+      "Punch ID",
+      "Employee ID",
+      "Device",
+      "App Installation ID",
+    ];
+    const exportRows = filtered.map((r) => {
+      const isMock =
+        Boolean(r.mockLocationDetected) ||
+        r.securityStatus === "DIRECT_MOCK_SIGNAL" ||
+        (r.mockLocationEventCount || 0) > 0;
+      return [
+        r.employeeName,
+        r.mobileNumber,
+        r.designation,
+        r.zone || "",
+        r.district || "",
+        r.assemblyName || "",
+        whenIst(r.punchInAt),
+        whenIst(r.punchOutAt),
+        r.mockLocationEventCount,
+        whenIst(r.firstMockAt || r.firstSuspiciousAt),
+        whenIst(r.lastMockAt || r.lastSuspiciousAt),
+        r.riskScore,
+        statusLabel(r.securityStatus),
+        isMock ? "true" : "false",
+        r.attendanceSessionId || "",
+        r.punchId || "",
+        r.employeeId,
+        r.deviceModel || "",
+        r.appInstallationId || "",
+      ];
+    });
+    downloadCsv(`fake-gps-sessions_${from}_to_${to}.csv`, headers, exportRows);
+  }
+
+  const field =
+    "mt-1 block h-10 w-full min-w-[140px] rounded-xl border border-navy/15 bg-white px-3 text-sm shadow-sm";
+
+  const summaryCards: {
+    key: SummaryFilter | "total" | "events" | "employees" | "showing";
+    label: string;
+    value: number;
+    clickable?: SummaryFilter;
+    active?: boolean;
+  }[] = [
+    { key: "total", label: "Sessions loaded", value: summary.totalSessions },
+    {
+      key: "mock",
+      label: "Mock GPS sessions",
+      value: summary.mockSessions,
+      clickable: "mock",
+      active: summaryFilter === "mock",
+    },
+    {
+      key: "open",
+      label: "Still punched in",
+      value: summary.openSessions,
+      clickable: "open",
+      active: summaryFilter === "open",
+    },
+    {
+      key: "closed",
+      label: "Punched out",
+      value: summary.closedSessions,
+      clickable: "closed",
+      active: summaryFilter === "closed",
+    },
+    {
+      key: "highRisk",
+      label: "High risk (≥150)",
+      value: summary.highRisk,
+      clickable: "highRisk",
+      active: summaryFilter === "highRisk",
+    },
+    { key: "events", label: "Total mock events", value: summary.totalMockEvents },
+    { key: "employees", label: "Unique employees", value: summary.employees },
+    { key: "showing", label: "Showing (filtered)", value: summary.showing },
+  ];
 
   return (
     <div className="space-y-4 p-4 md:p-6">
@@ -137,42 +325,159 @@ export default function LocationSecurityAdminPage() {
           {isMockView ? (
             <>
               Main list shows <strong>only</strong> attendance sessions with direct Android OS mock evidence (
-              <code>isMock=true</code> / <code>MOCK_LOCATION_OS_SIGNAL</code>). VPN, Play Integrity, or heuristic-only
-              cases are excluded. Status is always <strong>DIRECT OS MOCK SIGNAL</strong>. Punch is never blocked;
-              employees are never warned.
+              <code>isMock=true</code> / <code>MOCK_LOCATION_OS_SIGNAL</code>). Status is always{" "}
+              <strong>DIRECT OS MOCK SIGNAL</strong>. Punch is never blocked; employees are never warned.
             </>
           ) : (
-            <>
-              Supporting-only activity (VPN / Integrity / heuristics) without direct mock GPS. Not proof of fake GPS.
-            </>
+            <>Supporting-only activity (VPN / Integrity / heuristics) without direct mock GPS.</>
           )}
         </p>
       </div>
 
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
+        {summaryCards.map((c) => {
+          const clickable = Boolean(c.clickable);
+          const active = Boolean(c.active);
+          const className = `rounded-xl border px-3 py-3 text-left transition ${
+            active
+              ? "border-rose-300 bg-rose-50 ring-2 ring-rose-200"
+              : clickable
+                ? "border-navy/10 bg-white hover:border-teal/40 hover:bg-sand/40"
+                : "border-navy/10 bg-white"
+          }`;
+          const body = (
+            <>
+              <div className="text-[10px] font-semibold uppercase tracking-wide text-navy/45">{c.label}</div>
+              <div className="mt-1 text-2xl font-semibold text-navy">{c.value}</div>
+              {clickable && <div className="mt-1 text-[10px] text-teal">{active ? "Click to clear" : "Click to filter"}</div>}
+            </>
+          );
+          if (clickable && c.clickable) {
+            return (
+              <button key={c.key} type="button" className={className} onClick={() => toggleSummary(c.clickable!)}>
+                {body}
+              </button>
+            );
+          }
+          return (
+            <div key={c.key} className={className}>
+              {body}
+            </div>
+          );
+        })}
+      </div>
+
       <div className="flex flex-wrap items-end gap-3 rounded-xl border border-navy/10 bg-white p-3">
-        <label className="text-xs text-navy/60">
+        <label className="text-xs font-semibold text-navy/60">
           From
-          <input type="date" className="mt-1 block rounded border px-2 py-1" value={from} onChange={(e) => setFrom(e.target.value)} />
+          <input type="date" className={field} value={from} onChange={(e) => setFrom(e.target.value)} />
         </label>
-        <label className="text-xs text-navy/60">
+        <label className="text-xs font-semibold text-navy/60">
           To
-          <input type="date" className="mt-1 block rounded border px-2 py-1" value={to} onChange={(e) => setTo(e.target.value)} />
+          <input type="date" className={field} value={to} onChange={(e) => setTo(e.target.value)} />
         </label>
-        <label className="text-xs text-navy/60">
+        <label className="text-xs font-semibold text-navy/60">
           List
           <select
-            className="mt-1 block rounded border px-2 py-1"
+            className={field}
             value={view}
-            onChange={(e) => setView(e.target.value === "all" ? "all" : "mock")}
+            onChange={(e) => {
+              const next = e.target.value === "all" ? "all" : "mock";
+              setView(next);
+              setMockDetectedOnly(next === "mock");
+            }}
           >
             <option value="mock">Mock GPS only (main)</option>
             <option value="all">All security activity (optional)</option>
           </select>
         </label>
-        <button type="button" onClick={() => void load()} className="rounded-lg bg-navy px-4 py-2 text-sm text-white">
-          Refresh
+        <label className="min-w-[200px] flex-1 text-xs font-semibold text-navy/60">
+          Search
+          <input
+            className={field}
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Name, mobile, zone, district, assembly…"
+          />
+        </label>
+        <label className="text-xs font-semibold text-navy/60">
+          Zone
+          <select
+            className={field}
+            value={zone}
+            onChange={(e) => {
+              setZone(e.target.value);
+              setDistrict("");
+              setAssembly("");
+            }}
+          >
+            <option value="">All zones</option>
+            {zones.map((z) => (
+              <option key={z} value={z}>
+                {z}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-xs font-semibold text-navy/60">
+          District
+          <select
+            className={field}
+            value={district}
+            onChange={(e) => {
+              setDistrict(e.target.value);
+              setAssembly("");
+            }}
+          >
+            <option value="">All districts</option>
+            {districts.map((d) => (
+              <option key={d} value={d}>
+                {d}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-xs font-semibold text-navy/60">
+          Assembly
+          <select className={field} value={assembly} onChange={(e) => setAssembly(e.target.value)}>
+            <option value="">All assemblies</option>
+            {assemblies.map((a) => (
+              <option key={a} value={a}>
+                {a}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-xs font-semibold text-navy/60">
+          Designation
+          <select className={field} value={designation} onChange={(e) => setDesignation(e.target.value)}>
+            <option value="">All designations</option>
+            {designations.map((d) => (
+              <option key={d} value={d}>
+                {d}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex h-10 items-center gap-2 self-end rounded-xl border border-navy/15 bg-sand/40 px-3 text-xs font-semibold text-navy/70">
+          <input
+            type="checkbox"
+            checked={mockDetectedOnly}
+            onChange={(e) => setMockDetectedOnly(e.target.checked)}
+          />
+          mockLocationDetected: true
+        </label>
+        <button type="button" onClick={() => void load()} className="h-10 rounded-lg bg-navy px-4 text-sm text-white">
+          Search
         </button>
-        <Link href="/admin/security-violations" className="text-sm text-teal underline">
+        <button
+          type="button"
+          onClick={exportCsv}
+          className="h-10 rounded-lg border border-navy/20 bg-white px-4 text-sm font-medium text-navy"
+        >
+          Download CSV
+        </button>
+        <Link href="/admin/security-violations" className="self-end pb-2 text-sm text-teal underline">
           Legacy punch evidence
         </Link>
       </div>
@@ -187,57 +492,69 @@ export default function LocationSecurityAdminPage() {
               <th className="px-3 py-2">Name</th>
               <th className="px-3 py-2">Mobile</th>
               <th className="px-3 py-2">Designation</th>
+              <th className="px-3 py-2">Zone</th>
+              <th className="px-3 py-2">District</th>
+              <th className="px-3 py-2">Assembly</th>
               <th className="px-3 py-2">Punch In</th>
               <th className="px-3 py-2">Punch Out</th>
               <th className="px-3 py-2">Mock Events</th>
               {isMockView && (
                 <>
-                  <th className="px-3 py-2">First Mock Detected</th>
-                  <th className="px-3 py-2">Last Mock Detected</th>
+                  <th className="px-3 py-2">First Mock</th>
+                  <th className="px-3 py-2">Last Mock</th>
                 </>
               )}
               <th className="px-3 py-2">Risk</th>
               <th className="px-3 py-2">Status</th>
+              <th className="px-3 py-2">mockLocationDetected</th>
               <th className="px-3 py-2">Timeline</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
-              <tr key={`${r.punchId}-${r.attendanceSessionId || ""}-${r.lastMockAt || r.lastSuspiciousAt || ""}`} className="border-t border-navy/5">
-                <td className="px-3 py-2">
-                  <div className="font-medium text-navy">{r.employeeName || "—"}</div>
-                  <div className="text-xs text-navy/45">{r.team || r.assemblyName || "—"}</div>
-                </td>
-                <td className="px-3 py-2 whitespace-nowrap">{r.mobileNumber || "—"}</td>
-                <td className="px-3 py-2">{r.designation || "—"}</td>
-                <td className="px-3 py-2 whitespace-nowrap text-xs">{whenIst(r.punchInAt)}</td>
-                <td className="px-3 py-2 whitespace-nowrap text-xs">{whenIst(r.punchOutAt)}</td>
-                <td className="px-3 py-2 font-semibold">{r.mockLocationEventCount}</td>
-                {isMockView && (
-                  <>
-                    <td className="px-3 py-2 whitespace-nowrap text-xs">{whenIst(r.firstMockAt || r.firstSuspiciousAt)}</td>
-                    <td className="px-3 py-2 whitespace-nowrap text-xs">{whenIst(r.lastMockAt || r.lastSuspiciousAt)}</td>
-                  </>
-                )}
-                <td className="px-3 py-2 font-semibold">{r.riskScore}</td>
-                <td className="px-3 py-2">
-                  <span className={`rounded-full px-2 py-0.5 text-xs ${statusCls(r.securityStatus)}`}>
-                    {statusLabel(r.securityStatus)}
-                  </span>
-                </td>
-                <td className="px-3 py-2">
-                  <button type="button" className="text-teal underline" onClick={() => void openSession(r)}>
-                    Timeline
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {!rows.length && !loading && (
+            {filtered.map((r) => {
+              const isMock =
+                Boolean(r.mockLocationDetected) ||
+                r.securityStatus === "DIRECT_MOCK_SIGNAL" ||
+                (r.mockLocationEventCount || 0) > 0;
+              return (
+                <tr
+                  key={`${r.punchId}-${r.attendanceSessionId || ""}-${r.lastMockAt || r.lastSuspiciousAt || ""}`}
+                  className="border-t border-navy/5"
+                >
+                  <td className="px-3 py-2 font-medium text-navy">{r.employeeName || "—"}</td>
+                  <td className="px-3 py-2 whitespace-nowrap">{r.mobileNumber || "—"}</td>
+                  <td className="px-3 py-2">{r.designation || "—"}</td>
+                  <td className="px-3 py-2">{r.zone || "—"}</td>
+                  <td className="px-3 py-2">{r.district || "—"}</td>
+                  <td className="px-3 py-2">{r.assemblyName || "—"}</td>
+                  <td className="px-3 py-2 whitespace-nowrap text-xs">{whenIst(r.punchInAt)}</td>
+                  <td className="px-3 py-2 whitespace-nowrap text-xs">{whenIst(r.punchOutAt)}</td>
+                  <td className="px-3 py-2 font-semibold">{r.mockLocationEventCount}</td>
+                  {isMockView && (
+                    <>
+                      <td className="px-3 py-2 whitespace-nowrap text-xs">{whenIst(r.firstMockAt || r.firstSuspiciousAt)}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-xs">{whenIst(r.lastMockAt || r.lastSuspiciousAt)}</td>
+                    </>
+                  )}
+                  <td className="px-3 py-2 font-semibold">{r.riskScore}</td>
+                  <td className="px-3 py-2">
+                    <span className={`rounded-full px-2 py-0.5 text-xs ${statusCls(r.securityStatus)}`}>
+                      {statusLabel(r.securityStatus)}
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 font-mono text-xs">{isMock ? "true" : "false"}</td>
+                  <td className="px-3 py-2">
+                    <button type="button" className="text-teal underline" onClick={() => void openSession(r)}>
+                      Timeline
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+            {!filtered.length && !loading && (
               <tr>
-                <td colSpan={isMockView ? 11 : 9} className="px-3 py-8 text-center text-navy/40">
-                  {isMockView
-                    ? "No direct mock-GPS sessions in this range."
-                    : "No supporting-only security activity in this range."}
+                <td colSpan={isMockView ? 15 : 13} className="px-3 py-8 text-center text-navy/40">
+                  No rows match the current filters.
                 </td>
               </tr>
             )}
@@ -268,9 +585,10 @@ export default function LocationSecurityAdminPage() {
                 <div className="font-medium">{detail.employee?.employeeName}</div>
                 <div className="text-xs text-navy/55">ID: {detail.employee?.employeeId}</div>
                 <div>{detail.employee?.mobileNumber}</div>
-                <div>
-                  {detail.employee?.designation}
-                  {detail.employee?.team ? ` · ${detail.employee.team}` : ""}
+                <div>{detail.employee?.designation}</div>
+                <div className="mt-1 text-xs text-navy/55">
+                  Zone: {detail.employee?.zone || "—"} · District: {detail.employee?.district || "—"} · Assembly:{" "}
+                  {detail.employee?.assemblyName || "—"}
                 </div>
               </div>
               <div>
@@ -285,14 +603,6 @@ export default function LocationSecurityAdminPage() {
                   </span>
                   <span className="text-xs">Risk {detail.session?.riskScore ?? 0}</span>
                   <span className="text-xs">Mock events {detail.session?.mockLocationEventCount ?? 0}</span>
-                </div>
-                <div className="mt-1 text-xs text-navy/55">
-                  First mock: {whenIst(detail.session?.firstSuspiciousAt)} · Last:{" "}
-                  {whenIst(detail.session?.lastSuspiciousAt)}
-                </div>
-                <div className="mt-1 text-xs text-navy/55">
-                  Device: {detail.session?.deviceModel || "—"} · Install:{" "}
-                  {detail.session?.appInstallationId || "—"}
                 </div>
               </div>
             </section>
