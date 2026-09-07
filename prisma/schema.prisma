@@ -149,6 +149,7 @@ model Attendance {
 
   @@index([userId, punchInAt])
   @@index([punchOutReason])
+  /// Partial unique index in SQL: Attendance_one_open_per_user ON (userId) WHERE punchOutAt IS NULL
 }
 
 model TrackPoint {

@@ -263,30 +263,52 @@ export async function POST(req: Request) {
       }
     }
 
-    const attendance = await prisma.attendance.create({
-      data: {
-        userId: s.sub,
-        punchInAt: new Date(),
-        punchInLat: lat,
-        punchInLng: lng,
-        punchInAddress:
-          punchGate.reason === "reentry"
-            ? [address, "Re-entry after early punch-out (hours joined with morning session)"]
-                .filter(Boolean)
-                .join(" · ")
-                .slice(0, 200)
-            : address,
-        punchInFace,
-        punchInClient: parseClientSource(req),
-        lastKnownLat: lat,
-        lastKnownLng: lng,
-        lastKnownAt: new Date(),
-        points: {
-          create: { lat, lng, recordedAt: new Date(), accuracy: Number(body?.accuracy) || null },
+    let attendance: { id: string; punchInAt: Date };
+    try {
+      attendance = await prisma.attendance.create({
+        data: {
+          userId: s.sub,
+          punchInAt: new Date(),
+          punchInLat: lat,
+          punchInLng: lng,
+          punchInAddress:
+            punchGate.reason === "reentry"
+              ? [address, "Re-entry after early punch-out (hours joined with morning session)"]
+                  .filter(Boolean)
+                  .join(" · ")
+                  .slice(0, 200)
+              : address,
+          punchInFace,
+          punchInClient: parseClientSource(req),
+          lastKnownLat: lat,
+          lastKnownLng: lng,
+          lastKnownAt: new Date(),
+          points: {
+            create: { lat, lng, recordedAt: new Date(), accuracy: Number(body?.accuracy) || null },
+          },
         },
-      },
-      select: { id: true, punchInAt: true },
-    });
+        select: { id: true, punchInAt: true },
+      });
+    } catch (e) {
+      // Concurrent punch-in race (Android failover/retry): unique open-session index.
+      const code = e && typeof e === "object" && "code" in e ? String((e as { code: unknown }).code) : "";
+      if (code === "P2002") {
+        const existingOpen = await prisma.attendance.findFirst({
+          where: { userId: s.sub, punchOutAt: null },
+          select: { id: true, punchInAt: true },
+          orderBy: { punchInAt: "asc" },
+        });
+        if (existingOpen) {
+          return NextResponse.json({
+            attendance: { ...existingOpen, intervalSnapshotsDone: [] },
+            ok: true,
+            duplicate: true,
+            reentry: punchGate.reason === "reentry",
+          });
+        }
+      }
+      throw e;
+    }
 
     return NextResponse.json({
       attendance: { ...attendance, intervalSnapshotsDone: [] },
