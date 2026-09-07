@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { BrandMark } from "@/components/BrandMark";
 import { cleanScope } from "@/lib/hierarchy";
-import { downloadCsv, downloadPdf } from "@/lib/reportExport";
+import { downloadCsv, downloadPdf, type PdfSummaryCard } from "@/lib/reportExport";
 import { absentOrInProgressHint, absentOrInProgressLabel } from "@/lib/dailyAttendance";
 
 type Group = {
@@ -276,6 +276,36 @@ function CellBtn({
   );
 }
 
+function dashboardSummaryCards(data: Dash | null, date: string): PdfSummaryCard[] {
+  return [
+    { label: "Total users", value: data?.totalUsers || 0, background: "#0a1628", hint: "All users in scope" },
+    { label: "Inactive", value: data?.inactiveUsers || 0, background: "#3d4f66" },
+    { label: "Face registered", value: data?.faceRegisteredUsers || 0, background: "#7c3aed" },
+    { label: "Live now", value: data?.liveNow || 0, background: "#059669" },
+    { label: "Punched today", value: data?.activeToday || 0, background: "#c45c12" },
+    { label: "Leave", value: data?.leaveOnDate || 0, background: "#0284c7" },
+    { label: "Present", value: data?.presentOnDate || 0, background: "#047857", hint: "Punch by 10:30 · 6–12h" },
+    { label: "Half-day", value: data?.halfDayOnDate || 0, background: "#f59e0b" },
+    {
+      label: absentOrInProgressLabel(date),
+      value: data?.absentOnDate || 0,
+      background: "#dc2626",
+      hint: absentOrInProgressHint(date),
+    },
+    { label: "Pending punchin", value: data?.pendingPunchIn || 0, background: "#d97706" },
+    { label: "Pending face recog", value: data?.pendingFace || 0, background: "#e11d48" },
+    { label: "Pending live", value: data?.pendingLive || 0, background: "#0369a1" },
+  ];
+}
+
+const TABLE_ACCENT_HEX: Record<string, { bg: string; text: string }> = {
+  "bg-[#12305A] text-white": { bg: "#12305A", text: "#ffffff" },
+  "bg-teal text-white": { bg: "#1A56C4", text: "#ffffff" },
+  "bg-emerald-700 text-white": { bg: "#047857", text: "#ffffff" },
+  "bg-[#1A56C4] text-white": { bg: "#1A56C4", text: "#ffffff" },
+  "bg-[#c9a227] text-white": { bg: "#c9a227", text: "#ffffff" },
+};
+
 function GroupTable({
   title,
   accent,
@@ -286,6 +316,7 @@ function GroupTable({
   onCellClick,
   hideName,
   date,
+  summaryCards,
 }: {
   title: string;
   accent: string;
@@ -296,6 +327,7 @@ function GroupTable({
   onCellClick: (metric: Metric, groupValue: string) => void;
   hideName?: boolean;
   date: string;
+  summaryCards: PdfSummaryCard[];
 }) {
   function exportPdf() {
     const headers = [
@@ -326,7 +358,13 @@ function GroupTable({
       );
       return row;
     });
-    downloadPdf(`${title} · ${date}`, headers, data);
+    const accentColors = TABLE_ACCENT_HEX[accent] || { bg: "#12305A", text: "#ffffff" };
+    downloadPdf(`${title} · ${date}`, headers, data, {
+      subtitle: `Summary cards + ${rows.length} row(s) · ${new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}`,
+      summaryCards,
+      tableAccent: accentColors.bg,
+      tableAccentText: accentColors.text,
+    });
   }
 
   return (
@@ -504,6 +542,8 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
                 .filter(Boolean)
                 .join(" · ");
 
+  const summaryCards = dashboardSummaryCards(data, date);
+
   return (
     <main className="min-h-screen bg-gradient-to-b from-[#fff6d4] via-[#f3f6fb] to-[#e8eef8] px-4 py-6 md:px-8">
       <div className="mb-2 flex items-center gap-3">
@@ -662,6 +702,7 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
               groupBy="callCenterSite"
               hideName
               date={date}
+              summaryCards={summaryCards}
               activeMetric={metric}
               activeGroup={groupFilter}
               onCellClick={(m) => loadMetric(m, { groupBy: "callCenterSite", groupValue: "Yellow Stone" })}
@@ -673,6 +714,7 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
               groupBy="callCenterSite"
               hideName
               date={date}
+              summaryCards={summaryCards}
               activeMetric={metric}
               activeGroup={groupFilter}
               onCellClick={(m) => loadMetric(m, { groupBy: "callCenterSite", groupValue: "Unify" })}
@@ -686,6 +728,7 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
               rows={data?.byDesignation || []}
               groupBy="designation"
               date={date}
+              summaryCards={summaryCards}
               activeMetric={metric}
               activeGroup={groupFilter}
               onCellClick={(m, name) => loadMetric(m, { groupBy: "designation", groupValue: name })}
@@ -696,6 +739,7 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
               rows={data?.byZone || []}
               groupBy="zone"
               date={date}
+              summaryCards={summaryCards}
               activeMetric={metric}
               activeGroup={groupFilter}
               onCellClick={(m, name) => loadMetric(m, { groupBy: "zone", groupValue: name })}
@@ -706,6 +750,7 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
               rows={data?.byDistrict || []}
               groupBy="district"
               date={date}
+              summaryCards={summaryCards}
               activeMetric={metric}
               activeGroup={groupFilter}
               onCellClick={(m, name) => loadMetric(m, { groupBy: "district", groupValue: name })}
@@ -716,6 +761,7 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
               rows={data?.byAssembly || []}
               groupBy="assembly"
               date={date}
+              summaryCards={summaryCards}
               activeMetric={metric}
               activeGroup={groupFilter}
               onCellClick={(m, name) => loadMetric(m, { groupBy: "assembly", groupValue: name })}
