@@ -410,7 +410,8 @@ export default function AttendanceModulePage() {
       <h1 className="text-2xl font-semibold">Date-wise attendance</h1>
       <p className="mt-1 text-sm text-navy/55">
         Auto: punch by 10:30 + 6–12h = Present · after 10:30 to 1:00 = Half-day · after 1:00 PM no punch = Absent ·
-        until 1:00 PM, no punch stays Pending. Leave mark / approved leave / holiday (that designation) = Leave. Multiple punch-ins
+        until 1:00 PM, no punch stays Pending. Approved leave = Leave. Holiday for a designation: full Present (by 10:30 +
+        ≥6h) stays Present; half-day / incomplete / no punch = Leave (Holiday). Multiple punch-ins
         the same day (e.g. after GPS/phone off) are added together for hours. Manual change requires a reason. Flag (native punch-in
         only): 8+ thirty-minute
         location checks at the same lat/lng during a session (no block — admin review only).

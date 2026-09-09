@@ -4,8 +4,9 @@ import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { normalizePhone } from "@/lib/security";
 import { DESIGNATIONS, isSuperAdmin, userScopeWhere } from "@/lib/hierarchy";
-import { findHolidayToday, holidayAppliesTo } from "@/lib/holidays";
+import { findHolidayToday, holidayAppliesTo, holidayLeaveReason } from "@/lib/holidays";
 import { normalizeUserAssemblies } from "@/lib/userAssemblies";
+import { resolveDayAttendanceStatus } from "@/lib/dailyAttendance";
 
 const userSchema = z.object({
   name: z.string().min(2).max(80),
@@ -53,26 +54,56 @@ export async function GET() {
         });
   const onLeaveToday = new Set(onLeaveRows.map((r) => r.userId));
   const holiday = await findHolidayToday();
+  const holidayUserIds = users.filter((u) => holidayAppliesTo(holiday, u.designation)).map((u) => u.id);
+  const todaySessions =
+    holidayUserIds.length === 0
+      ? []
+      : await prisma.attendance.findMany({
+          where: { userId: { in: holidayUserIds }, punchInAt: { gte: dayStart, lte: dayEnd } },
+          select: { userId: true, punchInAt: true, punchOutAt: true },
+        });
+  const sessionsByUser = new Map<string, { punchInAt: Date; punchOutAt: Date | null }[]>();
+  for (const s of todaySessions) {
+    const list = sessionsByUser.get(s.userId) || [];
+    list.push({ punchInAt: s.punchInAt, punchOutAt: s.punchOutAt });
+    sessionsByUser.set(s.userId, list);
+  }
 
   return NextResponse.json({
-    users: users.map((u) => ({
-      id: u.id,
-      name: u.name,
-      phone: u.phone,
-      designation: u.designation,
-      assemblyName: u.assemblyName,
-      assemblies: u.assemblies || [],
-      sectorAllotted: u.sectorAllotted,
-      zone: u.zone,
-      district: u.district,
-      cluster: u.cluster,
-      isActive: u.isActive,
-      onLeaveToday: holidayAppliesTo(holiday, u.designation) || onLeaveToday.has(u.id),
-      faceRegistered: Boolean(u.faceRegisteredAt),
-      faceImage: u.faceImage,
-      lastPunchIn: u.attendances[0]?.punchInAt ?? null,
-      lastPunchOut: u.attendances[0]?.punchOutAt ?? null,
-    })),
+    users: users.map((u) => {
+      const approvedLeave = onLeaveToday.has(u.id);
+      const onHoliday = holidayAppliesTo(holiday, u.designation);
+      let holidayLeave = false;
+      if (onHoliday && !approvedLeave) {
+        const resolved = resolveDayAttendanceStatus({
+          sessions: sessionsByUser.get(u.id) || [],
+          dateYmd: ymd,
+          onApprovedLeave: false,
+          isHoliday: true,
+          holidayReason: holiday ? holidayLeaveReason(holiday.reason, u.designation) : null,
+          manual: null,
+        });
+        holidayLeave = resolved.status === "leave";
+      }
+      return {
+        id: u.id,
+        name: u.name,
+        phone: u.phone,
+        designation: u.designation,
+        assemblyName: u.assemblyName,
+        assemblies: u.assemblies || [],
+        sectorAllotted: u.sectorAllotted,
+        zone: u.zone,
+        district: u.district,
+        cluster: u.cluster,
+        isActive: u.isActive,
+        onLeaveToday: approvedLeave || holidayLeave,
+        faceRegistered: Boolean(u.faceRegisteredAt),
+        faceImage: u.faceImage,
+        lastPunchIn: u.attendances[0]?.punchInAt ?? null,
+        lastPunchOut: u.attendances[0]?.punchOutAt ?? null,
+      };
+    }),
   });
 }
 

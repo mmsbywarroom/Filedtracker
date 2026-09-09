@@ -250,7 +250,7 @@ export async function GET(req: Request) {
     if (holiday) {
       for (const u of users) {
         if (!holidayAppliesTo(holiday, u.designation)) continue;
-        leaveIds.add(u.id);
+        // Remark only here — leaveIds filled after resolve (full Present holiday workers stay Present).
         if (!leaveNoteByUser.has(u.id)) leaveNoteByUser.set(u.id, holidayLeaveReason(holiday.reason, u.designation));
       }
     }
@@ -300,8 +300,10 @@ export async function GET(req: Request) {
       dayStatusByUser.set(u.id, resolved.status);
       if (resolved.status === "present") presentOnDate += 1;
       else if (resolved.status === "half_day") halfDayOnDate += 1;
-      else if (resolved.status === "leave") attendanceLeaveOnDate += 1;
-      else if (resolved.status === "absent") absentOnDate += 1;
+      else if (resolved.status === "leave") {
+        attendanceLeaveOnDate += 1;
+        if (holidayAppliesTo(holiday, u.designation)) leaveIds.add(u.id);
+      } else if (resolved.status === "absent") absentOnDate += 1;
     }
 
     const activeUsers = users.filter((u) => u.isActive).length;

@@ -90,7 +90,9 @@ export default function HolidaysPage() {
       setMsg(data.error || "Could not save holiday");
       return;
     }
-    setMsg(`Holiday saved. Leave + punch-in blocked only for: ${selected.join(", ")}`);
+    setMsg(
+      `Holiday saved for: ${selected.join(", ")}. Full Present (≥6h by 10:30) stays Present; others → Leave (Holiday).`
+    );
     setPick("");
     setReason("");
     setSelected([]);
@@ -122,7 +124,8 @@ export default function HolidaysPage() {
       <p className="admin-page-kicker">Attendance</p>
       <h1 className="admin-page-title">Holiday calendar</h1>
       <p className="admin-page-sub">
-        Mark a date and pick designations. Only those designations are Leave that day — punch-in stays open for everyone else.
+        Mark a date and pick designations. Those designations: full Present (punch by 10:30 + ≥6h) stays Present;
+        half-day / incomplete punch / no punch → Leave (Holiday). Punch-in stays open for other designations.
       </p>
 
       <div className="mt-5 flex flex-wrap items-center gap-2">

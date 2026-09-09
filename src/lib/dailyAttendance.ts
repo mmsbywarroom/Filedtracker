@@ -202,6 +202,18 @@ export function resolveDayAttendanceStatus(opts: {
     };
   }
   if (opts.isHoliday) {
+    // Full Present already earned (by 10:30 + ≥6h) stays Present; half-day / incomplete / no punch → Holiday (leave).
+    const auto = autoAttendanceStatus({ firstPunchIn: firstIn, hours, hadPunch });
+    if (auto === "present") {
+      return {
+        status: "present",
+        source: "auto",
+        reason: autoReason("present", hours, hadPunch, false, firstIn, sessionCount),
+        hours,
+        firstIn,
+        sessionCount,
+      };
+    }
     return {
       status: "leave",
       source: "auto",
