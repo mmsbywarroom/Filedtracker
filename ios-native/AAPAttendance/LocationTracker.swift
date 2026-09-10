@@ -96,21 +96,25 @@ final class LocationTracker: NSObject, CLLocationManagerDelegate {
         lastLocation = loc
         guard !SessionStore.token.isEmpty, !SessionStore.punchInAt.isEmpty else { return }
 
-        if SecurityHelper.shouldAutoPunchOutForFakeGps(lastLocation: loc) {
+        if SecurityHelper.shouldAutoPunchOutForSecurity(lastLocation: loc) {
+            let reason = SecurityHelper.autoPunchOutReason(lastLocation: loc)
             TrackingApi.postSecurityEvent(
-                type: "mock_gps",
+                type: reason == "vpn" ? "vpn" : "mock_gps",
                 action: "auto_punch_out",
-                detail: "Auto punch-out: Fake GPS (mock location) detected after punch-in",
+                detail: reason == "vpn"
+                    ? "Auto punch-out: VPN detected after punch-in"
+                    : "Auto punch-out: Fake GPS (mock location) detected after punch-in",
                 lat: loc.coordinate.latitude,
                 lng: loc.coordinate.longitude
             )
-            TrackingApi.postFakeGpsPunchOut(lat: loc.coordinate.latitude, lng: loc.coordinate.longitude)
+            TrackingApi.postSecurityPunchOut(
+                lat: loc.coordinate.latitude,
+                lng: loc.coordinate.longitude,
+                reason: reason
+            )
             stop()
             return
         }
-
-        // Mid-session VPN: log only (Android does not auto punch-out for VPN).
-        // Punch-in/out remain blocked while VPN is on via assertSecureForPunch.
 
         creditLocalTravel(loc)
 

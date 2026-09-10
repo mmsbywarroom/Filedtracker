@@ -5,8 +5,8 @@ import java.util.Locale;
 import java.util.TimeZone;
 
 public final class PunchInWindow {
-    private static final int START_MIN = 5 * 60;
-    /** Same as server: unrestricted punch any time (including before 5:00 AM). */
+    private static final int START_MIN = 7 * 60;
+    /** Same as server: unrestricted punch any time (including before 7:00 AM). */
     private static final String UNRESTRICTED_PHONE = "9625692122";
 
     private PunchInWindow() {}
@@ -22,7 +22,7 @@ public final class PunchInWindow {
         return isAllowedForPhone(null);
     }
 
-    /** Allowed from 5:00 AM IST through end of day (after 1:00 PM included). */
+    /** Allowed from 7:00 AM IST through end of day (after 1:00 PM included). */
     public static boolean isAllowedForPhone(String phone) {
         if (isUnrestrictedPhone(phone)) return true;
         Calendar cal = Calendar.getInstance(TimeZone.getTimeZone("Asia/Kolkata"), Locale.US);
@@ -31,6 +31,6 @@ public final class PunchInWindow {
     }
 
     public static String blockedMessage() {
-        return "Punch in is allowed from 5:00 AM IST onward (including after 1:00 PM). Before 5:00 AM is not allowed.";
+        return "Punch in is allowed from 7:00 AM IST onward (including after 1:00 PM). Punch-in before 7:00 AM is not allowed.";
     }
 }

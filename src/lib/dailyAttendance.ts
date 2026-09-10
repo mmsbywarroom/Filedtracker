@@ -5,12 +5,18 @@ export type AttendanceStatus = (typeof ATTENDANCE_STATUSES)[number];
 /** Display-only: no punch yet, and 1:00 PM IST cutoff has not passed. */
 export type ResolvedAttendanceStatus = AttendanceStatus | "pending";
 
-/** Punch in by this IST time + ≥6.5h worked → Present (when first punch is on time). */
+/** Earliest valid punch-in (IST). Before this is not allowed / not counted. */
+export const EARLIEST_VALID_PUNCH_MINUTES = 7 * 60; // 7:00 AM
+/** First punch by this time can earn Present (with enough hours). */
 export const PRESENT_PUNCH_BEFORE_MINUTES = 10 * 60 + 30; // 10:30 AM
-/** After this IST time, a first punch of the day is treated as late (Half-day). */
+/** After this, a first punch of the day cannot be Present (Half-day if before 1:00). */
 export const HALF_DAY_PUNCH_BEFORE_MINUTES = 13 * 60; // 1:00 PM
-/** Min combined hours on duty for Present (6 hours 30 minutes). */
+/** Duty hours stop counting at this IST time (combined sessions). */
+export const DUTY_HOURS_END_MINUTES = 20 * 60; // 8:00 PM
+/** Min combined hours for Present (first punch 7:00–10:30). */
 export const PRESENT_MIN_HOURS = 6.5;
+/** Min combined hours for Half-day when first punch was 7:00–10:30 (below this → Absent). */
+export const HALF_DAY_MIN_HOURS = 3.5;
 export const PRESENT_MAX_HOURS = 12;
 
 export function istDateString(d = new Date()) {
@@ -43,7 +49,15 @@ export function istMinutesOfDay(d: Date) {
   return hour * 60 + minute;
 }
 
-/** 1:00 PM IST on the given calendar day — no-punch users become Absent after this. */
+/** Instant at HH:MM IST on the calendar day of `d` (or dateYmd). */
+export function istTimeOnSameDay(d: Date, minutesFromMidnight: number) {
+  const ymd = istDateString(d);
+  const hh = String(Math.floor(minutesFromMidnight / 60)).padStart(2, "0");
+  const mm = String(minutesFromMidnight % 60).padStart(2, "0");
+  return new Date(`${ymd}T${hh}:${mm}:00+05:30`);
+}
+
+/** 1:00 PM IST — no-punch users become Absent after this. */
 export function noPunchAbsentCutoff(dateYmd: string) {
   return new Date(`${dateYmd}T13:00:00+05:30`);
 }
@@ -52,11 +66,6 @@ export function isAfterNoPunchAbsentCutoff(dateYmd: string, now = new Date()) {
   return now.getTime() >= noPunchAbsentCutoff(dateYmd).getTime();
 }
 
-/**
- * Dashboard summary label for the absent bucket:
- * before 1:00 PM IST on that day → "In progress"; from 1:00 PM → "Absent".
- * Past calendar days always show "Absent".
- */
 export function absentOrInProgressLabel(dateYmd: string, now = new Date()) {
   const today = istDateString(now);
   if (dateYmd < today) return "Absent";
@@ -68,75 +77,80 @@ export function absentOrInProgressHint(dateYmd: string, now = new Date()) {
   if (absentOrInProgressLabel(dateYmd, now) === "In progress") {
     return "Duty still running — after 1:00 PM this becomes Absent if there is still no punch";
   }
-  return "No punch-in by 1:00 PM (or incomplete early duty under 6.5h)";
+  return "No punch-in by 1:00 PM, incomplete under 3.5h, or only punched at/after 1:00 PM";
+}
+
+/** Sessions with punch-in at/after 7:00 AM IST (midnight–7:00 punches are ignored). */
+export function validSessions(sessions: PunchRow[]) {
+  return sessions.filter((s) => istMinutesOfDay(s.punchInAt) >= EARLIEST_VALID_PUNCH_MINUTES);
 }
 
 export function firstPunchIn(sessions: PunchRow[]) {
-  if (!sessions.length) return null;
-  return sessions.reduce((a, b) => (a.punchInAt < b.punchInAt ? a : b)).punchInAt;
+  const valid = validSessions(sessions);
+  if (!valid.length) return null;
+  return valid.reduce((a, b) => (a.punchInAt < b.punchInAt ? a : b)).punchInAt;
 }
 
-/** True if any session started before 1:00 PM IST (eligible for Present via combined hours). */
+/** Any valid punch-in before 1:00 PM. */
 export function hadMorningWindowPunch(sessions: PunchRow[]) {
-  return sessions.some((s) => istMinutesOfDay(s.punchInAt) < HALF_DAY_PUNCH_BEFORE_MINUTES);
+  return validSessions(sessions).some(
+    (s) => istMinutesOfDay(s.punchInAt) < HALF_DAY_PUNCH_BEFORE_MINUTES
+  );
 }
 
-/** Total hours worked on a calendar day (IST), capping open sessions at 12h auto rule. */
+/**
+ * Total hours on duty (IST): only valid sessions (punch-in ≥ 7:00 AM),
+ * each segment capped at 8:00 PM the same day. Open sessions also capped by 12h auto rule.
+ */
 export function hoursWorkedOnDay(sessions: PunchRow[], asOf = new Date()) {
   let totalMs = 0;
-  for (const s of sessions) {
-    const end = s.punchOutAt ?? new Date(Math.min(asOf.getTime(), s.punchInAt.getTime() + AUTO_PUNCH_OUT_MS));
-    const ms = Math.max(0, end.getTime() - s.punchInAt.getTime());
-    totalMs += ms;
+  for (const s of validSessions(sessions)) {
+    const dutyEnd = istTimeOnSameDay(s.punchInAt, DUTY_HOURS_END_MINUTES);
+    const rawEnd =
+      s.punchOutAt ?? new Date(Math.min(asOf.getTime(), s.punchInAt.getTime() + AUTO_PUNCH_OUT_MS));
+    const end = new Date(Math.min(rawEnd.getTime(), dutyEnd.getTime()));
+    if (end.getTime() <= s.punchInAt.getTime()) continue;
+    // Punch-in at/after 8:00 PM contributes 0
+    if (istMinutesOfDay(s.punchInAt) >= DUTY_HOURS_END_MINUTES) continue;
+    totalMs += end.getTime() - s.punchInAt.getTime();
   }
   return totalMs / (1000 * 60 * 60);
 }
 
 /**
- * Auto day status from first punch-in time (IST) and combined hours (all sessions):
- * - First punch by 10:30 + ≥6.5h → Present
- * - First punch by 10:30 + under 6.5h → Absent (incomplete)
- * - First punch after 10:30 and by 1:00 + ≥6.5h → Present (sessions combined)
- * - First punch after 10:30 and by 1:00 + under 6.5h → Half-day
- * - First punch after 1:00 (no morning punch that day) → Half-day
- * - No punch after 1:00 → Absent
- *
- * HALF_DAY_WAIVER_DATES: outage days — punch after 10:30 still counts like on-time for Present.
+ * Status rules (replace prior Present/Half-day logic):
+ * - First valid punch 7:00–10:30 + ≥6.5h → Present
+ * - First valid punch 7:00–10:30 + 3.5–<6.5h → Half-day
+ * - First valid punch 7:00–10:30 + <3.5h → Absent
+ * - First valid punch after 10:30 and before 1:00 → Half-day
+ * - Only punch at/after 1:00 (no earlier valid) → Absent (remark: Punched In)
+ * - Multiple sessions: hours combined until 8:00 PM
  */
-const HALF_DAY_WAIVER_DATES = new Set([
-  "2026-09-05", // server/DNS outage morning — do not force half-day for late punch-in
-]);
-
-export function isHalfDayWaivedForDate(dateYmd: string) {
-  return HALF_DAY_WAIVER_DATES.has(dateYmd);
-}
-
 export function autoAttendanceStatus(opts: {
   firstPunchIn: Date | null;
   hours: number;
   hadPunch: boolean;
-  /** Any punch-in before 1:00 PM (enables Present when combined hours ≥ 6.5). */
   hadMorningWindowPunch?: boolean;
 }): AttendanceStatus {
   if (!opts.hadPunch || !opts.firstPunchIn) return "absent";
   const mins = istMinutesOfDay(opts.firstPunchIn);
-  const punchDay = istDateString(opts.firstPunchIn);
-  const waiveHalfDay = isHalfDayWaivedForDate(punchDay);
+  // Invalid / pre-7:00 first punch should not reach here if callers use validSessions
+  if (mins < EARLIEST_VALID_PUNCH_MINUTES) return "absent";
+
   const morningOk = opts.hadMorningWindowPunch ?? mins < HALF_DAY_PUNCH_BEFORE_MINUTES;
 
-  // Only punched at/after 1:00 PM (no session before 1:00) → Half-day always
-  if (!morningOk) return "half_day";
+  // Only punched at/after 1:00 PM → Absent (remark: Punched In)
+  if (!morningOk) return "absent";
 
-  const onTimeOrWaived = mins <= PRESENT_PUNCH_BEFORE_MINUTES || waiveHalfDay;
-
-  // First punch by 10:30 (or waiver day): ≥6.5h → Present, else Absent (incomplete)
-  if (onTimeOrWaived) {
-    return opts.hours >= PRESENT_MIN_HOURS ? "present" : "absent";
+  // After 10:30 and before 1:00 → Half-day (hours do not upgrade to Present)
+  if (mins > PRESENT_PUNCH_BEFORE_MINUTES) {
+    return "half_day";
   }
 
-  // First punch after 10:30 and before 1:00 (sessions may include afternoon re-entry):
-  // ≥6.5h combined → Present, else Half-day
-  return opts.hours >= PRESENT_MIN_HOURS ? "present" : "half_day";
+  // 7:00–10:30 first punch: tier by combined hours (sessions summed until 8:00 PM)
+  if (opts.hours >= PRESENT_MIN_HOURS) return "present";
+  if (opts.hours >= HALF_DAY_MIN_HOURS) return "half_day";
+  return "absent";
 }
 
 export function statusLabel(status: ResolvedAttendanceStatus) {
@@ -168,34 +182,31 @@ export function autoReason(
     minute: "2-digit",
   });
   const sessionsNote =
-    sessionCount > 1 ? ` · ${sessionCount} sessions combined (${fmtHours(hours)})` : ` · ${fmtHours(hours)} on duty`;
+    sessionCount > 1
+      ? ` · ${sessionCount} sessions combined (${fmtHours(hours)}, until 8:00 PM)`
+      : ` · ${fmtHours(hours)} on duty (until 8:00 PM)`;
   const mins = istMinutesOfDay(firstPunchIn);
-  const punchDay = istDateString(firstPunchIn);
-  const waived = isHalfDayWaivedForDate(punchDay);
 
   if (status === "present") {
-    if (waived && mins > PRESENT_PUNCH_BEFORE_MINUTES) {
-      return `Present: first punch ${punchLabel} (10:30 half-day waived for outage day)${sessionsNote} · need ≥6.5h — met`;
-    }
-    if (mins <= PRESENT_PUNCH_BEFORE_MINUTES) {
-      return `Present: first punch ${punchLabel} (by 10:30)${sessionsNote} · need ≥6.5h — met`;
-    }
-    return `Present: first punch ${punchLabel} (after 10:30, by 1:00)${sessionsNote} · combined duty ≥6.5h`;
+    return `Present: first punch ${punchLabel} (7:00–10:30)${sessionsNote} · ≥${PRESENT_MIN_HOURS}h met`;
   }
 
   if (status === "half_day") {
-    if (!hadMorning || mins >= HALF_DAY_PUNCH_BEFORE_MINUTES) {
-      return `Half-day: first punch ${punchLabel} (at/after 1:00 PM — no punch before 1:00)${sessionsNote} · late first punch is Half-day`;
+    if (mins > PRESENT_PUNCH_BEFORE_MINUTES && mins < HALF_DAY_PUNCH_BEFORE_MINUTES) {
+      return `Half-day: first punch ${punchLabel} (after 10:30, before 1:00)${sessionsNote}`;
     }
-    if (mins > PRESENT_PUNCH_BEFORE_MINUTES && hours < PRESENT_MIN_HOURS) {
-      return `Half-day: first punch ${punchLabel} (after 10:30, before 1:00)${sessionsNote} · under 6.5h (need ≥6.5h combined for Present)`;
+    if (mins <= PRESENT_PUNCH_BEFORE_MINUTES && hours >= HALF_DAY_MIN_HOURS && hours < PRESENT_MIN_HOURS) {
+      return `Half-day: first punch ${punchLabel} (7:00–10:30)${sessionsNote} · ${HALF_DAY_MIN_HOURS}–${PRESENT_MIN_HOURS}h (need ≥${PRESENT_MIN_HOURS}h for Present)`;
     }
     return `Half-day: first punch ${punchLabel}${sessionsNote}`;
   }
 
   // Absent
-  if (mins <= PRESENT_PUNCH_BEFORE_MINUTES && hours < PRESENT_MIN_HOURS) {
-    return `Absent: first punch ${punchLabel} (by 10:30)${sessionsNote} · under 6.5h (need ≥6.5h for Present)`;
+  if (!hadMorning || mins >= HALF_DAY_PUNCH_BEFORE_MINUTES) {
+    return `Absent — Punched In: first punch ${punchLabel} (at/after 1:00 PM)${sessionsNote}`;
+  }
+  if (mins <= PRESENT_PUNCH_BEFORE_MINUTES && hours < HALF_DAY_MIN_HOURS) {
+    return `Absent: first punch ${punchLabel} (7:00–10:30)${sessionsNote} · under ${HALF_DAY_MIN_HOURS}h (incomplete)`;
   }
   return `Absent: first punch ${punchLabel}${sessionsNote}`;
 }
@@ -219,10 +230,11 @@ export function resolveDayAttendanceStatus(opts: {
 } {
   const asOf = opts.asOf ?? new Date();
   const dateYmd = opts.dateYmd ?? istDateString(asOf);
+  const valid = validSessions(opts.sessions);
   const hours = hoursWorkedOnDay(opts.sessions, asOf);
-  const hadPunch = opts.sessions.length > 0;
+  const hadPunch = valid.length > 0;
   const firstIn = firstPunchIn(opts.sessions);
-  const sessionCount = opts.sessions.length;
+  const sessionCount = valid.length;
   const morning = hadMorningWindowPunch(opts.sessions);
   const manual = opts.manual;
 
@@ -237,7 +249,6 @@ export function resolveDayAttendanceStatus(opts: {
     };
   }
   if (opts.isHoliday) {
-    // Full Present already earned stays Present; half-day / incomplete / no punch → Holiday (leave).
     const auto = autoAttendanceStatus({
       firstPunchIn: firstIn,
       hours,

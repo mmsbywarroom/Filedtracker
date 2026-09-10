@@ -39,10 +39,22 @@ enum SecurityHelper {
         return false
     }
 
-    /// True when Fake GPS should force auto punch-out during an open session (Android parity).
+    /// Mid-session auto punch-out: Fake GPS (simulated) OR VPN active.
+    static func shouldAutoPunchOutForSecurity(lastLocation: CLLocation?) -> Bool {
+        if let loc = lastLocation, isMockLocation(loc) { return true }
+        return isVpnActive()
+    }
+
+    /// "fake_gps" or "vpn" for security-punch-out API.
+    static func autoPunchOutReason(lastLocation: CLLocation?) -> String {
+        if let loc = lastLocation, isMockLocation(loc) { return "fake_gps" }
+        if isVpnActive() { return "vpn" }
+        return "fake_gps"
+    }
+
+    /// True when Fake GPS should force auto punch-out during an open session.
     static func shouldAutoPunchOutForFakeGps(lastLocation: CLLocation?) -> Bool {
-        guard let loc = lastLocation else { return false }
-        return isMockLocation(loc)
+        shouldAutoPunchOutForSecurity(lastLocation: lastLocation)
     }
 
     /// Throws if VPN or Fake GPS should block punch-in / punch-out (Android assertSecureForPunch).

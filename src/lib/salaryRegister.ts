@@ -28,13 +28,13 @@ function shortReason(reason: string) {
     .replace(/^Approved leave for this date$/i, "Approved leave")
     .replace(/^Holiday \([^)]+\):\s*/i, "Holiday: ")
     .replace(/^Marked manually by admin$/i, "Manual")
+    .replace(/^Present: first punch (.+?) \(7:00–10:30\).*/i, "On time $1")
+    .replace(/^Half-day: first punch (.+?) \(after 10:30.+/i, "After 10:30 $1")
+    .replace(/^Half-day: first punch (.+?) \(7:00–10:30\).+/i, "Half 3.5–6.5h $1")
+    .replace(/^Absent — Punched In: first punch (.+?).+/i, "Punched In $1")
+    .replace(/^Absent: first punch (.+?) \(7:00–10:30\).+/i, "Under 3.5h $1")
     .replace(/^Present: first punch (.+?) \(by 10:30\).*/i, "On time $1")
-    .replace(/^Present: first punch (.+?) \(after 10:30.+/i, "Late OK $1")
-    .replace(/^Half-day: first punch (.+?) \(at\/after 1:00 PM.+/i, "After 1:00 $1")
-    .replace(/^Half-day: first punch (.+?) \(after 10:30.+/i, "Under 6.5h $1")
-    .replace(/^Absent: first punch (.+?) \(by 10:30\).+/i, "Under 6.5h $1")
-    .replace(/^First punch (.+) \(after 1:00\) = absent.*/i, "Late punch $1")
-    .replace(/^First punch (.+) but only .*/i, "Under hours · $1");
+    .replace(/^Absent: first punch (.+?) \(by 10:30\).+/i, "Incomplete $1");
   return t.length > 48 ? `${t.slice(0, 46)}…` : t;
 }
 

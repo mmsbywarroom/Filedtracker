@@ -41,7 +41,7 @@
     <string name="secure_footer">ਸੁਰੱਖਿਅਤ • GPS • ਚਿਹਰਾ</string>
     <string name="vpn_blocked">ਪੰਚ ਕਰਨ ਤੋਂ ਪਹਿਲਾਂ VPN ਬੰਦ ਕਰੋ।</string>
     <string name="mock_gps_blocked">ਫੇਕ GPS ਮਿਲਿਆ। Location spoofing ਐਪ ਹਟਾਓ।</string>
-    <string name="punch_in_window_blocked">ਪੰਚ ਇਨ ਸਵੇਰੇ 5:00 ਵਜੇ ਤੋਂ (IST) ਅੱਗੇ ਮਨਜ਼ੂਰ ਹੈ (ਦੁਪਹਿਰ 1:00 ਤੋਂ ਬਾਅਦ ਵੀ)। ਸਵੇਰੇ 5:00 ਤੋਂ ਪਹਿਲਾਂ ਨਹੀਂ।</string>
+    <string name="punch_in_window_blocked">ਪੰਚ ਇਨ ਸਵੇਰੇ 7:00 ਵਜੇ ਤੋਂ (IST) ਅੱਗੇ ਮਨਜ਼ੂਰ ਹੈ (ਦੁਪਹਿਰ 1:00 ਤੋਂ ਬਾਅਦ ਵੀ)। ਸਵੇਰੇ 7:00 ਤੋਂ ਪਹਿਲਾਂ ਨਹੀਂ।</string>
     <string name="allow_always_hint">“Allow all the time” ਚੁਣੋ, ਫਿਰ Back ਦਬਾਓ।</string>
     <string name="otp_sms_hint">SMS ਤੋਂ 6-ਅੰਕ OTP ਦਰਜ ਕਰੋ।</string>
 </resources>

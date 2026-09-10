@@ -1,10 +1,10 @@
-import { istMinutesOfDay } from "@/lib/dailyAttendance";
+import { EARLIEST_VALID_PUNCH_MINUTES, istMinutesOfDay } from "@/lib/dailyAttendance";
 import { normalizePhone } from "@/lib/security";
 
-/** Punch-in allowed from 5:00 AM IST (inclusive) through end of that IST day. */
-export const PUNCH_IN_START_MINUTES = 5 * 60;
+/** Punch-in allowed from 7:00 AM IST (inclusive) through end of that IST day. */
+export const PUNCH_IN_START_MINUTES = EARLIEST_VALID_PUNCH_MINUTES;
 
-/** These phones may punch in/out any time (web + native), including before 5:00 AM. */
+/** These phones may punch in/out any time (web + native), including before 7:00 AM. */
 const UNRESTRICTED_PUNCH_PHONES = new Set(["9625692122"]);
 
 export function isUnrestrictedPunchPhone(phone: string | null | undefined) {
@@ -12,7 +12,7 @@ export function isUnrestrictedPunchPhone(phone: string | null | undefined) {
   return Boolean(n && UNRESTRICTED_PUNCH_PHONES.has(n));
 }
 
-/** True from 5:00 AM IST through end of that IST day (after 1:00 PM is allowed). */
+/** True from 7:00 AM IST through end of that IST day (after 1:00 PM is allowed). */
 export function isWithinPunchInWindow(now = new Date()) {
   return istMinutesOfDay(now) >= PUNCH_IN_START_MINUTES;
 }
@@ -24,5 +24,5 @@ export function canPunchInNow(phone?: string | null, now = new Date()) {
 }
 
 export function punchInWindowMessage() {
-  return "Punch in is allowed from 5:00 AM IST onward (including after 1:00 PM). Before 5:00 AM is not allowed.";
+  return "Punch in is allowed from 7:00 AM IST onward (including after 1:00 PM). Punch-in before 7:00 AM is not allowed.";
 }

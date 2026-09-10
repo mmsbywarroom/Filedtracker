@@ -284,8 +284,8 @@ function dashboardSummaryCards(data: Dash | null, date: string): PdfSummaryCard[
     { label: "Live now", value: data?.liveNow || 0, background: "#059669" },
     { label: "Punched today", value: data?.activeToday || 0, background: "#c45c12" },
     { label: "Leave", value: data?.leaveOnDate || 0, background: "#0284c7" },
-    { label: "Present", value: data?.presentOnDate || 0, background: "#047857", hint: "≥6.5h · by 10:30 or combined" },
-    { label: "Half-day", value: data?.halfDayOnDate || 0, background: "#f59e0b", hint: "Late / under 6.5h / after 1:00" },
+    { label: "Present", value: data?.presentOnDate || 0, background: "#047857", hint: "7:00–10:30 · ≥6.5h" },
+    { label: "Half-day", value: data?.halfDayOnDate || 0, background: "#f59e0b", hint: "3.5–6.5h or after 10:30" },
     {
       label: absentOrInProgressLabel(date),
       value: data?.absentOnDate || 0,
@@ -646,7 +646,7 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
           className="bg-emerald-700"
           label="Present"
           value={data?.presentOnDate || 0}
-          hint="≥6.5h · by 10:30 or morning+afternoon combined"
+          hint="First punch 7:00–10:30 · ≥6.5h (sessions until 8:00 PM)"
           active={metric === "present" && !groupFilter}
           onClick={() => loadMetric("present")}
         />
@@ -654,7 +654,7 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
           className="bg-amber-500"
           label="Half-day"
           value={data?.halfDayOnDate || 0}
-          hint="After 10:30 under 6.5h, or first punch after 1:00"
+          hint="3.5–6.5h on time, or first punch after 10:30 before 1:00"
           active={metric === "halfDay" && !groupFilter}
           onClick={() => loadMetric("halfDay")}
         />

@@ -409,11 +409,11 @@ export default function AttendanceModulePage() {
       <p className="text-xs uppercase tracking-[0.2em] text-teal">Attendance</p>
       <h1 className="text-2xl font-semibold">Date-wise attendance</h1>
       <p className="mt-1 text-sm text-navy/55">
-        Auto: by 10:30 + ≥6.5h = Present · after 10:30 before 1:00 + ≥6.5h combined = Present · after 10:30 under 6.5h =
-        Half-day · first punch only after 1:00 = Half-day · no punch after 1:00 = Absent · until 1:00 no punch = Pending.
-        Morning + afternoon sessions are added for hours. Punch-in allowed from 5:00 AM (including after 1:00). Each row
-        shows a clear reason. Holiday: full Present stays Present; else Leave. Manual change needs a reason. Flag (native):
-        8+ thirty-minute checks at same lat/lng (admin review only).
+        Auto: first punch 7:00–10:30 + ≥6.5h = Present · 3.5h to under 6.5h = Half-day · under 3.5h = Absent · after
+        10:30 before 1:00 = Half-day · only at/after 1:00 = Absent (Punched In) · no punch after 1:00 = Absent ·
+        until 1:00 no punch = Pending. Sessions combine until 8:00 PM. Punch-in from 7:00 AM (not before). Holiday:
+        full Present stays Present; else Leave. Manual change needs a reason. Flag (native): 8+ thirty-minute checks
+        at same lat/lng (admin review only).
       </p>
 
       {intervalHealth ? (

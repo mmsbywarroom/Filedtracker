@@ -5,8 +5,8 @@ import { prisma } from "@/lib/prisma";
 /**
  * Afternoon re-entry helper (optional messaging): if the user punched before 1:00 PM,
  * was punched out, and has no open session, they may punch in again.
- * Punch-in after 1:00 PM is allowed for everyone via the main window (from 5:00 AM).
- * Day hours always sum all sessions; Present/Half-day uses first punch + combined hours.
+ * Punch-in after 1:00 PM is allowed for everyone via the main window (from 7:00 AM).
+ * Day hours always sum all valid sessions until 8:00 PM; Present/Half-day uses first punch + combined hours.
  */
 export async function hasEligibleReentryToday(userId: string, now = new Date()) {
   const day = istDateString(now);
@@ -54,5 +54,5 @@ export function punchInDeniedMessage() {
 }
 
 export function punchInReentryMessage() {
-  return "Re-entry: you punched in before 1:00 PM and were punched out — hours from all sessions today will be added together (need ≥6.5h for Present if first punch was by 1:00 PM).";
+  return "Re-entry: you punched in before 1:00 PM and were punched out — hours from all sessions today are added until 8:00 PM (need ≥6.5h for Present if first punch was by 10:30).";
 }

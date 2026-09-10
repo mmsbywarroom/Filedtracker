@@ -58,11 +58,18 @@ enum TrackingApi {
     }
 
     static func postFakeGpsPunchOut(lat: Double, lng: Double) {
+        postSecurityPunchOut(lat: lat, lng: lng, reason: "fake_gps")
+    }
+
+    static func postSecurityPunchOut(lat: Double, lng: Double, reason: String) {
+        let r = reason == "vpn" ? "vpn" : "fake_gps"
         postJSON(path: "/api/attendance/security-punch-out", body: [
             "lat": lat,
             "lng": lng,
-            "reason": "fake_gps",
-            "address": "Auto punch-out: Fake GPS (mock location) detected after punch-in",
+            "reason": r,
+            "address": r == "vpn"
+                ? "Auto punch-out: VPN detected after punch-in"
+                : "Auto punch-out: Fake GPS / mock location detected after punch-in",
         ])
     }
 
