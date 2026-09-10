@@ -7,6 +7,7 @@ import { DESIGNATIONS, isSuperAdmin, userScopeWhere } from "@/lib/hierarchy";
 import { findHolidayToday, holidayAppliesTo, holidayLeaveReason } from "@/lib/holidays";
 import { normalizeUserAssemblies } from "@/lib/userAssemblies";
 import { resolveDayAttendanceStatus } from "@/lib/dailyAttendance";
+import { isUnrestrictedPunchPhone } from "@/lib/punchInWindow";
 
 const userSchema = z.object({
   name: z.string().min(2).max(80),
@@ -82,6 +83,7 @@ export async function GET() {
           isHoliday: true,
           holidayReason: holiday ? holidayLeaveReason(holiday.reason, u.designation) : null,
           manual: null,
+          allowBeforeEarliest: isUnrestrictedPunchPhone(u.phone),
         });
         holidayLeave = resolved.status === "leave";
       }

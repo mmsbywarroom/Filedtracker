@@ -70,6 +70,7 @@ import `in`.videh.filedtracker.nativeapp.ApiClient
 import `in`.videh.filedtracker.nativeapp.DashboardActivity
 import `in`.videh.filedtracker.nativeapp.LocationHelper
 import `in`.videh.filedtracker.nativeapp.R
+import `in`.videh.filedtracker.nativeapp.PunchInWindow
 import `in`.videh.filedtracker.nativeapp.SecurityHelper
 import `in`.videh.filedtracker.nativeapp.SessionStore
 import kotlinx.coroutines.CancellationException
@@ -217,6 +218,12 @@ fun FaceScreen(
                     }
 
                     DashboardActivity.MODE_PUNCH_IN, DashboardActivity.MODE_PUNCH_OUT -> {
+                        if (mode == DashboardActivity.MODE_PUNCH_IN) {
+                            val phone = SessionStore.phone(context)
+                            if (phone.isNotBlank() && !PunchInWindow.isAllowedForPhone(phone)) {
+                                throw IllegalStateException(PunchInWindow.blockedMessage())
+                            }
+                        }
                         setStatus("Matching face…")
                         // Describe first (clear errors), then punch with descriptor — avoids heavy
                         // face-api on /api/attendance which caused opaque 500s under load.

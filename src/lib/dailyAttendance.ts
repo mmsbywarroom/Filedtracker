@@ -81,19 +81,20 @@ export function absentOrInProgressHint(dateYmd: string, now = new Date()) {
 }
 
 /** Sessions with punch-in at/after 7:00 AM IST (midnight–7:00 punches are ignored). */
-export function validSessions(sessions: PunchRow[]) {
+export function validSessions(sessions: PunchRow[], allowBeforeEarliest = false) {
+  if (allowBeforeEarliest) return sessions.slice();
   return sessions.filter((s) => istMinutesOfDay(s.punchInAt) >= EARLIEST_VALID_PUNCH_MINUTES);
 }
 
-export function firstPunchIn(sessions: PunchRow[]) {
-  const valid = validSessions(sessions);
+export function firstPunchIn(sessions: PunchRow[], allowBeforeEarliest = false) {
+  const valid = validSessions(sessions, allowBeforeEarliest);
   if (!valid.length) return null;
   return valid.reduce((a, b) => (a.punchInAt < b.punchInAt ? a : b)).punchInAt;
 }
 
 /** Any valid punch-in before 1:00 PM. */
-export function hadMorningWindowPunch(sessions: PunchRow[]) {
-  return validSessions(sessions).some(
+export function hadMorningWindowPunch(sessions: PunchRow[], allowBeforeEarliest = false) {
+  return validSessions(sessions, allowBeforeEarliest).some(
     (s) => istMinutesOfDay(s.punchInAt) < HALF_DAY_PUNCH_BEFORE_MINUTES
   );
 }
@@ -102,9 +103,9 @@ export function hadMorningWindowPunch(sessions: PunchRow[]) {
  * Total hours on duty (IST): only valid sessions (punch-in ≥ 7:00 AM),
  * each segment capped at 8:00 PM the same day. Open sessions also capped by 12h auto rule.
  */
-export function hoursWorkedOnDay(sessions: PunchRow[], asOf = new Date()) {
+export function hoursWorkedOnDay(sessions: PunchRow[], asOf = new Date(), allowBeforeEarliest = false) {
   let totalMs = 0;
-  for (const s of validSessions(sessions)) {
+  for (const s of validSessions(sessions, allowBeforeEarliest)) {
     const dutyEnd = istTimeOnSameDay(s.punchInAt, DUTY_HOURS_END_MINUTES);
     const rawEnd =
       s.punchOutAt ?? new Date(Math.min(asOf.getTime(), s.punchInAt.getTime() + AUTO_PUNCH_OUT_MS));
@@ -131,9 +132,14 @@ export function autoAttendanceStatus(opts: {
   hours: number;
   hadPunch: boolean;
   hadMorningWindowPunch?: boolean;
+  /** Unrestricted 24h phones: count pre-7:00 punches as on-time morning. */
+  allowBeforeEarliest?: boolean;
 }): AttendanceStatus {
   if (!opts.hadPunch || !opts.firstPunchIn) return "absent";
-  const mins = istMinutesOfDay(opts.firstPunchIn);
+  let mins = istMinutesOfDay(opts.firstPunchIn);
+  if (opts.allowBeforeEarliest && mins < EARLIEST_VALID_PUNCH_MINUTES) {
+    mins = EARLIEST_VALID_PUNCH_MINUTES;
+  }
   // Invalid / pre-7:00 first punch should not reach here if callers use validSessions
   if (mins < EARLIEST_VALID_PUNCH_MINUTES) return "absent";
 
@@ -220,6 +226,8 @@ export function resolveDayAttendanceStatus(opts: {
   isHoliday?: boolean;
   holidayReason?: string | null;
   manual?: { status: string; source: string; note?: string | null } | null;
+  /** Unrestricted 24h punch phones — count sessions before 7:00 AM. */
+  allowBeforeEarliest?: boolean;
 }): {
   status: ResolvedAttendanceStatus;
   source: "auto" | "manual";
@@ -230,12 +238,13 @@ export function resolveDayAttendanceStatus(opts: {
 } {
   const asOf = opts.asOf ?? new Date();
   const dateYmd = opts.dateYmd ?? istDateString(asOf);
-  const valid = validSessions(opts.sessions);
-  const hours = hoursWorkedOnDay(opts.sessions, asOf);
+  const allowBefore = Boolean(opts.allowBeforeEarliest);
+  const valid = validSessions(opts.sessions, allowBefore);
+  const hours = hoursWorkedOnDay(opts.sessions, asOf, allowBefore);
   const hadPunch = valid.length > 0;
-  const firstIn = firstPunchIn(opts.sessions);
+  const firstIn = firstPunchIn(opts.sessions, allowBefore);
   const sessionCount = valid.length;
-  const morning = hadMorningWindowPunch(opts.sessions);
+  const morning = hadMorningWindowPunch(opts.sessions, allowBefore);
   const manual = opts.manual;
 
   if (manual?.source === "manual" && ATTENDANCE_STATUSES.includes(manual.status as AttendanceStatus)) {
@@ -254,6 +263,7 @@ export function resolveDayAttendanceStatus(opts: {
       hours,
       hadPunch,
       hadMorningWindowPunch: morning,
+      allowBeforeEarliest: allowBefore,
     });
     if (auto === "present") {
       return {
@@ -299,6 +309,7 @@ export function resolveDayAttendanceStatus(opts: {
     hours,
     hadPunch,
     hadMorningWindowPunch: morning,
+    allowBeforeEarliest: allowBefore,
   });
   return {
     status,

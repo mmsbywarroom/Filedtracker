@@ -9,6 +9,7 @@ import {
 } from "@/lib/dailyAttendance";
 import { holidayAppliesTo, holidayLeaveReason } from "@/lib/holidays";
 import { monthDayList, salaryCell } from "@/lib/salaryRegister";
+import { isUnrestrictedPunchPhone } from "@/lib/punchInWindow";
 
 export async function GET(req: Request) {
   const s = await requireSuperAdmin();
@@ -129,6 +130,7 @@ export async function GET(req: Request) {
         isHoliday: onHoliday,
         holidayReason: onHoliday && holiday ? holidayLeaveReason(holiday.reason, u.designation) : null,
         manual: mark ? { status: mark.status, source: mark.source, note: mark.note } : null,
+        allowBeforeEarliest: isUnrestrictedPunchPhone(u.phone),
       });
       cells[dateYmd] = salaryCell({
         status: resolved.status,

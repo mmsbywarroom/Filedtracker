@@ -11,6 +11,7 @@ import {
   resolveDayAttendanceStatus,
   statusLabel,
 } from "@/lib/dailyAttendance";
+import { isUnrestrictedPunchPhone } from "@/lib/punchInWindow";
 import { adminPresentLabel, adminPresentRemark, ensureAdminPresentPunch, removeAdminPresentPunch, closeOpenPunchForAdminLeave } from "@/lib/adminPresentPunch";
 import { holidayAppliesTo, holidayLeaveReason } from "@/lib/holidays";
 import { userPinnedFlagFromSessions, filterValidIntervalSnapshots } from "@/lib/attendanceIntervalFlag";
@@ -157,6 +158,7 @@ export async function GET(req: Request) {
         manual: manual
           ? { status: manual.status, source: manual.source, note: manual.note }
           : null,
+        allowBeforeEarliest: isUnrestrictedPunchPhone(u.phone),
       });
       const { status, source, reason, hours, firstIn, sessionCount } = resolved;
 

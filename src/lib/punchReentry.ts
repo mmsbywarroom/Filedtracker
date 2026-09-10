@@ -1,5 +1,5 @@
 import { istDateString, istDayBounds, noPunchAbsentCutoff } from "@/lib/dailyAttendance";
-import { canPunchInNow, punchInWindowMessage } from "@/lib/punchInWindow";
+import { canPunchInNowAny, punchInWindowMessage } from "@/lib/punchInWindow";
 import { prisma } from "@/lib/prisma";
 
 /**
@@ -39,8 +39,20 @@ export async function hasEligibleReentryToday(userId: string, now = new Date()) 
   return Boolean(closedToday);
 }
 
-export async function canUserPunchIn(userId: string, phone?: string | null, now = new Date()) {
-  if (canPunchInNow(phone, now)) {
+export async function canUserPunchIn(
+  userId: string,
+  phone?: string | null,
+  now = new Date(),
+  extraPhones: Array<string | null | undefined> = []
+) {
+  const phones: Array<string | null | undefined> = [phone, ...extraPhones];
+  try {
+    const u = await prisma.user.findUnique({ where: { id: userId }, select: { phone: true } });
+    if (u?.phone) phones.push(u.phone);
+  } catch {
+    /* ignore */
+  }
+  if (canPunchInNowAny(phones, now)) {
     return { allowed: true as const, reason: "window" as const };
   }
   if (await hasEligibleReentryToday(userId, now)) {

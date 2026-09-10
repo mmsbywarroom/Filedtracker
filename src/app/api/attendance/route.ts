@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { parseClientSource } from "@/lib/clientSource";
-import { punchInWindowMessage } from "@/lib/punchInWindow";
+import { punchInWindowMessage, isUnrestrictedPunchPhone } from "@/lib/punchInWindow";
 import { canUserPunchIn, punchInDeniedMessage, punchInReentryMessage } from "@/lib/punchReentry";
 import { prisma } from "@/lib/prisma";
 import { downsample, sessionTravelMeters } from "@/lib/utils";
@@ -127,10 +127,11 @@ export async function GET(req: Request) {
       );
     }, 0);
 
-    const punchGate = await canUserPunchIn(s.sub, s.phone);
+    const punchGate = await canUserPunchIn(s.sub, s.phone, new Date(), [s.phone]);
     const todayHours = hoursWorkedOnDay(
       todayRows.map((r) => ({ punchInAt: r.punchInAt, punchOutAt: r.punchOutAt })),
-      new Date()
+      new Date(),
+      isUnrestrictedPunchPhone(s.phone)
     );
     const priorClosedMs = todayRows.reduce((sum, r) => {
       if (!r.punchOutAt) return sum;
@@ -230,7 +231,7 @@ export async function POST(req: Request) {
         { status: 403 }
       );
     }
-    const punchGate = await canUserPunchIn(s.sub, user.phone);
+    const punchGate = await canUserPunchIn(s.sub, user.phone, new Date(), [s.phone, user.phone]);
     if (!punchGate.allowed) {
       return NextResponse.json({ error: punchInDeniedMessage(), code: "PUNCH_IN_WINDOW" }, { status: 403 });
     }

@@ -11,6 +11,7 @@ import {
   type ResolvedAttendanceStatus,
 } from "@/lib/dailyAttendance";
 import { holidayAppliesTo, holidayLeaveReason } from "@/lib/holidays";
+import { isUnrestrictedPunchPhone } from "@/lib/punchInWindow";
 
 function groupCounts(
   users: { id: string; key: string; isActive: boolean; faceRegistered: boolean }[],
@@ -296,6 +297,7 @@ export async function GET(req: Request) {
           ? holidayLeaveReason(holiday!.reason, u.designation)
           : null,
         manual: mark ? { status: mark.status, source: mark.source, note: mark.note } : null,
+        allowBeforeEarliest: isUnrestrictedPunchPhone(u.phone),
       });
       dayStatusByUser.set(u.id, resolved.status);
       if (resolved.status === "present") presentOnDate += 1;

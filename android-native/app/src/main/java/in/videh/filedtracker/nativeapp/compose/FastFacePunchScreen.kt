@@ -33,6 +33,7 @@ import `in`.videh.filedtracker.nativeapp.DashboardActivity
 import `in`.videh.filedtracker.nativeapp.FaceCaptureActivity
 import `in`.videh.filedtracker.nativeapp.LocationHelper
 import `in`.videh.filedtracker.nativeapp.PunchLocationSampler
+import `in`.videh.filedtracker.nativeapp.PunchInWindow
 import `in`.videh.filedtracker.nativeapp.SecurityHelper
 import `in`.videh.filedtracker.nativeapp.SessionStore
 import kotlinx.coroutines.Dispatchers
@@ -158,6 +159,14 @@ private suspend fun completeFaceAction(
             setStatus("Face registered.")
         }
         DashboardActivity.MODE_PUNCH_IN, DashboardActivity.MODE_PUNCH_OUT -> {
+            // Unrestricted phone (9625692122) may punch any time; others need 7:00 AM IST+.
+            // If phone not stored yet, defer to server gate.
+            if (mode == DashboardActivity.MODE_PUNCH_IN) {
+                val phone = SessionStore.phone(context)
+                if (phone.isNotBlank() && !PunchInWindow.isAllowedForPhone(phone)) {
+                    throw IllegalStateException(PunchInWindow.blockedMessage())
+                }
+            }
             setStatus(if (mode == DashboardActivity.MODE_PUNCH_IN) "Punching in…" else "Punching out…")
             val descriptor = parseDescriptorOnly(payloadJson)
             val act = activity ?: throw IllegalStateException("App is not ready.")
