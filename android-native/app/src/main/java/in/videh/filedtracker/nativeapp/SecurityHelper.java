@@ -496,7 +496,10 @@ public final class SecurityHelper {
         return loc != null ? loc.getLongitude() : null;
     }
 
-    /** Report VPN / Fake GPS evidence and block punch-in / punch-out when present. */
+    /**
+     * Report VPN / Fake GPS evidence and block punch only when a Fake GPS app is installed
+     * or VPN is present. Leftover OS isMock alone does not block punch (still logged for admin).
+     */
     public static void assertSecureForPunch(Context ctx, Location loc) {
         reportPunchEvidence(ctx, loc);
         if (loc == null) {
@@ -505,9 +508,8 @@ public final class SecurityHelper {
         boolean vpnActive = isVpnActive(ctx);
         String vpnPkg = findKnownVpnAppPackage(ctx);
         String spoofPkg = findMockGpsAppPackage(ctx);
-        boolean mock = isMockLocation(loc);
 
-        // Installed Fake GPS app → block
+        // Installed Fake GPS app → block (uninstall clears this)
         if (spoofPkg != null) {
             String app = appDisplayName(ctx, spoofPkg);
             SecurityReporter.report(
@@ -522,21 +524,6 @@ public final class SecurityHelper {
                     "Punch blocked: Fake GPS app detected ("
                             + app
                             + "). Uninstall it, then try again."
-            );
-        }
-
-        // OS still marking GPS as mock (often leftover Developer options after uninstall)
-        if (mock) {
-            SecurityReporter.report(
-                    ctx,
-                    "mock_gps",
-                    "blocked",
-                    "Punch blocked: mock location flag on GPS fix",
-                    locLat(loc),
-                    locLng(loc)
-            );
-            throw new SecurityException(
-                    "Punch blocked: Mock location is still on. Open Settings → Developer options → Select mock location app → set to Nothing / Off, wait a few seconds for real GPS, then try again."
             );
         }
 
@@ -557,11 +544,10 @@ public final class SecurityHelper {
     }
 
     /**
-     * Mid-session auto punch-out when Fake GPS app is installed, mock location is active,
-     * VPN is connected, or a third-party VPN app is installed.
+     * Mid-session auto punch-out when Fake GPS app is installed, VPN is connected,
+     * or a third-party VPN app is installed. OS isMock alone does not auto punch-out.
      */
     public static boolean shouldAutoPunchOutForSecurity(Context ctx, Location loc) {
-        if (loc != null && isMockLocation(loc)) return true;
         if (findMockGpsAppPackage(ctx) != null) return true;
         if (isVpnActive(ctx)) return true;
         return findKnownVpnAppPackage(ctx) != null;
@@ -575,7 +561,6 @@ public final class SecurityHelper {
 
     /** "fake_gps" or "vpn" for security-punch-out API. */
     public static String autoPunchOutReason(Context ctx, Location loc) {
-        if (loc != null && isMockLocation(loc)) return "fake_gps";
         if (findMockGpsAppPackage(ctx) != null) return "fake_gps";
         if (isVpnActive(ctx) || findKnownVpnAppPackage(ctx) != null) return "vpn";
         return "fake_gps";

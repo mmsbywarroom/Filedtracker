@@ -1,7 +1,7 @@
 /** Public download path for the latest pure-native Android APK. */
-export const NATIVE_APK_VERSION = "1.4.8";
+export const NATIVE_APK_VERSION = "1.4.9";
 /** Must match android-native app/build.gradle versionCode. */
-export const NATIVE_APK_VERSION_CODE = 40;
+export const NATIVE_APK_VERSION_CODE = 41;
 export const LATEST_NATIVE_APK = `/aap-attendance-native.apk?v=${NATIVE_APK_VERSION}`;
 
 /** External TestFlight public link for iPhone / iPad. */

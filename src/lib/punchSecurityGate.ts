@@ -4,14 +4,14 @@ export function punchSecurityBlockFromBody(body: unknown): {
   code: "VPN" | "FAKE_GPS";
 } | null {
   const b = body && typeof body === "object" ? (body as Record<string, unknown>) : {};
-  const isMock = b.isMock === true || b.mockLocation === true;
+  // Only block when a Fake GPS app is installed — not on leftover OS isMock alone.
   const spoofApp = b.spoofApp === true;
   const vpnActive = b.vpnActive === true || b.vpn === true;
-  if (isMock || spoofApp) {
+  if (spoofApp) {
     return {
       code: "FAKE_GPS",
       error:
-        "Punch blocked: Fake GPS / mock location detected. Uninstall Fake GPS apps, then try again.",
+        "Punch blocked: Fake GPS app detected. Uninstall Fake GPS apps, then try again.",
     };
   }
   if (vpnActive) {

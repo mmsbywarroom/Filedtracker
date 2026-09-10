@@ -97,7 +97,8 @@ function reportSecurityViolation(
 }
 
 /**
- * Hard gate: block punch when VPN / Fake GPS is present on the device.
+ * Hard gate: block punch when VPN / Fake GPS app is present on the device.
+ * Leftover OS mock flag alone does not block.
  */
 export function assertNativeSecureForPunch(): void {
   const bridge = pureNativeBridge();
@@ -113,7 +114,8 @@ export function assertNativeSecureForPunch(): void {
       apps.push("VPN connected on device");
     }
   }
-  if (status.spoofPackage || status.spoofApp || status.mockLikely) {
+  const hasFakeGpsApp = Boolean(status.spoofPackage || status.spoofApp);
+  if (hasFakeGpsApp) {
     apps.push(
       status.spoofPackage
         ? `Fake GPS / spoof app: ${status.spoofPackage}`
@@ -125,8 +127,8 @@ export function assertNativeSecureForPunch(): void {
   const detail = `Apps at native punch-in: ${apps.join("; ")}. Punch blocked.`;
   reportSecurityViolation("punch_evidence", "blocked", detail);
 
-  if (status.spoofPackage || status.spoofApp || status.mockLikely) {
-    throw new Error("Punch blocked: Fake GPS / mock location detected. Turn it off, then try again.");
+  if (hasFakeGpsApp) {
+    throw new Error("Punch blocked: Fake GPS app detected. Uninstall Fake GPS apps, then try again.");
   }
   throw new Error("Punch blocked: VPN detected. Turn off VPN, then try again.");
 }
