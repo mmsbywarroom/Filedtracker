@@ -1,5 +1,6 @@
 package in.videh.filedtracker.nativeapp;
 
+import android.app.AppOpsManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
@@ -12,19 +13,25 @@ import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.net.VpnService;
 import android.os.Build;
+import android.provider.Settings;
 import android.util.Log;
 
 import java.net.NetworkInterface;
 import java.util.Collections;
 import java.util.Enumeration;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 public final class SecurityHelper {
     private static final String TAG = "FTSecurity";
 
+    /** Known Fake GPS / location-spoof packages (include Play + sideload variants). */
     private static final String[] MOCK_GPS_PACKAGES = {
             "com.lexa.fakegps",
             "com.incorporateapps.fakegps",
+            "com.incorporateapps.fakegps.fre",
             "com.blogspot.newapphorizons.fakegps",
             "com.ninja.toolkit.pulse.fake.gps",
             "com.rosteam.gpsspoof",
@@ -33,10 +40,48 @@ public final class SecurityHelper {
             "com.gsmartstudio.fakegps",
             "com.locationchanger",
             "com.pe.fakegps",
-            "com.incorporateapps.fakegps.fre",
             "com.fakegps.location",
             "com.just4fungames.fakegpslocation",
             "com.lkr.fakelocation",
+            "com.divinesoftstech.fakegps",
+            "com.theappninjas.fakegpsjoystick",
+            "com.incorporateapps.fakegps.pro",
+            "com.fake.gps.location.spoof",
+            "com.blogspot.android_campus.fakegps",
+            "com.location.changer.mock",
+            "com.wifi.fake.gps",
+            "com.modify.gps",
+            "ru.gavrikov.mocklocations",
+            "com.ltp.vpn.fakegps",
+            "com.fake.gps.camera.go",
+            "com.incorporateapps.fakegpsjoy",
+            "com.github.marcosalis.gpsfaker",
+            "org.hola.gpslocation",
+            "com.fakegps.run",
+    };
+
+    private static final String[] MOCK_GPS_NAME_HINTS = {
+            "fakegps",
+            "fake.gps",
+            "fake_gps",
+            "fake gps",
+            "fake location",
+            "fakelocation",
+            "mocklocation",
+            "mock.location",
+            "mock location",
+            "gpsjoystick",
+            "gps.spoof",
+            "spoof.gps",
+            "spoof location",
+            "location spoof",
+            "gps faker",
+            "gpsfaker",
+            "mock gps",
+            "virtual gps",
+            "location changer",
+            "locationchanger",
+            "gps emulator",
     };
 
     /** Common third-party VPN apps (including Turbo VPN). */
@@ -125,7 +170,7 @@ public final class SecurityHelper {
                     if (!nif.isUp()) continue;
                     String name = nif.getName();
                     if (name == null) continue;
-                    String n = name.toLowerCase();
+                    String n = name.toLowerCase(Locale.US);
                     if (n.contains("tun")
                             || n.startsWith("ppp")
                             || n.startsWith("tap")
@@ -158,12 +203,21 @@ public final class SecurityHelper {
         return findMockGpsAppPackage(ctx) != null;
     }
 
+    /**
+     * Detect Fake GPS apps even when mock is not currently active.
+     * Android 11+ package visibility: probe known packages via getPackageInfo,
+     * then scan launcher apps (MAIN/LAUNCHER query) by package + label.
+     */
     public static String findMockGpsAppPackage(Context ctx) {
-        return findPackageMatch(
-                ctx,
-                MOCK_GPS_PACKAGES,
-                new String[]{"fakegps", "fake.gps", "fake_gps", "mocklocation", "mock.location", "gpsjoystick", "gps.spoof", "spoof.gps"}
-        );
+        String selected = selectedMockLocationApp(ctx);
+        if (selected != null && !selected.isEmpty() && !selected.equals(ctx.getPackageName())) {
+            return selected;
+        }
+        String viaExact = findInstalledExactPackage(ctx, MOCK_GPS_PACKAGES);
+        if (viaExact != null) return viaExact;
+        String viaOp = findAppWithMockLocationOp(ctx);
+        if (viaOp != null) return viaOp;
+        return findSuspiciousFromLauncher(ctx, MOCK_GPS_NAME_HINTS);
     }
 
     /**
@@ -173,6 +227,8 @@ public final class SecurityHelper {
     public static String findKnownVpnAppPackage(Context ctx) {
         String viaIntent = findVpnAppViaVpnService(ctx);
         if (viaIntent != null) return viaIntent;
+        String viaExact = findInstalledExactPackage(ctx, VPN_PACKAGES);
+        if (viaExact != null) return viaExact;
         return findPackageMatch(
                 ctx,
                 VPN_PACKAGES,
@@ -193,6 +249,130 @@ public final class SecurityHelper {
         } catch (Exception ignored) {
         }
         return packageName;
+    }
+
+    private static String selectedMockLocationApp(Context ctx) {
+        try {
+            // Developer options → Select mock location app (API varies by OEM).
+            String pkg = Settings.Secure.getString(ctx.getContentResolver(), "mock_location_app");
+            if (pkg != null && !pkg.trim().isEmpty()) return pkg.trim();
+        } catch (Exception ignored) {
+        }
+        try {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+                int allow = Settings.Secure.getInt(ctx.getContentResolver(), Settings.Secure.ALLOW_MOCK_LOCATION, 0);
+                if (allow == 1) return "mock_location_enabled";
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
+    /** Works on Android 11+ for packages listed in manifest &lt;queries&gt;. */
+    private static String findInstalledExactPackage(Context ctx, String[] packages) {
+        PackageManager pm = ctx.getPackageManager();
+        for (String pkg : packages) {
+            if (pkg == null || pkg.contains(" ")) continue;
+            try {
+                if (Build.VERSION.SDK_INT >= 33) {
+                    pm.getPackageInfo(pkg, PackageManager.PackageInfoFlags.of(0));
+                } else {
+                    pm.getPackageInfo(pkg, 0);
+                }
+                return pkg;
+            } catch (PackageManager.NameNotFoundException ignored) {
+            } catch (Exception e) {
+                Log.w(TAG, "getPackageInfo " + pkg, e);
+            }
+        }
+        return null;
+    }
+
+    private static String findAppWithMockLocationOp(Context ctx) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return null;
+        try {
+            AppOpsManager ops = (AppOpsManager) ctx.getSystemService(Context.APP_OPS_SERVICE);
+            if (ops == null) return null;
+            PackageManager pm = ctx.getPackageManager();
+            Set<String> seen = new HashSet<>();
+            for (String pkg : collectVisiblePackages(ctx)) {
+                if (!seen.add(pkg) || pkg.equals(ctx.getPackageName())) continue;
+                try {
+                    ApplicationInfo ai = pm.getApplicationInfo(pkg, 0);
+                    if ((ai.flags & ApplicationInfo.FLAG_SYSTEM) != 0) continue;
+                    int mode = ops.unsafeCheckOpNoThrow(
+                            AppOpsManager.OPSTR_MOCK_LOCATION, ai.uid, pkg);
+                    if (mode == AppOpsManager.MODE_ALLOWED) return pkg;
+                } catch (Exception ignored) {
+                }
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "findAppWithMockLocationOp failed", e);
+        }
+        return null;
+    }
+
+    private static String findSuspiciousFromLauncher(Context ctx, String[] hints) {
+        PackageManager pm = ctx.getPackageManager();
+        for (String pkg : collectVisiblePackages(ctx)) {
+            if (pkg.equals(ctx.getPackageName())) continue;
+            String lower = pkg.toLowerCase(Locale.US);
+            for (String hint : hints) {
+                String h = hint.toLowerCase(Locale.US).replace(" ", "");
+                if (lower.contains(h) || lower.contains(hint.toLowerCase(Locale.US).replace(' ', '.'))) {
+                    try {
+                        ApplicationInfo ai = pm.getApplicationInfo(pkg, 0);
+                        if ((ai.flags & ApplicationInfo.FLAG_SYSTEM) == 0) return pkg;
+                    } catch (Exception ignored) {
+                        return pkg;
+                    }
+                }
+            }
+            try {
+                ApplicationInfo ai = pm.getApplicationInfo(pkg, 0);
+                if ((ai.flags & ApplicationInfo.FLAG_SYSTEM) != 0) continue;
+                CharSequence label = pm.getApplicationLabel(ai);
+                if (label == null) continue;
+                String name = label.toString().toLowerCase(Locale.US);
+                for (String hint : hints) {
+                    if (name.contains(hint.toLowerCase(Locale.US))) return pkg;
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        return null;
+    }
+
+    private static Set<String> collectVisiblePackages(Context ctx) {
+        Set<String> out = new HashSet<>();
+        PackageManager pm = ctx.getPackageManager();
+        try {
+            Intent launch = new Intent(Intent.ACTION_MAIN);
+            launch.addCategory(Intent.CATEGORY_LAUNCHER);
+            List<ResolveInfo> activities = pm.queryIntentActivities(launch, 0);
+            if (activities != null) {
+                for (ResolveInfo ri : activities) {
+                    if (ri.activityInfo != null && ri.activityInfo.packageName != null) {
+                        out.add(ri.activityInfo.packageName);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "queryIntentActivities failed", e);
+        }
+        try {
+            List<ApplicationInfo> apps = pm.getInstalledApplications(0);
+            if (apps != null) {
+                for (ApplicationInfo info : apps) {
+                    if (info.packageName != null) out.add(info.packageName);
+                }
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "getInstalledApplications failed", e);
+        }
+        Collections.addAll(out, MOCK_GPS_PACKAGES);
+        Collections.addAll(out, VPN_PACKAGES);
+        return out;
     }
 
     private static String findVpnAppViaVpnService(Context ctx) {
@@ -225,16 +405,19 @@ public final class SecurityHelper {
 
     private static String findPackageMatch(Context ctx, String[] exact, String[] contains) {
         try {
-            PackageManager pm = ctx.getPackageManager();
-            List<ApplicationInfo> apps = pm.getInstalledApplications(PackageManager.GET_META_DATA);
-            for (ApplicationInfo info : apps) {
-                if ((info.flags & ApplicationInfo.FLAG_SYSTEM) != 0) continue;
-                String pkg = info.packageName.toLowerCase();
+            for (String pkg : collectVisiblePackages(ctx)) {
+                try {
+                    ApplicationInfo info = ctx.getPackageManager().getApplicationInfo(pkg, 0);
+                    if ((info.flags & ApplicationInfo.FLAG_SYSTEM) != 0) continue;
+                } catch (Exception ignored) {
+                    continue;
+                }
+                String lower = pkg.toLowerCase(Locale.US);
                 for (String bad : exact) {
-                    if (pkg.equals(bad.toLowerCase())) return info.packageName;
+                    if (lower.equals(bad.toLowerCase(Locale.US))) return pkg;
                 }
                 for (String part : contains) {
-                    if (pkg.contains(part.toLowerCase())) return info.packageName;
+                    if (lower.contains(part.toLowerCase(Locale.US))) return pkg;
                 }
             }
         } catch (Exception e) {
@@ -313,7 +496,7 @@ public final class SecurityHelper {
                     locLng(loc)
             );
             throw new SecurityException(
-                    "Punch blocked: Fake GPS / mock location detected. Turn it off completely, then try again."
+                    "Punch blocked: Fake GPS / mock location detected. Uninstall Fake GPS apps, then try again."
             );
         }
         if (vpnActive || vpnPkg != null) {
@@ -327,13 +510,33 @@ public final class SecurityHelper {
                     locLng(loc)
             );
             throw new SecurityException(
-                    "Punch blocked: VPN detected. Turn off VPN, then try again."
+                    "Punch blocked: VPN detected. Turn off VPN / uninstall VPN apps, then try again."
             );
         }
     }
 
-    /** True when Fake GPS should force auto punch-out during an open session. */
+    /**
+     * Mid-session auto punch-out when Fake GPS app is installed, mock location is active,
+     * VPN is connected, or a third-party VPN app is installed.
+     */
+    public static boolean shouldAutoPunchOutForSecurity(Context ctx, Location loc) {
+        if (loc != null && isMockLocation(loc)) return true;
+        if (findMockGpsAppPackage(ctx) != null) return true;
+        if (isVpnActive(ctx)) return true;
+        return findKnownVpnAppPackage(ctx) != null;
+    }
+
+    /** @deprecated use {@link #shouldAutoPunchOutForSecurity} */
+    @Deprecated
     public static boolean shouldAutoPunchOutForFakeGps(Context ctx, Location loc) {
-        return loc != null && isMockLocation(loc);
+        return shouldAutoPunchOutForSecurity(ctx, loc);
+    }
+
+    /** "fake_gps" or "vpn" for security-punch-out API. */
+    public static String autoPunchOutReason(Context ctx, Location loc) {
+        if (loc != null && isMockLocation(loc)) return "fake_gps";
+        if (findMockGpsAppPackage(ctx) != null) return "fake_gps";
+        if (isVpnActive(ctx) || findKnownVpnAppPackage(ctx) != null) return "vpn";
+        return "fake_gps";
     }
 }

@@ -10,13 +10,14 @@ export function punchSecurityBlockFromBody(body: unknown): {
   if (isMock || spoofApp) {
     return {
       code: "FAKE_GPS",
-      error: "Punch blocked: Fake GPS / mock location detected. Turn it off, then try again.",
+      error:
+        "Punch blocked: Fake GPS / mock location detected. Uninstall Fake GPS apps, then try again.",
     };
   }
   if (vpnActive) {
     return {
       code: "VPN",
-      error: "Punch blocked: VPN detected. Turn off VPN, then try again.",
+      error: "Punch blocked: VPN detected. Turn off VPN / uninstall VPN apps, then try again.",
     };
   }
   return null;

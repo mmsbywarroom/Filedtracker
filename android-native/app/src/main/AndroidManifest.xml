@@ -15,16 +15,35 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
 
-    <!-- Package visibility so we can detect common VPN / fake-GPS apps on Android 11+ -->
+    <!-- Package visibility so we can detect VPN / Fake GPS apps on Android 11+ -->
     <queries>
         <intent>
             <action android:name="android.net.VpnService" />
         </intent>
+        <!-- See launchable apps so Fake GPS can be matched by package / label -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent>
         <package android:name="free.vpn.unblock.proxy.turbovpn" />
         <package android:name="free.vpn.proxy.unblock.turbovpn.pro" />
+        <package android:name="com.turbovpn.vpn" />
         <package android:name="com.lexa.fakegps" />
         <package android:name="com.incorporateapps.fakegps" />
+        <package android:name="com.incorporateapps.fakegps.fre" />
         <package android:name="com.blogspot.newapphorizons.fakegps" />
+        <package android:name="com.ninja.toolkit.pulse.fake.gps" />
+        <package android:name="com.rosteam.gpsspoof" />
+        <package android:name="com.evezzon.fakegps" />
+        <package android:name="com.fakegps.mock" />
+        <package android:name="com.gsmartstudio.fakegps" />
+        <package android:name="com.locationchanger" />
+        <package android:name="com.pe.fakegps" />
+        <package android:name="com.fakegps.location" />
+        <package android:name="com.just4fungames.fakegpslocation" />
+        <package android:name="com.lkr.fakelocation" />
+        <package android:name="com.theappninjas.fakegpsjoystick" />
+        <package android:name="com.divinesoftstech.fakegps" />
         <package android:name="com.expressvpn.vpn" />
         <package android:name="com.nordvpn.android" />
         <package android:name="com.protonvpn.android" />

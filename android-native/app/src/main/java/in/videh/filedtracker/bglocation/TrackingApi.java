@@ -138,17 +138,25 @@ public final class TrackingApi {
         });
     }
 
-    /** Auto punch-out when Fake GPS / mock location is detected mid-session. */
+    /** Auto punch-out when Fake GPS / VPN is detected mid-session. */
     public static void postFakeGpsPunchOut(String apiBase, String token, double lat, double lng) {
+        postSecurityPunchOut(apiBase, token, lat, lng, "fake_gps");
+    }
+
+    public static void postSecurityPunchOut(
+            String apiBase, String token, double lat, double lng, String reason) {
         IO.execute(() -> {
             try {
+                String r = "vpn".equals(reason) ? "vpn" : "fake_gps";
                 JSONObject body = new JSONObject();
                 body.put("lat", lat);
                 body.put("lng", lng);
-                body.put("reason", "fake_gps");
+                body.put("reason", r);
                 body.put(
                         "address",
-                        "Auto punch-out: Fake GPS (mock location) detected after punch-in"
+                        "vpn".equals(r)
+                                ? "Auto punch-out: VPN detected after punch-in"
+                                : "Auto punch-out: Fake GPS / spoof app detected after punch-in"
                 );
                 body.put("accuracy", JSONObject.NULL);
                 Request request = req(apiBase, token, "/api/attendance/security-punch-out")
@@ -156,10 +164,10 @@ public final class TrackingApi {
                         .build();
                 try (Response res = HTTP.newCall(request).execute()) {
                     if (!res.isSuccessful()) Log.w(TAG, "security-punch-out " + res.code());
-                    else Log.i(TAG, "security-punch-out fake_gps ok");
+                    else Log.i(TAG, "security-punch-out " + r + " ok");
                 }
             } catch (Exception e) {
-                Log.w(TAG, "postFakeGpsPunchOut failed", e);
+                Log.w(TAG, "postSecurityPunchOut failed", e);
             }
         });
     }

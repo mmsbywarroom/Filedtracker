@@ -171,7 +171,7 @@ private suspend fun completeFaceAction(
                         loc.accuracy.toDouble(),
                         descriptor,
                         image,
-                        SecurityHelper.isVpnActive(context),
+                        SecurityHelper.shouldBlockVpn(context),
                         SecurityHelper.isMockLocation(loc),
                         SecurityHelper.findMockGpsAppPackage(context) != null
                     )
@@ -182,7 +182,7 @@ private suspend fun completeFaceAction(
                         loc.accuracy.toDouble(),
                         descriptor,
                         image,
-                        SecurityHelper.isVpnActive(context),
+                        SecurityHelper.shouldBlockVpn(context),
                         SecurityHelper.isMockLocation(loc),
                         SecurityHelper.findMockGpsAppPackage(context) != null
                     )

@@ -268,8 +268,8 @@ public class FieldLocationService extends Service {
                 return;
             }
             gpsFailStreak = 0;
-            if (SecurityHelper.shouldAutoPunchOutForFakeGps(this, loc)) {
-                autoPunchOutForFakeGps(apiBase, token, loc);
+            if (SecurityHelper.shouldAutoPunchOutForSecurity(this, loc)) {
+                autoPunchOutForSecurity(apiBase, token, loc);
                 return;
             }
             maybeHourlySecurityCheck(loc);
@@ -313,27 +313,35 @@ public class FieldLocationService extends Service {
         });
     }
 
-    private void autoPunchOutForFakeGps(String apiBase, String token, Location loc) {
+    private void autoPunchOutForSecurity(String apiBase, String token, Location loc) {
         if (fakeGpsPunchOutStarted) return;
         fakeGpsPunchOutStarted = true;
+        String reason = SecurityHelper.autoPunchOutReason(this, loc);
         try {
             SecurityHelper.reportPunchEvidence(this, loc);
-            uploadSilentIntegritySample(loc, "background_mock_auto_out");
+            uploadSilentIntegritySample(loc, "background_security_auto_out");
             SecurityReporter.report(
                     this,
-                    "mock_gps",
+                    "vpn".equals(reason) ? "vpn" : "mock_gps",
                     "auto_punch_out",
-                    "Auto punch-out: Fake GPS (mock location) detected after punch-in",
+                    "vpn".equals(reason)
+                            ? "Auto punch-out: VPN detected after punch-in"
+                            : "Auto punch-out: Fake GPS / spoof app detected after punch-in",
                     loc.getLatitude(),
                     loc.getLongitude()
             );
-            TrackingApi.postFakeGpsPunchOut(apiBase, token, loc.getLatitude(), loc.getLongitude());
-            Log.i(TAG, "auto punch-out fake_gps");
+            TrackingApi.postSecurityPunchOut(
+                    apiBase, token, loc.getLatitude(), loc.getLongitude(), reason);
+            Log.i(TAG, "auto punch-out " + reason);
         } catch (Exception e) {
-            Log.w(TAG, "autoPunchOutForFakeGps", e);
+            Log.w(TAG, "autoPunchOutForSecurity", e);
         } finally {
             stop(this);
         }
+    }
+
+    private void autoPunchOutForFakeGps(String apiBase, String token, Location loc) {
+        autoPunchOutForSecurity(apiBase, token, loc);
     }
 
     private void runIntervalTick() {
@@ -354,8 +362,8 @@ public class FieldLocationService extends Service {
 
         withLocation(loc -> {
             if (loc == null) return;
-            if (SecurityHelper.shouldAutoPunchOutForFakeGps(this, loc)) {
-                autoPunchOutForFakeGps(apiBase, token, loc);
+            if (SecurityHelper.shouldAutoPunchOutForSecurity(this, loc)) {
+                autoPunchOutForSecurity(apiBase, token, loc);
                 return;
             }
             // Fresh location + LocationCompat.isMock every ~30 min while punched in.

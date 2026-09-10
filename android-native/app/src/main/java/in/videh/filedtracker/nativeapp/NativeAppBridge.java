@@ -84,7 +84,7 @@ public class NativeAppBridge {
             boolean vpn = vpnActive || vpnPkg != null;
             JSONObject o = new JSONObject();
             o.put("vpn", vpn);
-            o.put("vpnActive", vpnActive);
+            o.put("vpnActive", vpn);
             o.put("spoofApp", spoofPkg != null);
             o.put("spoofPackage", spoofPkg != null ? spoofPkg : "");
             o.put("vpnPackage", vpnPkg != null ? vpnPkg : "");

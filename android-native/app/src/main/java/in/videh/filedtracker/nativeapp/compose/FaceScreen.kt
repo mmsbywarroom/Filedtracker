@@ -246,7 +246,7 @@ fun FaceScreen(
                                     loc.accuracy.toDouble(),
                                     descriptor,
                                     dataUrl,
-                                    SecurityHelper.isVpnActive(context),
+                                    SecurityHelper.shouldBlockVpn(context),
                                     SecurityHelper.isMockLocation(loc),
                                     SecurityHelper.findMockGpsAppPackage(context) != null
                                 )
@@ -257,7 +257,7 @@ fun FaceScreen(
                                     loc.accuracy.toDouble(),
                                     descriptor,
                                     dataUrl,
-                                    SecurityHelper.isVpnActive(context),
+                                    SecurityHelper.shouldBlockVpn(context),
                                     SecurityHelper.isMockLocation(loc),
                                     SecurityHelper.findMockGpsAppPackage(context) != null
                                 )
