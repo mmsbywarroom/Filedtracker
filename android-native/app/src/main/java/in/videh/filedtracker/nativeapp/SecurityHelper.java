@@ -171,12 +171,11 @@ public final class SecurityHelper {
                     String name = nif.getName();
                     if (name == null) continue;
                     String n = name.toLowerCase(Locale.US);
-                    if (n.contains("tun")
+                    if (n.startsWith("tun")
                             || n.startsWith("ppp")
                             || n.startsWith("tap")
                             || n.startsWith("wg")
-                            || n.contains("ipsec")
-                            || n.contains("utun")) {
+                            || n.startsWith("ipsec")) {
                         return true;
                     }
                 } catch (Exception ignored) {
@@ -207,10 +206,15 @@ public final class SecurityHelper {
      * Detect Fake GPS apps even when mock is not currently active.
      * Android 11+ package visibility: probe known packages via getPackageInfo,
      * then scan launcher apps (MAIN/LAUNCHER query) by package + label.
+     * Never treat a stale Developer-options package (already uninstalled) as installed.
      */
     public static String findMockGpsAppPackage(Context ctx) {
         String selected = selectedMockLocationApp(ctx);
-        if (selected != null && !selected.isEmpty() && !selected.equals(ctx.getPackageName())) {
+        if (selected != null
+                && !selected.isEmpty()
+                && !selected.equals(ctx.getPackageName())
+                && !"mock_location_enabled".equals(selected)
+                && isPackageInstalled(ctx, selected)) {
             return selected;
         }
         String viaExact = findInstalledExactPackage(ctx, MOCK_GPS_PACKAGES);
@@ -266,6 +270,23 @@ public final class SecurityHelper {
         } catch (Exception ignored) {
         }
         return null;
+    }
+
+    private static boolean isPackageInstalled(Context ctx, String pkg) {
+        if (pkg == null || pkg.isEmpty()) return false;
+        try {
+            PackageManager pm = ctx.getPackageManager();
+            if (Build.VERSION.SDK_INT >= 33) {
+                pm.getPackageInfo(pkg, PackageManager.PackageInfoFlags.of(0));
+            } else {
+                pm.getPackageInfo(pkg, 0);
+            }
+            return true;
+        } catch (PackageManager.NameNotFoundException e) {
+            return false;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /** Works on Android 11+ for packages listed in manifest &lt;queries&gt;. */
@@ -485,20 +506,40 @@ public final class SecurityHelper {
         String vpnPkg = findKnownVpnAppPackage(ctx);
         String spoofPkg = findMockGpsAppPackage(ctx);
         boolean mock = isMockLocation(loc);
-        if (mock || spoofPkg != null) {
-            String app = spoofPkg != null ? appDisplayName(ctx, spoofPkg) : "mock location";
+
+        // Installed Fake GPS app → block
+        if (spoofPkg != null) {
+            String app = appDisplayName(ctx, spoofPkg);
             SecurityReporter.report(
                     ctx,
                     "mock_gps",
                     "blocked",
-                    "Punch blocked: Fake GPS / mock location (" + app + ")",
+                    "Punch blocked: Fake GPS app installed (" + app + ")",
                     locLat(loc),
                     locLng(loc)
             );
             throw new SecurityException(
-                    "Punch blocked: Fake GPS / mock location detected. Uninstall Fake GPS apps, then try again."
+                    "Punch blocked: Fake GPS app detected ("
+                            + app
+                            + "). Uninstall it, then try again."
             );
         }
+
+        // OS still marking GPS as mock (often leftover Developer options after uninstall)
+        if (mock) {
+            SecurityReporter.report(
+                    ctx,
+                    "mock_gps",
+                    "blocked",
+                    "Punch blocked: mock location flag on GPS fix",
+                    locLat(loc),
+                    locLng(loc)
+            );
+            throw new SecurityException(
+                    "Punch blocked: Mock location is still on. Open Settings → Developer options → Select mock location app → set to Nothing / Off, wait a few seconds for real GPS, then try again."
+            );
+        }
+
         if (vpnActive || vpnPkg != null) {
             String app = vpnPkg != null ? appDisplayName(ctx, vpnPkg) : "VPN";
             SecurityReporter.report(
