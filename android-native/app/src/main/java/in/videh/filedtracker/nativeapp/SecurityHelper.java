@@ -276,12 +276,13 @@ public final class SecurityHelper {
         if (pkg == null || pkg.isEmpty()) return false;
         try {
             PackageManager pm = ctx.getPackageManager();
+            ApplicationInfo ai;
             if (Build.VERSION.SDK_INT >= 33) {
-                pm.getPackageInfo(pkg, PackageManager.PackageInfoFlags.of(0));
+                ai = pm.getApplicationInfo(pkg, PackageManager.ApplicationInfoFlags.of(0));
             } else {
-                pm.getPackageInfo(pkg, 0);
+                ai = pm.getApplicationInfo(pkg, 0);
             }
-            return true;
+            return ai.enabled;
         } catch (PackageManager.NameNotFoundException e) {
             return false;
         } catch (Exception e) {
@@ -295,15 +296,18 @@ public final class SecurityHelper {
         for (String pkg : packages) {
             if (pkg == null || pkg.contains(" ")) continue;
             try {
+                ApplicationInfo ai;
                 if (Build.VERSION.SDK_INT >= 33) {
-                    pm.getPackageInfo(pkg, PackageManager.PackageInfoFlags.of(0));
+                    ai = pm.getApplicationInfo(pkg, PackageManager.ApplicationInfoFlags.of(0));
                 } else {
-                    pm.getPackageInfo(pkg, 0);
+                    ai = pm.getApplicationInfo(pkg, 0);
                 }
+                if (!ai.enabled) continue;
+                if ((ai.flags & ApplicationInfo.FLAG_SYSTEM) != 0) continue;
                 return pkg;
             } catch (PackageManager.NameNotFoundException ignored) {
             } catch (Exception e) {
-                Log.w(TAG, "getPackageInfo " + pkg, e);
+                Log.w(TAG, "getApplicationInfo " + pkg, e);
             }
         }
         return null;
@@ -337,33 +341,46 @@ public final class SecurityHelper {
         PackageManager pm = ctx.getPackageManager();
         for (String pkg : collectVisiblePackages(ctx)) {
             if (pkg.equals(ctx.getPackageName())) continue;
-            String lower = pkg.toLowerCase(Locale.US);
-            for (String hint : hints) {
-                String h = hint.toLowerCase(Locale.US).replace(" ", "");
-                if (lower.contains(h) || lower.contains(hint.toLowerCase(Locale.US).replace(' ', '.'))) {
-                    try {
-                        ApplicationInfo ai = pm.getApplicationInfo(pkg, 0);
-                        if ((ai.flags & ApplicationInfo.FLAG_SYSTEM) == 0) return pkg;
-                    } catch (Exception ignored) {
-                        return pkg;
-                    }
-                }
-            }
             try {
                 ApplicationInfo ai = pm.getApplicationInfo(pkg, 0);
                 if ((ai.flags & ApplicationInfo.FLAG_SYSTEM) != 0) continue;
-                CharSequence label = pm.getApplicationLabel(ai);
-                if (label == null) continue;
-                String name = label.toString().toLowerCase(Locale.US);
+                if (!ai.enabled) continue;
+
+                String lower = pkg.toLowerCase(Locale.US);
+                boolean nameHit = false;
                 for (String hint : hints) {
-                    if (name.contains(hint.toLowerCase(Locale.US))) return pkg;
+                    String h = hint.toLowerCase(Locale.US).replace(" ", "");
+                    if (lower.contains(h) || lower.contains(hint.toLowerCase(Locale.US).replace(' ', '.'))) {
+                        nameHit = true;
+                        break;
+                    }
                 }
+                if (!nameHit) {
+                    CharSequence label = pm.getApplicationLabel(ai);
+                    if (label != null) {
+                        String name = label.toString().toLowerCase(Locale.US);
+                        for (String hint : hints) {
+                            if (name.contains(hint.toLowerCase(Locale.US))) {
+                                nameHit = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (nameHit) return pkg;
+            } catch (PackageManager.NameNotFoundException ignored) {
+                // Package string is not installed — never treat as Fake GPS.
             } catch (Exception ignored) {
             }
         }
         return null;
     }
 
+    /**
+     * Packages actually visible on the device (launcher + installed apps).
+     * Do NOT inject known Fake-GPS/VPN package name lists here — that caused false
+     * positives when a name matched heuristics but the app was not installed.
+     */
     private static Set<String> collectVisiblePackages(Context ctx) {
         Set<String> out = new HashSet<>();
         PackageManager pm = ctx.getPackageManager();
@@ -385,14 +402,12 @@ public final class SecurityHelper {
             List<ApplicationInfo> apps = pm.getInstalledApplications(0);
             if (apps != null) {
                 for (ApplicationInfo info : apps) {
-                    if (info.packageName != null) out.add(info.packageName);
+                    if (info.packageName != null && info.enabled) out.add(info.packageName);
                 }
             }
         } catch (Exception e) {
             Log.w(TAG, "getInstalledApplications failed", e);
         }
-        Collections.addAll(out, MOCK_GPS_PACKAGES);
-        Collections.addAll(out, VPN_PACKAGES);
         return out;
     }
 
