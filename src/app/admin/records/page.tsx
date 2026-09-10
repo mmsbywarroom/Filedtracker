@@ -56,6 +56,8 @@ function rowReason(r: Row) {
   if (r.punchOutReason === "gps_off") return "gps_off";
   if (r.punchOutReason === "auto_12h") return "auto_12h";
   if (r.punchOutReason === "auto_geofence") return "auto_geofence";
+  if (r.punchOutReason === "fake_gps" || r.punchOutReason === "gps_spoof") return "fake_gps";
+  if (r.punchOutReason === "vpn") return "vpn";
   if (r.punchOutReason === "admin_present") return "admin_present";
   return "manual";
 }

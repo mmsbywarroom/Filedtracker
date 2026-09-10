@@ -23,7 +23,7 @@ import { ApkDownloadLanding } from "@/components/ApkDownloadLanding";
 import { useClientNativeApp } from "@/hooks/useClientNativeApp";
 import { apiFetch } from "@/lib/clientHeaders";
 import { isAndroidBrowser } from "@/lib/clientDevice";
-import { assertNativeSecureForPunch, isPureNativeApp, saveNativeSession } from "@/lib/pureNativeApp";
+import { assertNativeSecureForPunch, isPureNativeApp, readNativeSecurityStatus, saveNativeSession } from "@/lib/pureNativeApp";
 import { LangToggle, useLang } from "@/lib/i18n";
 
 const AUTO_12H_MS = 12 * 60 * 60 * 1000;
@@ -222,6 +222,18 @@ export default function DashboardPage() {
           const age = Date.now() - new Date(last.punchOutAt).getTime();
           if (age >= 0 && age < 10 * 60 * 1000) {
             setMsg(t("gpsSpoofAutoOut"));
+          }
+        }
+        if (!att.open && last?.punchOutReason === "fake_gps" && last.punchOutAt) {
+          const age = Date.now() - new Date(last.punchOutAt).getTime();
+          if (age >= 0 && age < 10 * 60 * 1000) {
+            setMsg(t("fakeGpsAutoOut"));
+          }
+        }
+        if (!att.open && last?.punchOutReason === "vpn" && last.punchOutAt) {
+          const age = Date.now() - new Date(last.punchOutAt).getTime();
+          if (age >= 0 && age < 10 * 60 * 1000) {
+            setMsg(t("vpnAutoOut"));
           }
         }
       }
@@ -631,6 +643,7 @@ export default function DashboardPage() {
         fix = await captureGpsFix(lastFix.current, liveAcc.current);
       }
 
+      const sec = readNativeSecurityStatus();
       const payload = {
         lat: fix.lat,
         lng: fix.lng,
@@ -638,6 +651,11 @@ export default function DashboardPage() {
         image,
         descriptor,
         gpsSamples: [fix],
+        vpnActive: Boolean(sec?.vpnActive || sec?.vpn),
+        vpn: Boolean(sec?.vpnActive || sec?.vpn),
+        isMock: Boolean(sec?.spoofApp || sec?.mockLikely),
+        mockLocation: Boolean(sec?.spoofApp || sec?.mockLikely),
+        spoofApp: Boolean(sec?.spoofApp || sec?.mockLikely),
       };
       const url = kind === "in" ? "/api/attendance" : "/api/attendance/punch-out";
       const res = await withTimeout(

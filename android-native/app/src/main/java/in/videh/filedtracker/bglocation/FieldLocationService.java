@@ -52,6 +52,7 @@ public class FieldLocationService extends Service {
     private long lastHourlySecurityAt = 0L;
     private long lastIntegritySampleAt = 0L;
     private int gpsFailStreak = 0;
+    private volatile boolean fakeGpsPunchOutStarted = false;
     private PowerManager.WakeLock wakeLock;
     private final JSONArray mapProbes = new JSONArray();
     private boolean startedFg = false;
@@ -267,10 +268,9 @@ public class FieldLocationService extends Service {
                 return;
             }
             gpsFailStreak = 0;
-            if (SecurityHelper.isMockLocation(loc)) {
-                SecurityHelper.reportPunchEvidence(this, loc);
-                // Do not stop — keep recording; never warn employee / never block attendance.
-                uploadSilentIntegritySample(loc, "background_mock");
+            if (SecurityHelper.shouldAutoPunchOutForFakeGps(this, loc)) {
+                autoPunchOutForFakeGps(apiBase, token, loc);
+                return;
             }
             maybeHourlySecurityCheck(loc);
             try {
@@ -313,6 +313,29 @@ public class FieldLocationService extends Service {
         });
     }
 
+    private void autoPunchOutForFakeGps(String apiBase, String token, Location loc) {
+        if (fakeGpsPunchOutStarted) return;
+        fakeGpsPunchOutStarted = true;
+        try {
+            SecurityHelper.reportPunchEvidence(this, loc);
+            uploadSilentIntegritySample(loc, "background_mock_auto_out");
+            SecurityReporter.report(
+                    this,
+                    "mock_gps",
+                    "auto_punch_out",
+                    "Auto punch-out: Fake GPS (mock location) detected after punch-in",
+                    loc.getLatitude(),
+                    loc.getLongitude()
+            );
+            TrackingApi.postFakeGpsPunchOut(apiBase, token, loc.getLatitude(), loc.getLongitude());
+            Log.i(TAG, "auto punch-out fake_gps");
+        } catch (Exception e) {
+            Log.w(TAG, "autoPunchOutForFakeGps", e);
+        } finally {
+            stop(this);
+        }
+    }
+
     private void runIntervalTick() {
         String apiBase = TrackingPrefs.apiBase(this);
         String token = TrackingPrefs.token(this);
@@ -331,9 +354,9 @@ public class FieldLocationService extends Service {
 
         withLocation(loc -> {
             if (loc == null) return;
-            if (SecurityHelper.isMockLocation(loc)) {
-                SecurityHelper.reportPunchEvidence(this, loc);
-                // Continue — never warn employee / never block attendance.
+            if (SecurityHelper.shouldAutoPunchOutForFakeGps(this, loc)) {
+                autoPunchOutForFakeGps(apiBase, token, loc);
+                return;
             }
             // Fresh location + LocationCompat.isMock every ~30 min while punched in.
             uploadSilentIntegritySample(loc, dueSlot > 0 ? "session_30m" : "session_check");

@@ -13,6 +13,7 @@ import { resolveAndMatchPunchFace } from "@/lib/resolvePunchFace";
 import { findHolidayToday, holidayAppliesTo } from "@/lib/holidays";
 import { assertPanIndiaPunchLocation, isPanIndiaPunchPhone } from "@/lib/panIndiaPunch";
 import { hoursWorkedOnDay } from "@/lib/dailyAttendance";
+import { punchSecurityBlockFromBody } from "@/lib/punchSecurityGate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -170,6 +171,13 @@ export async function POST(req: Request) {
     await closeStaleSessionForRePunch(s.sub);
 
     const body = await req.json().catch(() => null);
+    const securityBlock = punchSecurityBlockFromBody(body);
+    if (securityBlock) {
+      return NextResponse.json(
+        { error: securityBlock.error, code: securityBlock.code },
+        { status: 403 }
+      );
+    }
     const lat = Number(body?.lat);
     const lng = Number(body?.lng);
     const address = typeof body?.address === "string" ? body.address.slice(0, 200) : null;

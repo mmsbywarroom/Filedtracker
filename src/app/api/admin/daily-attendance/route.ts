@@ -297,9 +297,9 @@ export async function GET(req: Request) {
       maxSnapshotsOneUser: maxSnapsOneUser,
     },
     rules: {
-      present: `Punch in by 10:30 AM and stay on duty 6–12 hours`,
-      halfDay: `Punch in after 10:30 AM and by 1:00 PM`,
-      absent: `After 1:00 PM: no punch-in, punch after 1:00 PM, or early punch with under ${PRESENT_MIN_HOURS}h`,
+      present: `First punch by 10:30 AM with ≥${PRESENT_MIN_HOURS}h, OR first punch after 10:30 before 1:00 with ≥${PRESENT_MIN_HOURS}h combined (all sessions)`,
+      halfDay: `First punch after 10:30 before 1:00 with under ${PRESENT_MIN_HOURS}h, OR first punch only at/after 1:00 PM`,
+      absent: `No punch-in after 1:00 PM, or first punch by 10:30 with under ${PRESENT_MIN_HOURS}h`,
       leave: "Approved leave, holiday calendar (selected designations), or marked leave on Attendance",
     },
   });

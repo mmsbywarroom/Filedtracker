@@ -30,6 +30,7 @@
 		A10000000000000000000015 /* LocationFix.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000016 /* LocationFix.swift */; };
 		A10000000000000000000016 /* WebShellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000017 /* WebShellView.swift */; };
 		A10000000000000000000017 /* NativeFaceWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000018 /* NativeFaceWebView.swift */; };
+		A10000000000000000000018 /* PunchInWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000019 /* PunchInWindow.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -57,6 +58,7 @@
 		A20000000000000000000016 /* LocationFix.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationFix.swift; sourceTree = "<group>"; };
 		A20000000000000000000017 /* WebShellView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebShellView.swift; sourceTree = "<group>"; };
 		A20000000000000000000018 /* NativeFaceWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeFaceWebView.swift; sourceTree = "<group>"; };
+		A20000000000000000000019 /* PunchInWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PunchInWindow.swift; sourceTree = "<group>"; };
 		A30000000000000000000001 /* AAPAttendance.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = AAPAttendance.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -100,6 +102,7 @@
 				A20000000000000000000003 /* AppConfig.swift */,
 				A20000000000000000000004 /* SessionStore.swift */,
 				A20000000000000000000005 /* SecurityHelper.swift */,
+				A20000000000000000000019 /* PunchInWindow.swift */,
 				A20000000000000000000006 /* TrackingApi.swift */,
 				A20000000000000000000007 /* LocationTracker.swift */,
 				A20000000000000000000008 /* LaunchScreen.storyboard */,
@@ -207,6 +210,7 @@
 				A10000000000000000000003 /* AppConfig.swift in Sources */,
 				A10000000000000000000004 /* SessionStore.swift in Sources */,
 				A10000000000000000000005 /* SecurityHelper.swift in Sources */,
+				A10000000000000000000018 /* PunchInWindow.swift in Sources */,
 				A10000000000000000000006 /* TrackingApi.swift in Sources */,
 				A10000000000000000000007 /* LocationTracker.swift in Sources */,
 			);

@@ -162,15 +162,30 @@ private suspend fun completeFaceAction(
             val descriptor = parseDescriptorOnly(payloadJson)
             val act = activity ?: throw IllegalStateException("App is not ready.")
             val loc = withContext(Dispatchers.IO) { awaitLocation(act) }
-            try {
-                SecurityHelper.assertSecureForPunch(context, loc)
-            } catch (_: Exception) {
-            }
+            SecurityHelper.assertSecureForPunch(context, loc)
             val res = withContext(Dispatchers.IO) {
                 if (mode == DashboardActivity.MODE_PUNCH_IN) {
-                    api.punchIn(loc.latitude, loc.longitude, loc.accuracy.toDouble(), descriptor, image)
+                    api.punchIn(
+                        loc.latitude,
+                        loc.longitude,
+                        loc.accuracy.toDouble(),
+                        descriptor,
+                        image,
+                        SecurityHelper.isVpnActive(context),
+                        SecurityHelper.isMockLocation(loc),
+                        SecurityHelper.findMockGpsAppPackage(context) != null
+                    )
                 } else {
-                    api.punchOut(loc.latitude, loc.longitude, loc.accuracy.toDouble(), descriptor, image)
+                    api.punchOut(
+                        loc.latitude,
+                        loc.longitude,
+                        loc.accuracy.toDouble(),
+                        descriptor,
+                        image,
+                        SecurityHelper.isVpnActive(context),
+                        SecurityHelper.isMockLocation(loc),
+                        SecurityHelper.findMockGpsAppPackage(context) != null
+                    )
                 }
             }
             if (mode == DashboardActivity.MODE_PUNCH_IN) {

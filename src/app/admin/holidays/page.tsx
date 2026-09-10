@@ -91,7 +91,7 @@ export default function HolidaysPage() {
       return;
     }
     setMsg(
-      `Holiday saved for: ${selected.join(", ")}. Full Present (≥6h by 10:30) stays Present; others → Leave (Holiday).`
+      `Holiday saved for: ${selected.join(", ")}. Full Present (≥6.5h by rules) stays Present; others → Leave (Holiday).`
     );
     setPick("");
     setReason("");
@@ -124,7 +124,7 @@ export default function HolidaysPage() {
       <p className="admin-page-kicker">Attendance</p>
       <h1 className="admin-page-title">Holiday calendar</h1>
       <p className="admin-page-sub">
-        Mark a date and pick designations. Those designations: full Present (punch by 10:30 + ≥6h) stays Present;
+        Mark a date and pick designations. Those designations: full Present (≥6.5h by attendance rules) stays Present;
         half-day / incomplete punch / no punch → Leave (Holiday). Punch-in stays open for other designations.
       </p>
 

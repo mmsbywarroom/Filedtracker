@@ -201,10 +201,20 @@ final class WebShellViewController: UIViewController, WKNavigationDelegate, WKUI
     (function(){
       if(window.__ftPunchSecurityHook)return;
       window.__ftPunchSecurityHook=1;
-      function ftSecReport(){
+      function ftSecStatus(){
         try{
-          if(!window.NativeAppBridge||!NativeAppBridge.getSecurityStatus)return;
-          var s=JSON.parse(NativeAppBridge.getSecurityStatus());
+          if(!window.NativeAppBridge||!NativeAppBridge.getSecurityStatus)return null;
+          return JSON.parse(NativeAppBridge.getSecurityStatus()||'{}');
+        }catch(e){return null;}
+      }
+      function ftSecBlockedMessage(s){
+        if(!s)return '';
+        if(s.spoofApp||s.mockLikely||s.spoofPackage)return 'Punch blocked: Fake GPS / mock location detected. Turn it off completely, then try again.';
+        if(s.vpn||s.vpnActive||s.vpnPackage)return 'Punch blocked: VPN detected. Turn off VPN, then try again.';
+        return '';
+      }
+      function ftSecReport(s){
+        try{
           if(!s)return;
           var apps=[];
           if(s.vpnPackage)apps.push('VPN app: '+s.vpnPackage+(s.vpnActive?' (connected)':''));
@@ -212,16 +222,37 @@ final class WebShellViewController: UIViewController, WKNavigationDelegate, WKUI
           if(s.spoofPackage)apps.push('Fake GPS / spoof app: '+s.spoofPackage);
           else if(s.spoofApp||s.mockLikely)apps.push('Fake GPS / spoof app detected');
           if(!apps.length)return;
-          var d='Apps at native punch-in: '+apps.join('; ')+'. Pakka device evidence — third-party app(s) on phone when punching in native app.';
-          try{NativeAppBridge.reportSecurityEvent('punch_evidence','punch_evidence',d);}catch(e){}
-          try{fetch('/api/attendance/security-event',{method:'POST',credentials:'include',keepalive:true,headers:{'Content-Type':'application/json','X-Client-Source':'native'},body:JSON.stringify({type:'punch_evidence',action:'punch_evidence',detail:d})});}catch(e){}
+          var d='Apps at native punch-in: '+apps.join('; ')+'. Punch blocked.';
+          try{NativeAppBridge.reportSecurityEvent('punch_evidence','blocked',d);}catch(e){}
+          try{fetch('/api/attendance/security-event',{method:'POST',credentials:'include',keepalive:true,headers:{'Content-Type':'application/json','X-Client-Source':'native'},body:JSON.stringify({type:'punch_evidence',action:'blocked',detail:d})});}catch(e){}
         }catch(e){}
+      }
+      function mergeSec(bodyText,s){
+        try{
+          var o=bodyText?JSON.parse(bodyText):{};
+          if(!s)return JSON.stringify(o);
+          o.vpnActive=!!(s.vpnActive||s.vpn);
+          o.vpn=!!(s.vpnActive||s.vpn);
+          o.isMock=!!(s.spoofApp||s.mockLikely);
+          o.mockLocation=!!(s.spoofApp||s.mockLikely);
+          o.spoofApp=!!(s.spoofApp||s.mockLikely);
+          return JSON.stringify(o);
+        }catch(e){return bodyText;}
       }
       var origFetch=window.fetch;
       window.fetch=function(input,init){
         var url=typeof input==='string'?input:(input&&input.url)||'';
         var method=((init&&init.method)||(typeof input!=='string'&&input&&input.method)||'GET').toUpperCase();
-        if(method==='POST'&&/\\/api\\/attendance(\\/punch-out)?(\\?|$)/.test(url)){ftSecReport();}
+        if(method==='POST'&&/\\/api\\/attendance(\\/punch-out)?(\\?|$)/.test(url)){
+          var s=ftSecStatus();
+          var blocked=ftSecBlockedMessage(s);
+          if(blocked){
+            ftSecReport(s);
+            return Promise.reject(new Error(blocked));
+          }
+          init=init?Object.assign({},init):{};
+          init.body=mergeSec(init.body,s);
+        }
         return origFetch.apply(this,arguments);
       };
     })();

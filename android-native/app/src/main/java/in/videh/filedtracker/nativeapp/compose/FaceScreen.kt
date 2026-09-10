@@ -151,6 +151,8 @@ fun FaceScreen(
             val loc = withContext(Dispatchers.IO) { awaitLocation(act) }
             try {
                 SecurityHelper.assertSecureForPunch(context, loc)
+            } catch (e: SecurityException) {
+                setStatus(e.message ?: "Punch blocked for security.", error = true)
             } catch (_: Exception) {
             }
             cachedLoc = loc
@@ -231,10 +233,7 @@ fun FaceScreen(
                         )
                         val loc = withContext(Dispatchers.IO) {
                             val warm = cachedLoc ?: awaitLocation(act)
-                            try {
-                                SecurityHelper.assertSecureForPunch(context, warm)
-                            } catch (_: Exception) {
-                            }
+                            SecurityHelper.assertSecureForPunch(context, warm)
                             warm
                         }
                         cachedLoc = loc
@@ -246,7 +245,10 @@ fun FaceScreen(
                                     loc.longitude,
                                     loc.accuracy.toDouble(),
                                     descriptor,
-                                    dataUrl
+                                    dataUrl,
+                                    SecurityHelper.isVpnActive(context),
+                                    SecurityHelper.isMockLocation(loc),
+                                    SecurityHelper.findMockGpsAppPackage(context) != null
                                 )
                             } else {
                                 api.punchOut(
@@ -254,7 +256,10 @@ fun FaceScreen(
                                     loc.longitude,
                                     loc.accuracy.toDouble(),
                                     descriptor,
-                                    dataUrl
+                                    dataUrl,
+                                    SecurityHelper.isVpnActive(context),
+                                    SecurityHelper.isMockLocation(loc),
+                                    SecurityHelper.findMockGpsAppPackage(context) != null
                                 )
                             }
                         }

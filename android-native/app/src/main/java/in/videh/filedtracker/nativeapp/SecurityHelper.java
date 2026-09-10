@@ -273,7 +273,7 @@ public final class SecurityHelper {
         String detail =
                 "Apps at native punch-in: "
                         + apps
-                        + ". Pakka device evidence — third-party app(s) on phone when using native app.";
+                        + ". Confirmed device evidence — third-party app(s) on phone when using native app.";
         SecurityReporter.report(
                 ctx,
                 "punch_evidence",
@@ -292,11 +292,48 @@ public final class SecurityHelper {
         return loc != null ? loc.getLongitude() : null;
     }
 
-    /** Report VPN / spoof evidence — do not block punch. */
+    /** Report VPN / Fake GPS evidence and block punch-in / punch-out when present. */
     public static void assertSecureForPunch(Context ctx, Location loc) {
         reportPunchEvidence(ctx, loc);
         if (loc == null) {
-            throw new SecurityException("Could not verify GPS location.");
+            throw new SecurityException("Could not verify GPS location. Turn on Location and try again.");
         }
+        boolean vpnActive = isVpnActive(ctx);
+        String vpnPkg = findKnownVpnAppPackage(ctx);
+        String spoofPkg = findMockGpsAppPackage(ctx);
+        boolean mock = isMockLocation(loc);
+        if (mock || spoofPkg != null) {
+            String app = spoofPkg != null ? appDisplayName(ctx, spoofPkg) : "mock location";
+            SecurityReporter.report(
+                    ctx,
+                    "mock_gps",
+                    "blocked",
+                    "Punch blocked: Fake GPS / mock location (" + app + ")",
+                    locLat(loc),
+                    locLng(loc)
+            );
+            throw new SecurityException(
+                    "Punch blocked: Fake GPS / mock location detected. Turn it off completely, then try again."
+            );
+        }
+        if (vpnActive || vpnPkg != null) {
+            String app = vpnPkg != null ? appDisplayName(ctx, vpnPkg) : "VPN";
+            SecurityReporter.report(
+                    ctx,
+                    "vpn",
+                    "blocked",
+                    "Punch blocked: VPN on device (" + app + ")",
+                    locLat(loc),
+                    locLng(loc)
+            );
+            throw new SecurityException(
+                    "Punch blocked: VPN detected. Turn off VPN, then try again."
+            );
+        }
+    }
+
+    /** True when Fake GPS should force auto punch-out during an open session. */
+    public static boolean shouldAutoPunchOutForFakeGps(Context ctx, Location loc) {
+        return loc != null && isMockLocation(loc);
     }
 }

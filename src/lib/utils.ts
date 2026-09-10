@@ -149,8 +149,11 @@ export function filteredPathDistance(points: TrackPoint[]) {
     anchorAt = curAt;
   }
 
-  // Zigzag drift: long path but end point still near start
-  if (total > net * 1.5 + 15 && net < 150) return Math.round(Math.max(net, 0));
+  // GPS jitter while mostly stationary (tight cluster). Do NOT apply to real
+  // field loops that return near start — those must keep full path distance.
+  if (scatter < TRACK_STATIONARY_RADIUS_M * 1.5 && total > Math.max(scatter, net) * 3 + 40 && net < 120) {
+    return Math.round(Math.max(net, scatter));
+  }
 
   return Math.round(total);
 }
@@ -161,7 +164,7 @@ export function pathDistance(points: LatLng[]) {
   return d;
 }
 
-/** Real travel km for a session — filtered GPS path, not crow-fly or inflated stored totals. */
+/** Real travel meters for a session — filtered GPS path, never below last stored total. */
 export function sessionTravelMeters(opts: {
   stored?: number | null;
   punchIn: LatLng;
@@ -171,6 +174,7 @@ export function sessionTravelMeters(opts: {
   punchOutAt?: string | Date | number | null;
   live?: LatLng | null;
 }) {
+  const stored = Math.max(0, opts.stored || 0);
   const chain: TrackPoint[] = [{ ...opts.punchIn, recordedAt: opts.punchInAt ?? null, accuracy: null }];
   for (const p of opts.points || []) {
     chain.push(p);
@@ -180,8 +184,13 @@ export function sessionTravelMeters(opts: {
   } else if (opts.live) {
     chain.push({ ...opts.live, recordedAt: Date.now(), accuracy: null });
   }
-  if (chain.length >= 2) return filteredPathDistance(chain);
-  return Math.max(0, opts.stored || 0);
+  // Closed rows often load without track points: punchIn≈punchOut ⇒ path ~0.
+  // Prefer stored distance written during live tracking / punch-out.
+  if (chain.length < 2) return stored;
+  const path = filteredPathDistance(chain);
+  const hasTrack = (opts.points?.length || 0) > 0 || Boolean(opts.live);
+  if (!hasTrack && opts.punchOut) return Math.max(stored, path);
+  return Math.max(stored, path);
 }
 
 export function splitTrack<T extends LatLng>(points: T[], maxGapMeters = 8000): T[][] {

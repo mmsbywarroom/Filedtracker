@@ -115,9 +115,13 @@ export function reasonLabel(reason?: string | null, punchOutAt?: string | null) 
   if (reason === "gps_off") return "GPS off";
   if (reason === "auto_12h") return "Auto · 12 hours";
   if (reason === "auto_geofence") return "Auto · left 1000 m boundary";
+  if (reason === "gps_spoof") return "Auto · fake / invalid GPS";
+  if (reason === "fake_gps") return "Auto · Fake GPS (mock)";
+  if (reason === "vpn") return "Auto · VPN";
   if (reason === "admin_present") return "Manual present by admin";
   if (reason === "admin_leave") return "Closed for leave by admin";
   if (reason === "manual") return "Manual punch-out";
+  if (reason === "tracking_gap") return "Tracking gap";
   if (punchOutAt) return "Completed";
   return reason || "—";
 }

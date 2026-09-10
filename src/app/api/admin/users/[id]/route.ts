@@ -77,6 +77,28 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
   if (!isSuperAdmin(s.admin)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const existing = await prisma.user.findUnique({ where: { id: params.id } });
   if (!existing || !canSeeUser(s.admin, existing)) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  await prisma.user.delete({ where: { id: params.id } }).catch(() => null);
-  return NextResponse.json({ ok: true });
+
+  // Soft-delete: remove from org / block login, keep attendance & history for reports.
+  await prisma.user.update({
+    where: { id: params.id },
+    data: { isActive: false },
+  });
+  const openSessions = await prisma.attendance.findMany({
+    where: { userId: params.id, punchOutAt: null },
+    select: { id: true, punchInLat: true, punchInLng: true, lastKnownLat: true, lastKnownLng: true },
+  });
+  const now = new Date();
+  for (const sess of openSessions) {
+    await prisma.attendance.update({
+      where: { id: sess.id },
+      data: {
+        punchOutAt: now,
+        punchOutLat: sess.lastKnownLat ?? sess.punchInLat,
+        punchOutLng: sess.lastKnownLng ?? sess.punchInLng,
+        punchOutReason: "manual",
+        punchOutAddress: "User removed from organization (inactive)",
+      },
+    });
+  }
+  return NextResponse.json({ ok: true, softDeleted: true });
 }

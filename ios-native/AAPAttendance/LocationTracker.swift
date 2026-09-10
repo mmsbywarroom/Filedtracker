@@ -7,20 +7,25 @@ final class LocationTracker: NSObject, CLLocationManagerDelegate {
 
     private let manager = CLLocationManager()
     private var lastHeartbeat: TimeInterval = 0
+    private var lastTrackPost: TimeInterval = 0
+    private var lastCredited: CLLocation?
+    private var lastPosted: CLLocation?
     private(set) var lastLocation: CLLocation?
+    /// Local session travel since punch-in (meters); UI uses max(server, this).
+    private(set) var localTravelMeters: Double = 0
 
-    /// Attendance FLAG: every 30 minutes from punch-in until punch-out.
     private let flagIntervalSec: TimeInterval = 30 * 60
-    /// VPN/security log: at most once per hour.
     private let securityIntervalSec: TimeInterval = 60 * 60
-    private let heartbeatSec: TimeInterval = 120
+    private let heartbeatSec: TimeInterval = 60
+    private let minTrackPostSec: TimeInterval = 20
+    private let creditMinMeters: CLLocationDistance = 35
     private let maxFlagSlots = 24
 
     private override init() {
         super.init()
         manager.delegate = self
         manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
-        manager.distanceFilter = 40
+        manager.distanceFilter = 25
         manager.pausesLocationUpdatesAutomatically = false
         manager.allowsBackgroundLocationUpdates = true
         if #available(iOS 11.0, *) {
@@ -46,17 +51,33 @@ final class LocationTracker: NSObject, CLLocationManagerDelegate {
     }
 
     func start(apiBase: String, token: String, punchInAt: String) {
+        let sameSession = !punchInAt.isEmpty && SessionStore.punchInAt == punchInAt
         SessionStore.save(token: token, apiBase: apiBase, phone: SessionStore.phone)
         SessionStore.punchInAt = punchInAt
+        if !sameSession {
+            localTravelMeters = 0
+            lastCredited = nil
+            lastPosted = nil
+            lastTrackPost = 0
+            lastHeartbeat = 0
+        }
         requestPermissions()
         manager.startUpdatingLocation()
         manager.startMonitoringSignificantLocationChanges()
+    }
+
+    /// Keep local total at least as high as last server-reported open-session distance.
+    func syncServerDistance(_ meters: Double) {
+        if meters > localTravelMeters { localTravelMeters = meters }
     }
 
     func stop() {
         manager.stopUpdatingLocation()
         manager.stopMonitoringSignificantLocationChanges()
         SessionStore.clearTracking()
+        localTravelMeters = 0
+        lastCredited = nil
+        lastPosted = nil
     }
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
@@ -75,25 +96,57 @@ final class LocationTracker: NSObject, CLLocationManagerDelegate {
         lastLocation = loc
         guard !SessionStore.token.isEmpty, !SessionStore.punchInAt.isEmpty else { return }
 
-        if SecurityHelper.isMockLocation(loc) {
+        if SecurityHelper.shouldAutoPunchOutForFakeGps(lastLocation: loc) {
             TrackingApi.postSecurityEvent(
                 type: "mock_gps",
-                action: "detected",
-                detail: "Fake GPS / simulated location · tracking continues (FLAG if same lat/lng)",
+                action: "auto_punch_out",
+                detail: "Auto punch-out: Fake GPS (mock location) detected after punch-in",
                 lat: loc.coordinate.latitude,
                 lng: loc.coordinate.longitude
             )
-            // Continue tracking so FLAG can catch fixed coordinates.
+            TrackingApi.postFakeGpsPunchOut(lat: loc.coordinate.latitude, lng: loc.coordinate.longitude)
+            stop()
+            return
         }
 
+        // Mid-session VPN: log only (Android does not auto punch-out for VPN).
+        // Punch-in/out remain blocked while VPN is on via assertSecureForPunch.
+
+        creditLocalTravel(loc)
+
         let now = Date().timeIntervalSince1970
-        if now - lastHeartbeat >= heartbeatSec {
+        let shouldPostTrack: Bool = {
+            if lastPosted == nil { return true }
+            guard let prev = lastPosted else { return true }
+            return loc.distance(from: prev) >= creditMinMeters && now - lastTrackPost >= minTrackPostSec
+        }()
+        if shouldPostTrack {
+            lastTrackPost = now
             lastHeartbeat = now
+            lastPosted = loc
             TrackingApi.postTrack(lat: loc.coordinate.latitude, lng: loc.coordinate.longitude, accuracy: loc.horizontalAccuracy)
+        } else if now - lastHeartbeat >= heartbeatSec {
+            lastHeartbeat = now
+            TrackingApi.postHeartbeat(lat: loc.coordinate.latitude, lng: loc.coordinate.longitude)
         }
 
         maybeHourlySecurity(loc)
         maybeHalfHourSnapshot(loc)
+    }
+
+    private func creditLocalTravel(_ loc: CLLocation) {
+        guard loc.horizontalAccuracy >= 0, loc.horizontalAccuracy <= 65 else { return }
+        if let prev = lastCredited {
+            let gap = loc.distance(from: prev)
+            let dt = loc.timestamp.timeIntervalSince(prev.timestamp)
+            if gap >= creditMinMeters, dt > 0, gap / max(dt, 1) <= 35 {
+                localTravelMeters += gap
+                lastCredited = loc
+                NotificationCenter.default.post(name: .ftTrackingStatsChanged, object: nil)
+            }
+        } else {
+            lastCredited = loc
+        }
     }
 
     private func maybeHourlySecurity(_ loc: CLLocation) {
@@ -120,10 +173,13 @@ final class LocationTracker: NSObject, CLLocationManagerDelegate {
         guard !SessionStore.hasSentSlot(slot) else { return }
         let due = punch + Double(slot) * flagIntervalSec
         let now = Date().timeIntervalSince1970
-        // Same window as server: early 2 min … late 25 min (Doze / delayed wake)
         guard now >= due - 120, now <= due + 25 * 60 else { return }
         TrackingApi.postIntervalSnapshot(slot: slot, lat: loc.coordinate.latitude, lng: loc.coordinate.longitude) { ok in
             if ok { SessionStore.markSlotSent(slot) }
         }
     }
+}
+
+extension Notification.Name {
+    static let ftTrackingStatsChanged = Notification.Name("ftTrackingStatsChanged")
 }

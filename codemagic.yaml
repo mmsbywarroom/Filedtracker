@@ -53,7 +53,7 @@ workflows:
           fi
           echo "CFBundleVersion -> $BUILD_NO"
           agvtool new-version -all "$BUILD_NO"
-          agvtool new-marketing-version 1.4.0
+          agvtool new-marketing-version 1.4.5
       - name: Build IPA for App Store / TestFlight
         script: |
           xcode-project build-ipa \

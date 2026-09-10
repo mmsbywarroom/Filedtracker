@@ -36,7 +36,7 @@ export default function AdminUsersPage() {
   const [zone, setZone] = useState("");
   const [district, setDistrict] = useState("");
   const [face, setFace] = useState("");
-  const [status, setStatus] = useState("");
+  const [status, setStatus] = useState("active");
   const [isSuper, setIsSuper] = useState(false);
   const [canResetFace, setCanResetFace] = useState(false);
   const [visibleDens, setVisibleDens] = useState<string[]>(() => hierarchyDesignations());
@@ -78,7 +78,13 @@ export default function AdminUsersPage() {
   }, []);
 
   async function remove(id: string) {
-    if (!confirm("Delete this user and all footprints?")) return;
+    if (
+      !confirm(
+        "Remove this user from the organization? They will not be able to log in. Attendance and history are kept."
+      )
+    ) {
+      return;
+    }
     await fetch(`/api/admin/users/${id}`, { method: "DELETE" });
     load();
   }
@@ -110,7 +116,13 @@ export default function AdminUsersPage() {
   async function bulkDelete() {
     const ids = Object.keys(selected).filter((id) => selected[id]);
     if (!ids.length) return;
-    if (!confirm(`Delete ${ids.length} selected user(s) and all their footprints?`)) return;
+    if (
+      !confirm(
+        `Remove ${ids.length} selected user(s) from the organization? They will not be able to log in. Attendance and history are kept.`
+      )
+    ) {
+      return;
+    }
     setBulkBusy(true);
     const res = await fetch("/api/admin/users", {
       method: "DELETE",
@@ -120,10 +132,11 @@ export default function AdminUsersPage() {
     setBulkBusy(false);
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      setCsvMsg(data.error || "Bulk delete failed");
+      setCsvMsg(data.error || "Could not remove users");
       return;
     }
-    setCsvMsg(`Deleted ${data.deleted || 0} user(s).`);
+    setCsvMsg(`Removed ${data.deleted || 0} user(s) from the organization (history kept).`);
+    setSelected({});
     load();
   }
 
@@ -219,7 +232,8 @@ export default function AdminUsersPage() {
           <p className="text-xs uppercase tracking-[0.2em] text-teal">Users</p>
           <h1 className="text-2xl font-semibold text-ink">Field users</h1>
           <p className="mt-1 text-sm text-navy/55">
-            {filtered.length} of {users.length} users
+            {filtered.length} of {users.length} users · Inactive / Remove = left organization (cannot log in). Attendance
+            history is kept with name and phone.
           </p>
         </div>
         {isSuper && (
@@ -337,7 +351,7 @@ export default function AdminUsersPage() {
             onClick={bulkDelete}
             className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
           >
-            {bulkBusy ? "Deleting…" : `Delete selected (${selectedCount})`}
+            {bulkBusy ? "Removing…" : `Remove selected (${selectedCount})`}
           </button>
         </div>
       )}
@@ -440,7 +454,7 @@ export default function AdminUsersPage() {
                             Edit
                           </Link>
                           <button type="button" onClick={() => remove(u.id)} className="admin-btn-danger admin-btn-sm">
-                            Delete
+                            Remove
                           </button>
                         </>
                       )}

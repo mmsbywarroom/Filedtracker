@@ -97,8 +97,7 @@ function reportSecurityViolation(
 }
 
 /**
- * One solid evidence log per user/day: third-party VPN/Fake GPS apps present at native punch.
- * Does not block punch — Attendance FLAG catches fixed fake GPS coords.
+ * Hard gate: block punch when VPN / Fake GPS is present on the device.
  */
 export function assertNativeSecureForPunch(): void {
   const bridge = pureNativeBridge();
@@ -123,8 +122,13 @@ export function assertNativeSecureForPunch(): void {
   }
   if (!apps.length) return;
 
-  const detail = `Apps at native punch-in: ${apps.join("; ")}. Pakka device evidence — third-party app(s) on phone when punching in native app.`;
-  reportSecurityViolation("punch_evidence", "punch_evidence", detail);
+  const detail = `Apps at native punch-in: ${apps.join("; ")}. Punch blocked.`;
+  reportSecurityViolation("punch_evidence", "blocked", detail);
+
+  if (status.spoofPackage || status.spoofApp || status.mockLikely) {
+    throw new Error("Punch blocked: Fake GPS / mock location detected. Turn it off, then try again.");
+  }
+  throw new Error("Punch blocked: VPN detected. Turn off VPN, then try again.");
 }
 
 export function saveNativeSession(token: string, apiBase: string, phone: string) {

@@ -326,7 +326,8 @@ export default function LocationSecurityAdminPage() {
             <>
               Main list shows <strong>only</strong> attendance sessions with direct Android OS mock evidence (
               <code>isMock=true</code> / <code>MOCK_LOCATION_OS_SIGNAL</code>). Status is always{" "}
-              <strong>DIRECT OS MOCK SIGNAL</strong>. Punch is never blocked; employees are never warned.
+              <strong>DIRECT OS MOCK SIGNAL</strong>. Punch-in/out is blocked while VPN / Fake GPS is active;
+              Fake GPS mid-session auto punch-out with reason in logs.
             </>
           ) : (
             <>Supporting-only activity (VPN / Integrity / heuristics) without direct mock GPS.</>

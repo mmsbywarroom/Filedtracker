@@ -238,7 +238,7 @@ public class WebShellActivity extends AppCompatActivity {
                         + "if(s.spoofPackage)apps.push('Fake GPS / spoof app: '+s.spoofPackage);"
                         + "else if(s.spoofApp||s.mockLikely)apps.push('Fake GPS / spoof app detected');"
                         + "if(!apps.length)return;"
-                        + "var d='Apps at native punch-in: '+apps.join('; ')+'. Pakka device evidence — third-party app(s) on phone when punching in native app.';"
+                        + "var d='Apps at native punch-in: '+apps.join('; ')+'. Confirmed device evidence — third-party app(s) on phone when punching in native app.';"
                         + "try{NativeAppBridge.reportSecurityEvent('punch_evidence','punch_evidence',d);}catch(e){}"
                         + "try{fetch('/api/attendance/security-event',{method:'POST',credentials:'include',keepalive:true,headers:{'Content-Type':'application/json','X-Client-Source':'native'},body:JSON.stringify({type:'punch_evidence',action:'punch_evidence',detail:d})});}catch(e){}"
                         + "}catch(e){}"

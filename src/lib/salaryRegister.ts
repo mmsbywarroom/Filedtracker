@@ -22,13 +22,19 @@ export function istClock(d: Date | null) {
 
 function shortReason(reason: string) {
   const t = reason
-    .replace(/^No punch-in on this date$/i, "No punch")
+    .replace(/^No punch-in on this date — marked Absent after 1:00 PM$/i, "No punch")
+    .replace(/^No punch-in yet — becomes Absent after 1:00 PM if still no punch$/i, "Pending till 1:00")
     .replace(/^No punch-in yet — marked Absent after 1:00 PM$/i, "Pending till 1:00")
     .replace(/^Approved leave for this date$/i, "Approved leave")
     .replace(/^Holiday \([^)]+\):\s*/i, "Holiday: ")
     .replace(/^Marked manually by admin$/i, "Manual")
+    .replace(/^Present: first punch (.+?) \(by 10:30\).*/i, "On time $1")
+    .replace(/^Present: first punch (.+?) \(after 10:30.+/i, "Late OK $1")
+    .replace(/^Half-day: first punch (.+?) \(at\/after 1:00 PM.+/i, "After 1:00 $1")
+    .replace(/^Half-day: first punch (.+?) \(after 10:30.+/i, "Under 6.5h $1")
+    .replace(/^Absent: first punch (.+?) \(by 10:30\).+/i, "Under 6.5h $1")
     .replace(/^First punch (.+) \(after 1:00\) = absent.*/i, "Late punch $1")
-    .replace(/^First punch (.+) but only .*/i, "Under 6h · $1");
+    .replace(/^First punch (.+) but only .*/i, "Under hours · $1");
   return t.length > 48 ? `${t.slice(0, 46)}…` : t;
 }
 

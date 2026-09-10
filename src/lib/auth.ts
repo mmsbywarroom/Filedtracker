@@ -147,6 +147,11 @@ export async function getUserSessionFromRequest(req?: Request): Promise<SessionP
 export async function requireUser(req?: Request) {
   const s = await getUserSessionFromRequest(req);
   if (!s || s.role !== "user" || s.kind === "rally") return null;
+  const user = await prisma.user.findFirst({
+    where: { id: s.sub, isActive: true },
+    select: { id: true },
+  });
+  if (!user) return null;
   return s;
 }
 

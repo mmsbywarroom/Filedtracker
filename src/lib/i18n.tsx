@@ -36,7 +36,7 @@ const dict = {
     inProgress: "In progress",
     live: "Live",
     punchStart: "Punch in to start your travel footprint.",
-    punchInWindow: "Punch in is only allowed between 5:00 AM and 1:00 PM (IST).",
+    punchInWindow: "Punch in is allowed from 5:00 AM IST onward (including after 1:00 PM).",
     lookCamera: "Look at the camera as you would to unlock your phone.",
     camStarting: "Camera opening…",
     faceLocked: "Face locked",
@@ -99,6 +99,10 @@ const dict = {
     gpsLocating: "Getting your location…",
     gpsSpoofAutoOut:
       "Your session was ended — fake or invalid GPS was detected. Turn off location spoofing apps and punch again from your real field location.",
+    fakeGpsAutoOut:
+      "You were punched out because Fake GPS / mock location was detected. Turn it off completely, then punch in again.",
+    vpnAutoOut:
+      "You were punched out because VPN was detected. Turn off VPN, then punch in again.",
     gpsOffFlag: "You were punched out because GPS was turned off. Keep Location on while you are punched in.",
     gpsOffTitle: "Punched out because GPS was turned off",
     autoPunchOutLogs: "Auto punch-out",
@@ -190,7 +194,7 @@ const dict = {
     inProgress: "ਚਾਲੂ",
     live: "ਲਾਈਵ",
     punchStart: "ਰਸਤਾ ਸ਼ੁਰੂ ਕਰਨ ਲਈ ਪੰਚ ਇਨ ਕਰੋ",
-    punchInWindow: "ਪੰਚ ਇਨ ਸਿਰਫ਼ ਸਵੇਰੇ 5:00 ਤੋਂ ਦੁਪਹਿਰ 1:00 ਵਜੇ ਤੱਕ (IST) ਕੀਤਾ ਜਾ ਸਕਦਾ ਹੈ।",
+    punchInWindow: "ਪੰਚ ਇਨ ਸਵੇਰੇ 5:00 ਵਜੇ ਤੋਂ (IST) ਅੱਗੇ ਮਨਜ਼ੂਰ ਹੈ (ਦੁਪਹਿਰ 1:00 ਤੋਂ ਬਾਅਦ ਵੀ)।",
     lookCamera: "ਫੋਨ ਅਨਲਾਕ ਵਾਂਗ ਕੈਮਰਾ ਵੱਲ ਵੇਖੋ",
     camStarting: "ਕੈਮਰਾ ਖੁੱਲ ਰਿਹਾ…",
     faceLocked: "ਚਿਹਰਾ ਲਾਕ",
@@ -253,6 +257,10 @@ const dict = {
     gpsLocating: "ਤੁਹਾਡੀ ਥਾਂ ਲੱਭੀ ਜਾ ਰਹੀ ਹੈ…",
     gpsSpoofAutoOut:
       "ਤੁਹਾਡਾ ਸੈਸ਼ਨ ਬੰਦ ਕਰ ਦਿੱਤਾ ਗਿਆ — ਫੇਕ ਜਾਂ ਗਲਤ GPS ਮਿਲਿਆ। Location spoofing ਐਪ ਬੰਦ ਕਰੋ ਅਤੇ ਅਸਲ ਫੀਲਡ ਥਾਂ ਤੋਂ ਦੁਬਾਰਾ ਪੰਚ ਕਰੋ।",
+    fakeGpsAutoOut:
+      "ਫੇਕ GPS / mock location ਮਿਲਣ ਕਰਕੇ ਤੁਹਾਡਾ ਪੰਚ ਆਉਟ ਹੋ ਗਿਆ। ਇਸ ਨੂੰ ਪੂਰੀ ਤਰ੍ਹਾਂ ਬੰਦ ਕਰੋ, ਫਿਰ ਦੁਬਾਰਾ ਪੰਚ ਇਨ ਕਰੋ।",
+    vpnAutoOut:
+      "VPN ਮਿਲਣ ਕਰਕੇ ਤੁਹਾਡਾ ਪੰਚ ਆਉਟ ਹੋ ਗਿਆ। VPN ਬੰਦ ਕਰੋ, ਫਿਰ ਦੁਬਾਰਾ ਪੰਚ ਇਨ ਕਰੋ।",
     gpsOffFlag: "GPS ਬੰਦ ਹੋਣ ਕਰਕੇ ਤੁਹਾਡਾ ਪੰਚ ਆਉਟ ਹੋ ਗਿਆ। ਪੰਚ ਇਨ ਦੌਰਾਨ Location ਚਾਲੂ ਰੱਖੋ।",
     gpsOffTitle: "GPS ਬੰਦ ਹੋਣ ਕਰਕੇ ਪੰਚ ਆਉਟ",
     autoPunchOutLogs: "ਆਟੋ ਪੰਚ-ਆਉਟ",

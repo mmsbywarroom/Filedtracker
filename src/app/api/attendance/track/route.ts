@@ -136,6 +136,7 @@ export async function POST(req: Request) {
       select: { lat: true, lng: true, recordedAt: true, accuracy: true },
     });
     spreadUpdate.distanceMeters = sessionTravelMeters({
+      stored: open.distanceMeters,
       punchIn: { lat: open.punchInLat, lng: open.punchInLng },
       punchInAt: open.punchInAt,
       points: allPoints,

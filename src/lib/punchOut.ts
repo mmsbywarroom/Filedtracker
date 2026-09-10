@@ -5,7 +5,15 @@ export const AUTO_PUNCH_OUT_MS = 12 * 60 * 60 * 1000;
 /** Gap with no track points before a new punch-in may start a fresh session (screen-off is OK). */
 export const RE_PUNCH_GAP_MS = 45 * 60 * 1000;
 
-export type PunchOutReason = "manual" | "gps_off" | "auto_12h" | "auto_geofence" | "tracking_gap" | "gps_spoof";
+export type PunchOutReason =
+  | "manual"
+  | "gps_off"
+  | "auto_12h"
+  | "auto_geofence"
+  | "tracking_gap"
+  | "gps_spoof"
+  | "fake_gps"
+  | "vpn";
 
 export async function closeOpenAttendance(opts: {
   userId: string;
@@ -29,6 +37,7 @@ export async function closeOpenAttendance(opts: {
   const lat = Number.isFinite(opts.lat) ? opts.lat : lastPoint?.lat ?? open.punchInLat;
   const lng = Number.isFinite(opts.lng) ? opts.lng : lastPoint?.lng ?? open.punchInLng;
   const path = sessionTravelMeters({
+    stored: open.distanceMeters,
     punchIn: { lat: open.punchInLat, lng: open.punchInLng },
     punchInAt: open.punchInAt,
     points: open.points.map((p) => ({
@@ -68,6 +77,12 @@ export async function closeOpenAttendance(opts: {
   }
   if (opts.reason === "gps_spoof") {
     address = opts.address || "Auto punch-out: fake or invalid GPS detected";
+  }
+  if (opts.reason === "fake_gps") {
+    address = opts.address || "Auto punch-out: Fake GPS (mock location) detected after punch-in";
+  }
+  if (opts.reason === "vpn") {
+    address = opts.address || "Auto punch-out: VPN detected after punch-in";
   }
 
   return prisma.attendance.update({

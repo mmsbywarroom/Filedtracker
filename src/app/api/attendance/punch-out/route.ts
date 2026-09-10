@@ -8,6 +8,7 @@ import { assertInsideCallCenterSite, isCallCenterDesignation } from "@/lib/callC
 import { closeOpenAttendance } from "@/lib/punchOut";
 import { resolveAndMatchPunchFace } from "@/lib/resolvePunchFace";
 import { assertPanIndiaPunchLocation, isPanIndiaPunchPhone } from "@/lib/panIndiaPunch";
+import { punchSecurityBlockFromBody } from "@/lib/punchSecurityGate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,6 +19,13 @@ export async function POST(req: Request) {
     const s = await requireUser(req);
     if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const body = await req.json().catch(() => null);
+    const securityBlock = punchSecurityBlockFromBody(body);
+    if (securityBlock) {
+      return NextResponse.json(
+        { error: securityBlock.error, code: securityBlock.code },
+        { status: 403 }
+      );
+    }
     const lat = Number(body?.lat);
     const lng = Number(body?.lng);
     const address = typeof body?.address === "string" ? body.address.slice(0, 200) : null;

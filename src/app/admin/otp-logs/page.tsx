@@ -120,7 +120,7 @@ export default function OtpLogsAdminPage() {
       <div>
         <h1 className="text-xl font-semibold text-navy">OTP request logs</h1>
         <p className="mt-1 max-w-3xl text-sm text-navy/60">
-          Forensic log: kis number pe OTP, kis device ID se request, aur pehle se known ho to kiska device.
+          Forensic log of OTP SMS requests: target phone, device install ID, Android ID, IP, and known device owner when available.
           Super admin only. Limits: ~90s cooldown, max 3 OTP/hour per number. Needs APK 1.4.3+ for Android ID.
         </p>
       </div>

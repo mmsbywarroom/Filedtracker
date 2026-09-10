@@ -20,7 +20,7 @@ export async function GET(req: Request) {
 
   const where: Record<string, unknown> = {
     userId: { in: ids },
-    punchOutReason: { in: ["auto_12h", "auto_geofence"] },
+    punchOutReason: { in: ["auto_12h", "auto_geofence", "fake_gps", "vpn", "gps_spoof"] },
   };
   if (date) {
     const start = new Date(`${date}T00:00:00+05:30`);
@@ -70,14 +70,27 @@ export async function GET(req: Request) {
       punchOutAt: r.punchOutAt,
       lat: r.punchOutLat,
       lng: r.punchOutLng,
-      place: r.punchOutAddress || (r.punchOutReason === "auto_geofence"
-        ? "Left Call Center 1000 m boundary"
-        : "Auto punch-out after 12 hours without punch-out"),
+      place: r.punchOutAddress
+        || (r.punchOutReason === "auto_geofence"
+          ? "Left Call Center 1000 m boundary"
+          : r.punchOutReason === "fake_gps"
+            ? "Fake GPS (mock location) detected"
+            : r.punchOutReason === "vpn"
+              ? "VPN detected"
+              : r.punchOutReason === "gps_spoof"
+                ? "Fake or invalid GPS detected"
+                : "Auto punch-out after 12 hours without punch-out"),
       reason: r.punchOutReason,
       why:
         r.punchOutReason === "auto_geofence"
           ? "Left office 1000 m boundary without punch-out"
-          : "No punch-out within 12 hours of punch-in",
+          : r.punchOutReason === "fake_gps"
+            ? "Fake GPS / mock location used after punch-in — session auto closed"
+            : r.punchOutReason === "vpn"
+              ? "VPN detected — session auto closed"
+              : r.punchOutReason === "gps_spoof"
+                ? "Fake or invalid GPS detected — session auto closed"
+                : "No punch-out within 12 hours of punch-in",
     }));
 
   return NextResponse.json({ logs });

@@ -131,9 +131,10 @@ export default function SecurityViolationsPage() {
       <p className="text-xs uppercase tracking-[0.2em] text-teal">Security</p>
       <h1 className="text-2xl font-semibold">VPN / Fake GPS / Spoof apps</h1>
       <p className="mt-1 text-sm text-navy/55">
-        Ek user ka din ka <strong>ek hi</strong> punch-in evidence log: native app se punch ke time pe phone pe
-        kaunsa third-party VPN / Fake GPS / spoof app tha (app name + package + coords). Punch block nahi hota —
-        fake GPS <em>use</em> Attendance → Flag se pakda jata hai (8× same 30-min lat/lng).
+        One punch-in evidence log per user per day from the native app: which third-party VPN / Fake GPS / spoof app
+        was on the phone at punch time (app name + package + coordinates). Punch-in and punch-out are blocked while
+        VPN or Fake GPS is active. Fake GPS used after punch-in triggers auto punch-out (see Auto punch-out logs).
+        Attendance Flag still marks pinned same lat/lng across 30-min checks (8+).
       </p>
 
       <div className="mt-4 flex flex-wrap items-end gap-3">

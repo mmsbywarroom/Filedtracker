@@ -55,17 +55,37 @@ enum ApiClient {
         ])
     }
 
-    static func punchIn(lat: Double, lng: Double, accuracy: Double, descriptor: [Double], image: String) async throws -> [String: Any] {
+    static func punchIn(
+        lat: Double,
+        lng: Double,
+        accuracy: Double,
+        descriptor: [Double],
+        image: String,
+        vpnActive: Bool = false,
+        isMock: Bool = false
+    ) async throws -> [String: Any] {
         try await authed(path: "/api/attendance", method: "POST", body: [
             "lat": lat, "lng": lng, "accuracy": accuracy,
             "descriptor": descriptor, "image": image,
+            "vpn": vpnActive, "vpnActive": vpnActive,
+            "isMock": isMock, "mockLocation": isMock, "spoofApp": isMock,
         ])
     }
 
-    static func punchOut(lat: Double, lng: Double, accuracy: Double, descriptor: [Double], image: String) async throws -> [String: Any] {
+    static func punchOut(
+        lat: Double,
+        lng: Double,
+        accuracy: Double,
+        descriptor: [Double],
+        image: String,
+        vpnActive: Bool = false,
+        isMock: Bool = false
+    ) async throws -> [String: Any] {
         try await authed(path: "/api/attendance/punch-out", method: "POST", body: [
             "lat": lat, "lng": lng, "accuracy": accuracy,
             "descriptor": descriptor, "image": image,
+            "vpn": vpnActive, "vpnActive": vpnActive,
+            "isMock": isMock, "mockLocation": isMock, "spoofApp": isMock,
         ])
     }
 

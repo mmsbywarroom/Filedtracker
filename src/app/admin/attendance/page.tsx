@@ -409,12 +409,11 @@ export default function AttendanceModulePage() {
       <p className="text-xs uppercase tracking-[0.2em] text-teal">Attendance</p>
       <h1 className="text-2xl font-semibold">Date-wise attendance</h1>
       <p className="mt-1 text-sm text-navy/55">
-        Auto: punch by 10:30 + 6–12h = Present · after 10:30 to 1:00 = Half-day · after 1:00 PM no punch = Absent ·
-        until 1:00 PM, no punch stays Pending. Approved leave = Leave. Holiday for a designation: full Present (by 10:30 +
-        ≥6h) stays Present; half-day / incomplete / no punch = Leave (Holiday). Multiple punch-ins
-        the same day (e.g. after GPS/phone off) are added together for hours. Manual change requires a reason. Flag (native punch-in
-        only): 8+ thirty-minute
-        location checks at the same lat/lng during a session (no block — admin review only).
+        Auto: by 10:30 + ≥6.5h = Present · after 10:30 before 1:00 + ≥6.5h combined = Present · after 10:30 under 6.5h =
+        Half-day · first punch only after 1:00 = Half-day · no punch after 1:00 = Absent · until 1:00 no punch = Pending.
+        Morning + afternoon sessions are added for hours. Punch-in allowed from 5:00 AM (including after 1:00). Each row
+        shows a clear reason. Holiday: full Present stays Present; else Leave. Manual change needs a reason. Flag (native):
+        8+ thirty-minute checks at same lat/lng (admin review only).
       </p>
 
       {intervalHealth ? (
@@ -810,7 +809,7 @@ export default function AttendanceModulePage() {
                         disabled={flagBusy === r.userId}
                         onClick={() => void openFlagDetail(r.userId, r.name, { showAll: true })}
                         className="mt-1 block text-left text-[10px] font-semibold text-navy/55 underline decoration-navy/25 underline-offset-2 hover:text-navy disabled:opacity-50"
-                        title="Har 30-min check ke coordinates dekho"
+                        title="View coordinates for each 30-min location check"
                       >
                         {flagBusy === r.userId
                           ? "Loading…"

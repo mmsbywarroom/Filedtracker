@@ -137,7 +137,7 @@ export default function AdminRallyUsersPage() {
 
   async function uploadCsv(file: File) {
     if (!rallyId) {
-      setMsg("Pehle rally create karo, phir dropdown se rally choose karo.");
+      setMsg("Create a rally first, then select it from the dropdown.");
       return;
     }
     setMsg("Uploading…");
@@ -160,7 +160,7 @@ export default function AdminRallyUsersPage() {
   async function saveUser(e: FormEvent) {
     e.preventDefault();
     if (!rallyId) {
-      setMsg("Pehle rally create karo, phir dropdown se rally choose karo.");
+      setMsg("Create a rally first, then select it from the dropdown.");
       return;
     }
     setBusy(true);
@@ -228,7 +228,7 @@ export default function AdminRallyUsersPage() {
       <p className="admin-page-kicker">Rally</p>
       <h1 className="admin-page-title">Rally users</h1>
       <p className="admin-page-sub">
-        Step 1: Create rally · Step 2: Choose rally from dropdown · Step 3: CSV upload / add user — sab selected rally ke liye.
+        Step 1: Create rally · Step 2: Choose rally from the dropdown · Step 3: CSV upload / add user — all for the selected rally.
       </p>
 
       <section className="admin-panel mt-5 p-4">
@@ -274,7 +274,7 @@ export default function AdminRallyUsersPage() {
       <section className="admin-panel mt-4 p-4">
         <h2 className="text-sm font-semibold">Select rally</h2>
         <p className="mt-1 text-xs text-navy/55">
-          Jo rally yahan choose karoge — usi ke users neeche dikhenge, usi mein CSV jayegi, aur naya user bhi usi rally mein add hoga.
+          The rally you select here controls the user list below, CSV import, and where new users are added.
         </p>
         <RallyPicker
           label="Rally"
@@ -288,7 +288,7 @@ export default function AdminRallyUsersPage() {
       <section className="admin-panel mt-4 p-4">
         <h2 className="text-sm font-semibold">CSV upload</h2>
         <p className="mt-1 text-xs text-navy/55">
-          Selected rally mein upload hoga. Columns: Zone, District, Ac Name, Village/Ward, User Name, Number, Vehicle No, POC Name, POC Number, Vehicle Type
+          Uploads go to the selected rally. Columns: Zone, District, Ac Name, Village/Ward, User Name, Number, Vehicle No, POC Name, POC Number, Vehicle Type
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
           <a href="/sample-rally-users.csv" download className="admin-btn-secondary">
@@ -313,7 +313,7 @@ export default function AdminRallyUsersPage() {
 
       <section className="admin-panel mt-4 p-4">
         <h2 className="text-sm font-semibold">{editing ? "Edit user" : "Create user"}</h2>
-        <p className="mt-1 text-xs text-navy/55">Selected rally mein user add hoga.</p>
+        <p className="mt-1 text-xs text-navy/55">New users are added to the selected rally.</p>
         <form onSubmit={saveUser} className="mt-3 grid gap-3 md:grid-cols-3 lg:grid-cols-5">
           {field("name", "User Name")}
           {field("phone", "Number")}
@@ -380,7 +380,7 @@ export default function AdminRallyUsersPage() {
           Delete all
         </button>
         <p className="text-sm text-navy/55">
-          {rallyId ? `${users.length} users · selected rally` : "Rally choose karo"}
+          {rallyId ? `${users.length} users · selected rally` : "Select a rally"}
         </p>
       </div>
 

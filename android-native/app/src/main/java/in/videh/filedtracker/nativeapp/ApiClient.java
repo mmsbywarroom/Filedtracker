@@ -236,9 +236,17 @@ public final class ApiClient {
         }
     }
 
-    public JSONObject punchIn(double lat, double lng, Double accuracy, JSONArray descriptor, String image)
+    public JSONObject punchIn(
+            double lat,
+            double lng,
+            Double accuracy,
+            JSONArray descriptor,
+            String image,
+            boolean vpnActive,
+            boolean isMock,
+            boolean spoofApp)
             throws IOException, ApiError {
-        JSONObject body = punchBody(lat, lng, accuracy, descriptor, image);
+        JSONObject body = punchBody(lat, lng, accuracy, descriptor, image, vpnActive, isMock, spoofApp);
         try (Response res =
                 executeAuthFailover("/api/attendance", "POST", RequestBody.create(body.toString(), JSON))) {
             return readJson(res);
@@ -251,9 +259,22 @@ public final class ApiClient {
         }
     }
 
-    public JSONObject punchOut(double lat, double lng, Double accuracy, JSONArray descriptor, String image)
+    public JSONObject punchIn(double lat, double lng, Double accuracy, JSONArray descriptor, String image)
             throws IOException, ApiError {
-        JSONObject body = punchBody(lat, lng, accuracy, descriptor, image);
+        return punchIn(lat, lng, accuracy, descriptor, image, false, false, false);
+    }
+
+    public JSONObject punchOut(
+            double lat,
+            double lng,
+            Double accuracy,
+            JSONArray descriptor,
+            String image,
+            boolean vpnActive,
+            boolean isMock,
+            boolean spoofApp)
+            throws IOException, ApiError {
+        JSONObject body = punchBody(lat, lng, accuracy, descriptor, image, vpnActive, isMock, spoofApp);
         try (Response res = executeAuthFailover(
                 "/api/attendance/punch-out", "POST", RequestBody.create(body.toString(), JSON))) {
             return readJson(res);
@@ -266,7 +287,20 @@ public final class ApiClient {
         }
     }
 
-    private static JSONObject punchBody(double lat, double lng, Double accuracy, JSONArray descriptor, String image)
+    public JSONObject punchOut(double lat, double lng, Double accuracy, JSONArray descriptor, String image)
+            throws IOException, ApiError {
+        return punchOut(lat, lng, accuracy, descriptor, image, false, false, false);
+    }
+
+    private static JSONObject punchBody(
+            double lat,
+            double lng,
+            Double accuracy,
+            JSONArray descriptor,
+            String image,
+            boolean vpnActive,
+            boolean isMock,
+            boolean spoofApp)
             throws IOException {
         JSONObject body = new JSONObject();
         try {
@@ -275,6 +309,9 @@ public final class ApiClient {
             if (accuracy != null) body.put("accuracy", accuracy);
             if (descriptor != null && descriptor.length() > 0) body.put("descriptor", descriptor);
             body.put("image", image);
+            body.put("vpnActive", vpnActive);
+            body.put("isMock", isMock);
+            body.put("spoofApp", spoofApp);
         } catch (Exception e) {
             throw new IOException(e);
         }

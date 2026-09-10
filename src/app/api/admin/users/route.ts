@@ -163,6 +163,27 @@ export async function DELETE(req: Request) {
   const allowed = scoped.map((u) => u.id);
   if (!allowed.length) return NextResponse.json({ deleted: 0, ok: true });
 
-  const result = await prisma.user.deleteMany({ where: { id: { in: allowed } } });
-  return NextResponse.json({ deleted: result.count, ok: true });
+  // Soft-delete: keep attendance history; block login / remove from active org list.
+  const result = await prisma.user.updateMany({
+    where: { id: { in: allowed } },
+    data: { isActive: false },
+  });
+  const openSessions = await prisma.attendance.findMany({
+    where: { userId: { in: allowed }, punchOutAt: null },
+    select: { id: true, punchInLat: true, punchInLng: true, lastKnownLat: true, lastKnownLng: true },
+  });
+  const now = new Date();
+  for (const sess of openSessions) {
+    await prisma.attendance.update({
+      where: { id: sess.id },
+      data: {
+        punchOutAt: now,
+        punchOutLat: sess.lastKnownLat ?? sess.punchInLat,
+        punchOutLng: sess.lastKnownLng ?? sess.punchInLng,
+        punchOutReason: "manual",
+        punchOutAddress: "User removed from organization (inactive)",
+      },
+    });
+  }
+  return NextResponse.json({ deleted: result.count, ok: true, softDeleted: true });
 }

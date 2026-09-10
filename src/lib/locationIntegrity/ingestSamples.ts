@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { closeOpenAttendance } from "@/lib/punchOut";
 import { findImpossibleTravel } from "./impossibleTravel";
 import { computeRiskScore } from "./riskScore";
 
@@ -370,7 +371,23 @@ export async function ingestLocationSamples(opts: {
         vpnActive: opts.samples.some((s) => Boolean(s.vpnActive)),
       });
     } catch {
-      // never affect attendance
+      // never affect attendance path errors for summary
+    }
+  }
+
+  // Policy: Fake GPS mid-session → auto punch-out (server-side backup if client missed it).
+  if (mockCount > 0) {
+    try {
+      const mockSample = opts.samples.find((s) => Boolean(s.isMock));
+      await closeOpenAttendance({
+        userId: opts.userId,
+        lat: Number(mockSample?.lat) || 0,
+        lng: Number(mockSample?.lng) || 0,
+        reason: "fake_gps",
+        address: "Auto punch-out: Fake GPS (mock location) detected after punch-in",
+      });
+    } catch {
+      // ignore
     }
   }
 
