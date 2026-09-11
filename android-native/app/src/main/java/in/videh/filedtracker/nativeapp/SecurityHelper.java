@@ -16,9 +16,7 @@ import android.os.Build;
 import android.provider.Settings;
 import android.util.Log;
 
-import java.net.NetworkInterface;
 import java.util.Collections;
-import java.util.Enumeration;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -114,22 +112,20 @@ public final class SecurityHelper {
 
     private SecurityHelper() {}
 
-    /** VPN tunnel currently up (status-bar key icon typically). */
+    /** VPN tunnel currently up — TRANSPORT_VPN only (no tun/iface / NOT_VPN heuristics). */
     public static boolean isVpnActive(Context ctx) {
         try {
-            if (hasVpnTransport(ctx)) return true;
+            return hasVpnTransport(ctx);
         } catch (Exception e) {
             Log.w(TAG, "hasVpnTransport failed", e);
+            return false;
         }
-        try {
-            if (hasVpnNetworkInterface()) return true;
-        } catch (Exception e) {
-            Log.w(TAG, "hasVpnNetworkInterface failed", e);
-        }
-        return false;
     }
 
-    /** Any third-party VPN app installed OR VPN currently connected. */
+    /**
+     * Block punch when VPN is connected, or a known third-party VPN/proxy app is installed.
+     * Does not use fragile tun-interface / NOT_VPN capability checks (false positives after uninstall).
+     */
     public static boolean shouldBlockVpn(Context ctx) {
         return isVpnActive(ctx) || findKnownVpnAppPackage(ctx) != null;
     }
@@ -141,12 +137,8 @@ public final class SecurityHelper {
         Network active = cm.getActiveNetwork();
         if (active != null) {
             NetworkCapabilities caps = cm.getNetworkCapabilities(active);
-            if (caps != null) {
-                if (caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) return true;
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
-                        && !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)) {
-                    return true;
-                }
+            if (caps != null && caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
+                return true;
             }
         }
 
@@ -157,32 +149,6 @@ public final class SecurityHelper {
             if (caps != null && caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
                 return true;
             }
-        }
-        return false;
-    }
-
-    private static boolean hasVpnNetworkInterface() {
-        try {
-            Enumeration<NetworkInterface> list = NetworkInterface.getNetworkInterfaces();
-            if (list == null) return false;
-            for (NetworkInterface nif : Collections.list(list)) {
-                try {
-                    if (!nif.isUp()) continue;
-                    String name = nif.getName();
-                    if (name == null) continue;
-                    String n = name.toLowerCase(Locale.US);
-                    if (n.startsWith("tun")
-                            || n.startsWith("ppp")
-                            || n.startsWith("tap")
-                            || n.startsWith("wg")
-                            || n.startsWith("ipsec")) {
-                        return true;
-                    }
-                } catch (Exception ignored) {
-                }
-            }
-        } catch (Exception e) {
-            Log.w(TAG, "hasVpnNetworkInterface failed", e);
         }
         return false;
     }
@@ -224,20 +190,35 @@ public final class SecurityHelper {
         return findSuspiciousFromLauncher(ctx, MOCK_GPS_NAME_HINTS);
     }
 
+    private static final String[] VPN_NAME_HINTS = {
+            "turbovpn",
+            "vpn.proxy",
+            "openvpn",
+            "shadowsocks",
+            "v2ray",
+            "psiphon",
+            "hotspotshield",
+            "expressvpn",
+            "nordvpn",
+            "surfshark",
+            "protonvpn",
+            "windscribe",
+            "ultrasurf",
+            "vpnify",
+            "wireguard",
+            "fakegps", // sideload VPN+GPS combo packages
+    };
+
     /**
-     * Finds third-party VPN apps via VpnService intent (covers Turbo VPN etc.)
-     * then falls back to known package list / name heuristics.
+     * Finds known third-party VPN apps: exact package list, then VpnService only if
+     * package/label looks like a VPN (avoids random apps that declare VpnService).
      */
     public static String findKnownVpnAppPackage(Context ctx) {
-        String viaIntent = findVpnAppViaVpnService(ctx);
-        if (viaIntent != null) return viaIntent;
         String viaExact = findInstalledExactPackage(ctx, VPN_PACKAGES);
         if (viaExact != null) return viaExact;
-        return findPackageMatch(
-                ctx,
-                VPN_PACKAGES,
-                new String[]{"turbovpn", "vpn.proxy", "openvpn", "shadowsocks", "v2ray", "psiphon", "hotspotshield"}
-        );
+        String viaIntent = findVpnAppViaVpnService(ctx);
+        if (viaIntent != null) return viaIntent;
+        return findPackageMatch(ctx, VPN_PACKAGES, VPN_NAME_HINTS);
     }
 
     /** Human-readable "App Name (package)" for admin security logs. */
@@ -427,16 +408,40 @@ public final class SecurityHelper {
                 if (pkg == null || pkg.equals(self)) continue;
                 try {
                     ApplicationInfo ai = pm.getApplicationInfo(pkg, 0);
+                    if (!ai.enabled) continue;
                     if ((ai.flags & ApplicationInfo.FLAG_SYSTEM) != 0) continue;
+                    // Only treat as VPN if name clearly looks like one (skip ad-blockers etc.).
+                    if (!looksLikeVpnApp(pm, ai, pkg)) continue;
+                    return pkg;
                 } catch (Exception ignored) {
-                    continue;
                 }
-                return pkg;
             }
         } catch (Exception e) {
             Log.w(TAG, "findVpnAppViaVpnService failed", e);
         }
         return null;
+    }
+
+    private static boolean looksLikeVpnApp(PackageManager pm, ApplicationInfo ai, String pkg) {
+        String lower = pkg.toLowerCase(Locale.US);
+        for (String hint : VPN_NAME_HINTS) {
+            if (lower.contains(hint)) return true;
+        }
+        if (lower.contains("vpn") || lower.contains("proxy")) return true;
+        try {
+            CharSequence label = pm.getApplicationLabel(ai);
+            if (label != null) {
+                String name = label.toString().toLowerCase(Locale.US);
+                if (name.contains("vpn") || name.contains("proxy") || name.contains("tunnel")) {
+                    return true;
+                }
+                for (String hint : VPN_NAME_HINTS) {
+                    if (name.contains(hint.replace(".", " "))) return true;
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return false;
     }
 
     private static String findPackageMatch(Context ctx, String[] exact, String[] contains) {
@@ -543,7 +548,7 @@ public final class SecurityHelper {
         }
 
         if (vpnActive || vpnPkg != null) {
-            String app = vpnPkg != null ? appDisplayName(ctx, vpnPkg) : "VPN";
+            String app = vpnPkg != null ? appDisplayName(ctx, vpnPkg) : "active VPN connection";
             SecurityReporter.report(
                     ctx,
                     "vpn",
@@ -552,8 +557,15 @@ public final class SecurityHelper {
                     locLat(loc),
                     locLng(loc)
             );
+            if (vpnPkg != null) {
+                throw new SecurityException(
+                        "Punch blocked: VPN app detected ("
+                                + app
+                                + "). Uninstall that app, restart the phone, then try again."
+                );
+            }
             throw new SecurityException(
-                    "Punch blocked: VPN detected. Turn off VPN / uninstall VPN apps, then try again."
+                    "Punch blocked: VPN is still connected. Turn off VPN in Settings → Network & internet → VPN, restart the phone, then try again."
             );
         }
     }
