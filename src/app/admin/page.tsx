@@ -279,7 +279,7 @@ function CellBtn({
 function dashboardSummaryCards(data: Dash | null, date: string): PdfSummaryCard[] {
   return [
     { label: "Total users", value: data?.totalUsers || 0, background: "#0a1628", hint: "All users in scope" },
-    { label: "Inactive", value: data?.inactiveUsers || 0, background: "#3d4f66" },
+    { label: "Inactive", value: data?.inactiveUsers || 0, background: "#3d4f66", hint: "Not in Absent counts" },
     { label: "Face registered", value: data?.faceRegisteredUsers || 0, background: "#7c3aed" },
     { label: "Live now", value: data?.liveNow || 0, background: "#059669" },
     { label: "Punched today", value: data?.activeToday || 0, background: "#c45c12" },
@@ -606,7 +606,7 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
           className="bg-navy/70"
           label="Inactive"
           value={data?.inactiveUsers || 0}
-          hint="Tap to view list"
+          hint="Not counted in Absent / Present / Half-day"
           active={metric === "inactive" && !groupFilter}
           onClick={() => loadMetric("inactive")}
         />

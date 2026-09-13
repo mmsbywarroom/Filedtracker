@@ -75,6 +75,12 @@ export default function AdminShell({ children }: { children: ReactNode }) {
     },
     { href: "/admin/records", label: t("dailyRecords"), match: (p: string) => p.startsWith("/admin/records"), group: "Attendance" },
     { href: "/admin/leaves", label: t("leaveModule"), match: (p: string) => p.startsWith("/admin/leaves"), group: "Attendance" },
+    {
+      href: "/admin/attendance-approvals",
+      label: t("attendanceApprovals"),
+      match: (p: string) => p.startsWith("/admin/attendance-approvals"),
+      group: "Attendance",
+    },
     ...(isSuper
       ? [
           {

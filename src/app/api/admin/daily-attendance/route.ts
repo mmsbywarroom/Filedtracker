@@ -5,14 +5,17 @@ import { prisma } from "@/lib/prisma";
 import { canSeeUser, userScopeWhere } from "@/lib/hierarchy";
 import {
   PRESENT_MIN_HOURS,
-  hoursWorkedOnDay,
   istDayBounds,
   istDateString,
   resolveDayAttendanceStatus,
   statusLabel,
 } from "@/lib/dailyAttendance";
 import { isUnrestrictedPunchPhone } from "@/lib/punchInWindow";
-import { adminPresentLabel, adminPresentRemark, ensureAdminPresentPunch, removeAdminPresentPunch, closeOpenPunchForAdminLeave } from "@/lib/adminPresentPunch";
+import { isAttendanceEligibleOnDay } from "@/lib/userActiveOnDay";
+import {
+  applyManualAttendanceMark,
+  attendanceChangeReviewLevel,
+} from "@/lib/attendanceChangeApproval";
 import { holidayAppliesTo, holidayLeaveReason } from "@/lib/holidays";
 import { userPinnedFlagFromSessions, filterValidIntervalSnapshots } from "@/lib/attendanceIntervalFlag";
 import { isExactSamePunchInOut } from "@/lib/stationarySessions";
@@ -45,6 +48,8 @@ export async function GET(req: Request) {
       sectorAllotted: true,
       zone: true,
       district: true,
+      isActive: true,
+      deactivatedAt: true,
     },
   });
 
@@ -143,6 +148,13 @@ export async function GET(req: Request) {
 
   const allRows = users
     .filter((u) => canSeeUser(s.admin, u))
+    .filter((u) =>
+      isAttendanceEligibleOnDay({
+        isActive: u.isActive,
+        deactivatedAt: u.deactivatedAt,
+        dateYmd: date,
+      })
+    )
     .map((u) => {
       const sessions = punchesByUser.get(u.id) || [];
       const manual = markByUser.get(u.id);
@@ -325,7 +337,7 @@ export async function PATCH(req: Request) {
   }
 
   const { userId, date, status, note } = parsed.data;
-  const { dateOnly, start, end } = istDayBounds(date);
+  const { dateOnly } = istDayBounds(date);
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
@@ -336,62 +348,61 @@ export async function PATCH(req: Request) {
       district: true,
       assemblyName: true,
       cluster: true,
+      assemblies: true,
     },
   });
   if (!user || !canSeeUser(s.admin, user)) {
     return NextResponse.json({ error: "User not in your scope." }, { status: 403 });
   }
 
-  const sessions = await prisma.attendance.findMany({
-    where: { userId, punchInAt: { gte: start, lte: end } },
-    select: { punchInAt: true, punchOutAt: true },
-  });
-  const hours = hoursWorkedOnDay(sessions, date === istDateString() ? new Date() : end);
-  const adminLabel = adminPresentLabel(s.admin.name, s.admin.email);
-  const storedNote =
-    status === "present" ? `${adminPresentRemark(adminLabel)}. ${note}` : note;
+  const reviewLevel = attendanceChangeReviewLevel(s.admin.accessLevel, s.admin.isSuper);
 
-  if (status === "present") {
-    await ensureAdminPresentPunch({
-      userId,
-      dateYmd: date,
-      start,
-      end,
-      adminLabel,
-      note,
+  // Cluster / ALC → DLC approval; DLC → ZLC approval
+  if (reviewLevel) {
+    const existingMark = await prisma.dailyAttendanceMark.findUnique({
+      where: { userId_date: { userId, date: dateOnly } },
+      select: { status: true },
     });
-  } else if (status === "leave") {
-    await removeAdminPresentPunch({ userId, start, end });
-    await closeOpenPunchForAdminLeave({
-      userId,
-      start,
-      end,
-      adminLabel,
-      note,
+    await prisma.attendanceChangeRequest.updateMany({
+      where: { userId, date: dateOnly, status: "pending" },
+      data: { status: "cancelled" },
     });
-  } else {
-    await removeAdminPresentPunch({ userId, start, end });
+    const request = await prisma.attendanceChangeRequest.create({
+      data: {
+        userId,
+        date: dateOnly,
+        proposedStatus: status,
+        previousStatus: existingMark?.status || null,
+        note,
+        status: "pending",
+        requestedById: s.admin.id,
+        requestedByName: s.admin.name || "",
+        requestedByEmail: s.admin.email,
+        requestedByLevel: s.admin.accessLevel,
+        reviewLevel,
+      },
+    });
+    return NextResponse.json({
+      ok: true,
+      pendingApproval: true,
+      reviewLevel,
+      requestId: request.id,
+      message:
+        reviewLevel === "DLC"
+          ? "Sent to DLC for approval. Attendance will update after DLC approves."
+          : "Sent to ZLC for approval. Attendance will update after ZLC approves.",
+    });
   }
 
-  const mark = await prisma.dailyAttendanceMark.upsert({
-    where: { userId_date: { userId, date: dateOnly } },
-    create: {
-      userId,
-      date: dateOnly,
-      status,
-      source: "manual",
-      hoursWorked: hours,
-      note: storedNote,
-      markedBy: s.admin.id,
-    },
-    update: {
-      status,
-      source: "manual",
-      hoursWorked: hours,
-      note: storedNote,
-      markedBy: s.admin.id,
-    },
+  const mark = await applyManualAttendanceMark({
+    userId,
+    dateYmd: date,
+    status,
+    note,
+    adminId: s.admin.id,
+    adminName: s.admin.name,
+    adminEmail: s.admin.email,
   });
 
-  return NextResponse.json({ ok: true, mark });
+  return NextResponse.json({ ok: true, mark, pendingApproval: false });
 }

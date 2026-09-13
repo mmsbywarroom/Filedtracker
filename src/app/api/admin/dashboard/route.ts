@@ -12,6 +12,7 @@ import {
 } from "@/lib/dailyAttendance";
 import { holidayAppliesTo, holidayLeaveReason } from "@/lib/holidays";
 import { isUnrestrictedPunchPhone } from "@/lib/punchInWindow";
+import { isAttendanceEligibleOnDay } from "@/lib/userActiveOnDay";
 
 function groupCounts(
   users: { id: string; key: string; isActive: boolean; faceRegistered: boolean }[],
@@ -193,6 +194,7 @@ export async function GET(req: Request) {
         sectorAllotted: true,
         cluster: true,
         isActive: true,
+        deactivatedAt: true,
         faceRegisteredAt: true,
       },
     });
@@ -258,6 +260,24 @@ export async function GET(req: Request) {
     const markByUser = new Map(allMarks.map((m) => [m.userId, m]));
     const approvedLeaveIds = new Set(approvedLeaves.map((l) => l.userId));
 
+    const eligibleOnDay = (u: { isActive: boolean; deactivatedAt: Date | null }) =>
+      isAttendanceEligibleOnDay({ isActive: u.isActive, deactivatedAt: u.deactivatedAt, dateYmd: date });
+    const userById = new Map(users.map((u) => [u.id, u]));
+
+    // Day punch/live sets exclude users inactive from this IST day onward
+    for (const id of [...punchedIds]) {
+      const u = userById.get(id);
+      if (u && !eligibleOnDay(u)) punchedIds.delete(id);
+    }
+    for (const id of [...liveIds]) {
+      const u = userById.get(id);
+      if (u && !eligibleOnDay(u)) liveIds.delete(id);
+    }
+    for (const id of [...leaveIds]) {
+      const u = userById.get(id);
+      if (u && !eligibleOnDay(u)) leaveIds.delete(id);
+    }
+
     const punchesByUser = new Map<string, { punchInAt: Date; punchOutAt: Date | null }[]>();
     const punchInByUser = new Map<string, Date>();
     const punchMetaByUser = new Map<
@@ -286,6 +306,13 @@ export async function GET(req: Request) {
     let attendanceLeaveOnDate = 0;
 
     for (const u of users) {
+      const eligible = isAttendanceEligibleOnDay({
+        isActive: u.isActive,
+        deactivatedAt: u.deactivatedAt,
+        dateYmd: date,
+      });
+      if (!eligible) continue;
+
       const mark = markByUser.get(u.id);
       const resolved = resolveDayAttendanceStatus({
         sessions: punchesByUser.get(u.id) || [],
@@ -312,10 +339,29 @@ export async function GET(req: Request) {
     const faceRegisteredUsers = users.filter((u) => u.faceRegisteredAt).length;
     const leaveOnDate = users.filter((u) => leaveIds.has(u.id)).length;
     // Leave overrides punch/live for dashboard day counts (no double counting)
-    const punchedNotLeave = users.filter((u) => punchedIds.has(u.id) && !leaveIds.has(u.id));
-    const liveNotLeave = users.filter((u) => liveIds.has(u.id) && !leaveIds.has(u.id));
+    const punchedNotLeave = users.filter(
+      (u) =>
+        punchedIds.has(u.id) &&
+        !leaveIds.has(u.id) &&
+        isAttendanceEligibleOnDay({ isActive: u.isActive, deactivatedAt: u.deactivatedAt, dateYmd: date })
+    );
+    const liveNotLeave = users.filter(
+      (u) =>
+        liveIds.has(u.id) &&
+        !leaveIds.has(u.id) &&
+        isAttendanceEligibleOnDay({ isActive: u.isActive, deactivatedAt: u.deactivatedAt, dateYmd: date })
+    );
     const pendingPunchIds = new Set(
-      users.filter((u) => u.isActive && dayStatusByUser.get(u.id) === "pending").map((u) => u.id)
+      users
+        .filter(
+          (u) =>
+            isAttendanceEligibleOnDay({
+              isActive: u.isActive,
+              deactivatedAt: u.deactivatedAt,
+              dateYmd: date,
+            }) && dayStatusByUser.get(u.id) === "pending"
+        )
+        .map((u) => u.id)
     );
     const pendingPunchIn = pendingPunchIds.size;
     const pendingFace = users.filter((u) => u.isActive && !u.faceRegisteredAt).length;
@@ -326,8 +372,8 @@ export async function GET(req: Request) {
       if (metric === "active") filtered = users.filter((u) => u.isActive);
       else if (metric === "inactive") filtered = users.filter((u) => !u.isActive);
       else if (metric === "face") filtered = users.filter((u) => u.faceRegisteredAt);
-      else if (metric === "live") filtered = users.filter((u) => liveIds.has(u.id) && !leaveIds.has(u.id));
-      else if (metric === "punched") filtered = users.filter((u) => punchedIds.has(u.id) && !leaveIds.has(u.id));
+      else if (metric === "live") filtered = users.filter((u) => liveIds.has(u.id) && !leaveIds.has(u.id) && isAttendanceEligibleOnDay({ isActive: u.isActive, deactivatedAt: u.deactivatedAt, dateYmd: date }));
+      else if (metric === "punched") filtered = users.filter((u) => punchedIds.has(u.id) && !leaveIds.has(u.id) && isAttendanceEligibleOnDay({ isActive: u.isActive, deactivatedAt: u.deactivatedAt, dateYmd: date }));
       else if (metric === "leave") filtered = users.filter((u) => leaveIds.has(u.id));
       else if (metric === "present") filtered = users.filter((u) => dayStatusByUser.get(u.id) === "present");
       else if (metric === "halfDay") filtered = users.filter((u) => dayStatusByUser.get(u.id) === "half_day");
@@ -336,7 +382,7 @@ export async function GET(req: Request) {
         filtered = users.filter((u) => pendingPunchIds.has(u.id));
       } else if (metric === "pendingFace") filtered = users.filter((u) => u.isActive && !u.faceRegisteredAt);
       else if (metric === "pendingLive") {
-        filtered = users.filter((u) => punchedIds.has(u.id) && !liveIds.has(u.id) && !leaveIds.has(u.id));
+        filtered = users.filter((u) => punchedIds.has(u.id) && !liveIds.has(u.id) && !leaveIds.has(u.id) && isAttendanceEligibleOnDay({ isActive: u.isActive, deactivatedAt: u.deactivatedAt, dateYmd: date }));
       }
 
       if (groupBy && GROUP_BY.has(groupBy)) {

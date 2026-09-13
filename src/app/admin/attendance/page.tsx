@@ -301,6 +301,9 @@ export default function AttendanceModulePage() {
     }
     setPending(null);
     setReason("");
+    if (data.pendingApproval) {
+      window.alert(String(data.message || "Sent for approval."));
+    }
     load();
   }
 
@@ -412,8 +415,9 @@ export default function AttendanceModulePage() {
         Auto: first punch 7:00–10:30 + ≥6.5h = Present · 3.5h to under 6.5h = Half-day · under 3.5h = Absent · after
         10:30 before 1:00 = Half-day · only at/after 1:00 = Absent (Punched In) · no punch after 1:00 = Absent ·
         until 1:00 no punch = Pending. Sessions combine until 8:00 PM. Punch-in from 7:00 AM (not before). Holiday:
-        full Present stays Present; else Leave. Manual change needs a reason. Flag (native): 8+ thirty-minute checks
-        at same lat/lng (admin review only).
+        full Present stays Present; else Leave. Manual change needs a reason. Cluster/ALC changes need DLC approval;
+        DLC changes need ZLC approval (see Attendance approvals). Flag (native): 8+ thirty-minute checks at same
+        lat/lng (admin review only).
       </p>
 
       {intervalHealth ? (

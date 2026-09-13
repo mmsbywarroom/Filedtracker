@@ -63,6 +63,13 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     data.assemblyName = normalized.assemblyName;
     data.assemblies = normalized.assemblies;
   }
+  if (typeof parsed.data.isActive === "boolean") {
+    if (parsed.data.isActive === false && existing.isActive) {
+      data.deactivatedAt = new Date();
+    } else if (parsed.data.isActive === true) {
+      data.deactivatedAt = null;
+    }
+  }
   try {
     const user = await prisma.user.update({ where: { id: params.id }, data });
     return NextResponse.json({ user });
@@ -78,10 +85,10 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
   const existing = await prisma.user.findUnique({ where: { id: params.id } });
   if (!existing || !canSeeUser(s.admin, existing)) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  // Soft-delete: remove from org / block login, keep attendance & history for reports.
+  // Soft-delete: remove from org / block login, keep attendance & history before this day.
   await prisma.user.update({
     where: { id: params.id },
-    data: { isActive: false },
+    data: { isActive: false, deactivatedAt: new Date() },
   });
   const openSessions = await prisma.attendance.findMany({
     where: { userId: params.id, punchOutAt: null },

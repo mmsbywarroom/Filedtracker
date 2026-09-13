@@ -10,6 +10,7 @@ import {
 import { holidayAppliesTo, holidayLeaveReason } from "@/lib/holidays";
 import { monthDayList, salaryCell } from "@/lib/salaryRegister";
 import { isUnrestrictedPunchPhone } from "@/lib/punchInWindow";
+import { isAttendanceEligibleOnDay } from "@/lib/userActiveOnDay";
 
 export async function GET(req: Request) {
   const s = await requireSuperAdmin();
@@ -53,6 +54,8 @@ export async function GET(req: Request) {
       assemblyName: true,
       zone: true,
       district: true,
+      isActive: true,
+      deactivatedAt: true,
     },
   })).filter((u) => canSeeUser(s.admin, u));
 
@@ -112,6 +115,16 @@ export async function GET(req: Request) {
     let leave = 0;
     for (const dateYmd of days) {
       if (dateYmd > todayYmd) {
+        cells[dateYmd] = "";
+        continue;
+      }
+      if (
+        !isAttendanceEligibleOnDay({
+          isActive: u.isActive,
+          deactivatedAt: u.deactivatedAt,
+          dateYmd,
+        })
+      ) {
         cells[dateYmd] = "";
         continue;
       }

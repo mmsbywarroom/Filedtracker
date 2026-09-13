@@ -42,6 +42,8 @@ model User {
   /// Relaxed face match for turban/pagri — eyes, nose, mouth, beard; not forehead
   usesTurban          Boolean  @default(false)
   isActive            Boolean  @default(true)
+  /// When the user was marked inactive (IST day onward excluded from attendance lists/counts)
+  deactivatedAt       DateTime?
   /// Native app: While using / When In Use location
   locationForeground  Boolean?
   /// Native app: Allow all the time / Always location (needed for 30-min FLAG)
@@ -54,6 +56,7 @@ model User {
   attendances         Attendance[]
   leaveRequests       LeaveRequest[]
   dailyAttendanceMarks DailyAttendanceMark[]
+  attendanceChangeRequests AttendanceChangeRequest[]
 }
 
 model DailyAttendanceMark {
@@ -210,6 +213,37 @@ model LeaveRequest {
 
   @@index([userId, createdAt])
   @@index([status, createdAt])
+}
+
+/// Manual attendance edits from Cluster/ALC (→ DLC) or DLC (→ ZLC) awaiting approval.
+model AttendanceChangeRequest {
+  id               String   @id @default(cuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Calendar date in IST (stored as UTC midnight of YYYY-MM-DD)
+  date             DateTime @db.Date
+  /// present | half_day | absent | leave
+  proposedStatus   String
+  previousStatus   String?
+  note             String
+  /// pending | approved | rejected | cancelled
+  status           String   @default("pending")
+  requestedById    String
+  requestedByName  String   @default("")
+  requestedByEmail String   @default("")
+  requestedByLevel String   @default("")
+  /// DLC | ZLC
+  reviewLevel      String
+  reviewedAt       DateTime?
+  reviewedById     String?
+  reviewedByEmail  String?
+  adminNote        String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([status, reviewLevel, createdAt])
+  @@index([userId, date])
+  @@index([requestedById, createdAt])
 }
 
 model Rally {
