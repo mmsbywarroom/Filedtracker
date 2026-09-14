@@ -4,6 +4,7 @@ import {
   canSeeUser,
   isSuperAdmin,
   normalizeAccessLevel,
+  userScopeWhere,
 } from "@/lib/hierarchy";
 import { hoursWorkedOnDay, istDateString, istDayBounds } from "@/lib/dailyAttendance";
 import {
@@ -56,33 +57,30 @@ export function canReviewAttendanceChangeRequest(
   return false;
 }
 
-/** List filter for pending (and other) attendance change requests for this admin. */
+/**
+ * List filter for attendance change requests for this admin.
+ * Must match Users / Dashboard scope (userScopeWhere) — not a weaker district-only filter.
+ * Super / State: all queues. DLC: DLC queue in their scope. ZLC: ZLC queue in their zone.
+ * Cluster / ALC: only requests they submitted.
+ */
 export function attendanceChangeListWhere(admin: AdminScope) {
   if (isSuperAdmin(admin) || normalizeAccessLevel(admin.accessLevel) === "State") {
     return {};
   }
   const level = normalizeAccessLevel(admin.accessLevel);
   if (level === "DLC") {
-    const district = (admin.district || "").trim();
-    if (!district) return { id: "__none__" };
-    const zone = (admin.zone || "").trim();
     return {
       reviewLevel: "DLC",
-      user: {
-        district: { equals: district, mode: "insensitive" as const },
-        ...(zone ? { zone: { equals: zone, mode: "insensitive" as const } } : {}),
-      },
+      user: userScopeWhere(admin),
     };
   }
   if (level === "ZLC") {
-    const zone = (admin.zone || "").trim();
-    if (!zone) return { id: "__none__" };
     return {
       reviewLevel: "ZLC",
-      user: { zone: { equals: zone, mode: "insensitive" as const } },
+      user: userScopeWhere(admin),
     };
   }
-  // Cluster / ALC / Zone Coord: only their own requests
+  // Cluster / ALC / Zone Coordinator: only their own submitted requests
   return { requestedById: admin.id || "__none__" };
 }
 
