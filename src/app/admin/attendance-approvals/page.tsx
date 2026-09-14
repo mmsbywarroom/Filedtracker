@@ -38,6 +38,15 @@ function fmtDate(d: string) {
   });
 }
 
+/** AttendanceChangeRequest.date is a calendar date — normalize to YYYY-MM-DD for filters. */
+function requestDateYmd(d: string) {
+  if (!d) return "";
+  if (/^\d{4}-\d{2}-\d{2}/.test(d)) return d.slice(0, 10);
+  const dt = new Date(d);
+  if (Number.isNaN(dt.getTime())) return "";
+  return dt.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+}
+
 function statusLabel(s: string) {
   if (s === "present") return "Present";
   if (s === "half_day") return "Half-day";
@@ -47,10 +56,22 @@ function statusLabel(s: string) {
   return s;
 }
 
+function uniqueSorted(values: string[]) {
+  return Array.from(new Set(values.map((v) => v.trim()).filter(Boolean))).sort((a, b) =>
+    a.localeCompare(b)
+  );
+}
+
+const selectClass = "h-11 w-full rounded-xl border border-navy/15 bg-white px-3 text-sm shadow-sm";
+
 export default function AttendanceApprovalsPage() {
   const [requests, setRequests] = useState<ChangeRequest[]>([]);
   const [status, setStatus] = useState("pending");
   const [q, setQ] = useState("");
+  const [dateFilter, setDateFilter] = useState("");
+  const [zone, setZone] = useState("");
+  const [district, setDistrict] = useState("");
+  const [halka, setHalka] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [busyId, setBusyId] = useState("");
@@ -64,7 +85,6 @@ export default function AttendanceApprovalsPage() {
     setErr("");
     const params = new URLSearchParams();
     if (status) params.set("status", status);
-    if (q) params.set("q", q);
     const res = await fetch(`/api/admin/attendance-change-requests?${params}`);
     if (res.status === 401) {
       window.location.href = "/admin/login";
@@ -84,9 +104,12 @@ export default function AttendanceApprovalsPage() {
 
   useEffect(() => {
     load();
-    // Reload when filter changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [q, dateFilter, zone, district, halka, pageSize]);
 
   async function decide(id: string, decision: "approved" | "rejected") {
     setBusyId(id);
@@ -105,9 +128,48 @@ export default function AttendanceApprovalsPage() {
     load();
   }
 
+  const zones = useMemo(() => uniqueSorted(requests.map((r) => r.user.zone)), [requests]);
+  const districts = useMemo(() => {
+    const rows = zone ? requests.filter((r) => r.user.zone === zone) : requests;
+    return uniqueSorted(rows.map((r) => r.user.district));
+  }, [requests, zone]);
+  const halkas = useMemo(() => {
+    let rows = requests;
+    if (zone) rows = rows.filter((r) => r.user.zone === zone);
+    if (district) rows = rows.filter((r) => r.user.district === district);
+    return uniqueSorted(rows.map((r) => r.user.assemblyName));
+  }, [requests, zone, district]);
+
+  const filtered = useMemo(() => {
+    const textQ = q.trim().toLowerCase();
+    return requests.filter((r) => {
+      if (dateFilter && requestDateYmd(r.date) !== dateFilter) return false;
+      if (zone && r.user.zone !== zone) return false;
+      if (district && r.user.district !== district) return false;
+      if (halka && r.user.assemblyName !== halka) return false;
+      if (textQ) {
+        const blob = [
+          r.user.name,
+          r.user.phone,
+          r.user.assemblyName,
+          r.user.zone,
+          r.user.district,
+          r.requestedByName,
+          r.note,
+          r.proposedStatus,
+          r.previousStatus || "",
+        ]
+          .join(" ")
+          .toLowerCase();
+        if (!blob.includes(textQ)) return false;
+      }
+      return true;
+    });
+  }, [requests, dateFilter, zone, district, halka, q]);
+
   const pageRows = useMemo(
-    () => requests.slice((page - 1) * pageSize, (page - 1) * pageSize + pageSize),
-    [requests, page, pageSize]
+    () => filtered.slice((page - 1) * pageSize, (page - 1) * pageSize + pageSize),
+    [filtered, page, pageSize]
   );
 
   return (
@@ -129,34 +191,99 @@ export default function AttendanceApprovalsPage() {
         </div>
       </div>
 
-      <div className="admin-toolbar mt-4 mb-4 flex flex-wrap items-end gap-3">
-        <select
-          value={status}
-          onChange={(e) => setStatus(e.target.value)}
-          className="rounded-xl border border-navy/15 bg-white px-3 py-2 text-sm"
-        >
-          <option value="pending">Pending</option>
-          <option value="approved">Approved</option>
-          <option value="rejected">Rejected</option>
-          <option value="cancelled">Cancelled</option>
-          <option value="all">All</option>
-        </select>
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search name, phone, reason…"
-          className="min-w-[220px] rounded-xl border border-navy/15 bg-white px-3 py-2 text-sm"
-        />
-        <button
-          type="button"
-          onClick={load}
-          className="rounded-xl bg-teal px-4 py-2 text-sm font-semibold text-white"
-        >
-          Refresh
-        </button>
+      <div className="admin-filters mt-4 mb-4 grid gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8">
+        <label className="text-xs font-medium text-navy/55">
+          Request status
+          <select value={status} onChange={(e) => setStatus(e.target.value)} className={`${selectClass} mt-1`}>
+            <option value="pending">Pending</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+            <option value="cancelled">Cancelled</option>
+            <option value="all">All</option>
+          </select>
+        </label>
+        <label className="text-xs font-medium text-navy/55">
+          Date
+          <input
+            type="date"
+            value={dateFilter}
+            onChange={(e) => setDateFilter(e.target.value)}
+            className={`${selectClass} mt-1`}
+          />
+        </label>
+        <label className="text-xs font-medium text-navy/55">
+          Zone
+          <select
+            value={zone}
+            onChange={(e) => {
+              setZone(e.target.value);
+              setDistrict("");
+              setHalka("");
+            }}
+            className={`${selectClass} mt-1`}
+          >
+            <option value="">All zones</option>
+            {zones.map((z) => (
+              <option key={z} value={z}>
+                {z}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-xs font-medium text-navy/55">
+          District
+          <select
+            value={district}
+            onChange={(e) => {
+              setDistrict(e.target.value);
+              setHalka("");
+            }}
+            className={`${selectClass} mt-1`}
+          >
+            <option value="">All districts</option>
+            {districts.map((d) => (
+              <option key={d} value={d}>
+                {d}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-xs font-medium text-navy/55">
+          Halka (assembly)
+          <select value={halka} onChange={(e) => setHalka(e.target.value)} className={`${selectClass} mt-1`}>
+            <option value="">All halkas</option>
+            {halkas.map((h) => (
+              <option key={h} value={h}>
+                {h}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-xs font-medium text-navy/55 md:col-span-2 xl:col-span-2">
+          Search
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Name, phone, reason…"
+            className={`${selectClass} mt-1`}
+          />
+        </label>
+        <div className="flex items-end">
+          <button
+            type="button"
+            onClick={load}
+            className="h-11 w-full rounded-xl bg-teal px-4 text-sm font-semibold text-white"
+          >
+            Refresh
+          </button>
+        </div>
       </div>
 
       {err ? <p className="mb-3 text-sm text-red-600">{err}</p> : null}
+      <p className="mb-2 text-xs text-navy/45">
+        Showing {filtered.length} of {requests.length} loaded requests
+        {dateFilter || zone || district || halka || q.trim() ? " (filters applied)" : ""}
+      </p>
 
       <div className="overflow-x-auto rounded-2xl border border-navy/10 bg-white">
         <table className="min-w-full text-left text-sm">
@@ -250,12 +377,9 @@ export default function AttendanceApprovalsPage() {
       <PaginationBar
         page={page}
         pageSize={pageSize}
-        total={requests.length}
-        onPageChange={setPage}
-        onPageSizeChange={(n) => {
-          setPageSize(n);
-          setPage(1);
-        }}
+        total={filtered.length}
+        onPage={setPage}
+        onPageSize={setPageSize}
       />
     </main>
   );

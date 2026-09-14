@@ -29,7 +29,7 @@ export function PaginationBar({ page, pageSize, total, onPage, onPageSize }: Pro
               onChange={(e) => onPageSize(Number(e.target.value))}
               className="rounded-lg border border-navy/15 bg-white px-2 py-1.5 text-sm shadow-sm"
             >
-              {[25, 50, 100].map((n) => (
+              {[10, 25, 50, 100].map((n) => (
                 <option key={n} value={n}>
                   {n}
                 </option>
