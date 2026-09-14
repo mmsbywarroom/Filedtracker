@@ -55,6 +55,7 @@ export default function AttendanceApprovalsPage() {
   const [busyId, setBusyId] = useState("");
   const [note, setNote] = useState<Record<string, string>>({});
   const [canDecide, setCanDecide] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
   const [hint, setHint] = useState<string | null>(null);
   const [err, setErr] = useState("");
 
@@ -74,6 +75,7 @@ export default function AttendanceApprovalsPage() {
       return;
     }
     setRequests(data.requests || []);
+    setPendingCount(typeof data.pendingCount === "number" ? data.pendingCount : 0);
     setCanDecide(Boolean(data.canDecide));
     setHint(data.reviewLevelHint || null);
     setPage(1);
@@ -81,7 +83,9 @@ export default function AttendanceApprovalsPage() {
 
   useEffect(() => {
     load();
-  }, []);
+    // Reload when filter changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status]);
 
   async function decide(id: string, decision: "approved" | "rejected") {
     setBusyId(id);
@@ -111,9 +115,18 @@ export default function AttendanceApprovalsPage() {
       <h1 className="text-2xl font-semibold">Attendance change approvals</h1>
       <p className="mt-1 text-sm text-navy/55">
         Cluster / ALC manual changes go to DLC. DLC manual changes go to ZLC. Status updates only after approval.
+        Each request shows the requester&apos;s reason. Use Approve / Reject on pending rows.
         {hint === "DLC" ? " You are reviewing the DLC queue." : null}
         {hint === "ZLC" ? " You are reviewing the ZLC queue." : null}
       </p>
+
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="rounded-2xl bg-amber-500 px-4 py-3 text-white shadow-card">
+          <p className="text-xs uppercase tracking-wider text-white/80">Pending for you</p>
+          <p className="text-3xl font-semibold tabular-nums">{pendingCount}</p>
+          <p className="text-xs text-white/75">Open Attendance approvals · Approve or Reject</p>
+        </div>
+      </div>
 
       <div className="admin-toolbar mt-4 mb-4 flex flex-wrap items-end gap-3">
         <select

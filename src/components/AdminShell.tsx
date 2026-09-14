@@ -30,6 +30,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const [isSuper, setIsSuper] = useState(false);
   const [canSeeCallCenter, setCanSeeCallCenter] = useState(false);
+  const [approvalPending, setApprovalPending] = useState(0);
 
   useEffect(() => {
     fetch("/api/admin/me")
@@ -46,6 +47,26 @@ export default function AdminShell({ children }: { children: ReactNode }) {
         }
       })
       .catch(() => {});
+  }, [pathname]);
+
+  useEffect(() => {
+    let cancelled = false;
+    function loadPending() {
+      fetch("/api/admin/attendance-change-requests?summary=1")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => {
+          if (!cancelled && d && typeof d.pendingCount === "number") {
+            setApprovalPending(d.pendingCount);
+          }
+        })
+        .catch(() => {});
+    }
+    loadPending();
+    const t = window.setInterval(loadPending, 60_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(t);
+    };
   }, [pathname]);
 
   const nav = [
@@ -70,7 +91,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
     {
       href: "/admin/attendance",
       label: t("attendanceModule"),
-      match: (p: string) => p.startsWith("/admin/attendance"),
+      match: (p: string) => p.startsWith("/admin/attendance") && !p.startsWith("/admin/attendance-approvals"),
       group: "Attendance",
     },
     { href: "/admin/records", label: t("dailyRecords"), match: (p: string) => p.startsWith("/admin/records"), group: "Attendance" },
@@ -80,6 +101,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
       label: t("attendanceApprovals"),
       match: (p: string) => p.startsWith("/admin/attendance-approvals"),
       group: "Attendance",
+      badge: approvalPending,
     },
     ...(isSuper
       ? [
@@ -221,6 +243,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
                 <div className="flex flex-col gap-0.5">
                   {items.map((item) => {
                     const active = item.match(pathname);
+                    const badge = "badge" in item && typeof item.badge === "number" ? item.badge : 0;
                     return (
                       <Link
                         key={item.href}
@@ -235,7 +258,14 @@ export default function AdminShell({ children }: { children: ReactNode }) {
                         {active && (
                           <span className="absolute inset-y-2 left-0 w-1 rounded-full bg-teal-bright" aria-hidden />
                         )}
-                        <span className={active ? "pl-2" : ""}>{item.label}</span>
+                        <span className={`inline-flex items-center gap-2 ${active ? "pl-2" : ""}`}>
+                          {item.label}
+                          {badge > 0 ? (
+                            <span className="rounded-md bg-amber-500 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-ink">
+                              {badge > 99 ? "99+" : badge}
+                            </span>
+                          ) : null}
+                        </span>
                       </Link>
                     );
                   })}

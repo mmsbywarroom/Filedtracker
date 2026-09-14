@@ -11,12 +11,27 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const status = (searchParams.get("status") || "pending").trim();
   const q = (searchParams.get("q") || "").trim().toLowerCase();
+  const summaryOnly = searchParams.get("summary") === "1";
 
   const level = normalizeAccessLevel(s.admin.accessLevel);
   const canDecide =
     isSuperAdmin(s.admin) || level === "State" || level === "DLC" || level === "ZLC";
 
   const scopeWhere = attendanceChangeListWhere(s.admin);
+
+  const pendingCount = await prisma.attendanceChangeRequest.count({
+    where: { AND: [scopeWhere, { status: "pending" }] },
+  });
+
+  if (summaryOnly) {
+    return NextResponse.json({
+      pendingCount,
+      canDecide,
+      reviewLevelHint:
+        level === "DLC" ? "DLC" : level === "ZLC" ? "ZLC" : isSuperAdmin(s.admin) || level === "State" ? "all" : null,
+    });
+  }
+
   const rows = await prisma.attendanceChangeRequest.findMany({
     where: {
       AND: [
@@ -51,6 +66,7 @@ export async function GET(req: Request) {
 
   return NextResponse.json({
     requests: filtered,
+    pendingCount,
     canDecide,
     reviewLevelHint:
       level === "DLC" ? "DLC" : level === "ZLC" ? "ZLC" : isSuperAdmin(s.admin) || level === "State" ? "all" : null,
