@@ -62,9 +62,9 @@ export type TrackPoint = LatLng & {
 const TRACK_MIN_STEP_M = 20;
 const TRACK_MIN_CREDIT_M = 35;
 const TRACK_MAX_ACCURACY_M = 65;
-/** ~45 km/h — field / village travel. */
-const TRACK_MAX_SPEED_MPS = 12.5;
-const TRACK_ABSOLUTE_MAX_STEP_M = 2000;
+/** ~100 km/h — field travel may include bike/car between sparse GPS updates. */
+const TRACK_MAX_SPEED_MPS = 28;
+const TRACK_ABSOLUTE_MAX_STEP_M = 3500;
 /** Phone on desk — all fixes inside this radius ⇒ 0 km. */
 const TRACK_STATIONARY_RADIUS_M = 45;
 
@@ -114,7 +114,27 @@ function trackScatterMeters(points: LatLng[]) {
   return Math.max(...points.map((p) => haversineMeters(centroid, p)));
 }
 
-/** Sum distance only when GPS shows sustained movement away from last credited spot. */
+function maxDistanceFromStart(points: LatLng[]) {
+  if (points.length < 2) return 0;
+  const start = points[0];
+  let max = 0;
+  for (let i = 1; i < points.length; i++) {
+    max = Math.max(max, haversineMeters(start, points[i]));
+  }
+  return max;
+}
+
+function maxPlausibleGapM(accuracy: number | null | undefined, dtMs: number) {
+  const dt = dtMs > 0 ? dtMs : 60_000;
+  const slack = Math.min(40, Math.max(10, (accuracy ?? 25) * 0.35));
+  return Math.min(TRACK_ABSOLUTE_MAX_STEP_M, (dt / 1000) * TRACK_MAX_SPEED_MPS + slack);
+}
+
+/**
+ * Sum path length along GPS track (round-trips included).
+ * Stationary phone jitter near punch-in → 0. Leaving the area and returning
+ * still counts full out-and-back distance.
+ */
 export function filteredPathDistance(points: TrackPoint[]) {
   if (points.length < 2) return 0;
 
@@ -122,8 +142,10 @@ export function filteredPathDistance(points: TrackPoint[]) {
   const end = points[points.length - 1];
   const net = haversineMeters(start, end);
   const scatter = trackScatterMeters(points);
+  const fromStart = maxDistanceFromStart(points);
 
-  if (scatter < TRACK_STATIONARY_RADIUS_M && net < TRACK_STATIONARY_RADIUS_M) return 0;
+  // Truly stationary: never left the punch-in area.
+  if (fromStart < TRACK_STATIONARY_RADIUS_M && net < TRACK_STATIONARY_RADIUS_M) return 0;
 
   let total = 0;
   let anchor = points[0];
@@ -138,7 +160,17 @@ export function filteredPathDistance(points: TrackPoint[]) {
     const gap = haversineMeters(anchor, cur);
     const dt = Math.max(0, curAt - anchorAt);
     if (gap < TRACK_MIN_CREDIT_M) continue;
-    if (!isPlausibleStep(anchor, cur, acc, dt)) {
+
+    const maxGap = maxPlausibleGapM(acc, dt);
+    if (gap > TRACK_ABSOLUTE_MAX_STEP_M) {
+      // Teleport / bad fix — move anchor, do not credit full jump.
+      anchor = cur;
+      anchorAt = curAt;
+      continue;
+    }
+    if (gap > maxGap) {
+      // Sparse updates while moving (e.g. vehicle): credit speed-capped segment.
+      if (maxGap >= TRACK_MIN_CREDIT_M) total += maxGap;
       anchor = cur;
       anchorAt = curAt;
       continue;
@@ -149,9 +181,14 @@ export function filteredPathDistance(points: TrackPoint[]) {
     anchorAt = curAt;
   }
 
-  // GPS jitter while mostly stationary (tight cluster). Do NOT apply to real
-  // field loops that return near start — those must keep full path distance.
-  if (scatter < TRACK_STATIONARY_RADIUS_M * 1.5 && total > Math.max(scatter, net) * 3 + 40 && net < 120) {
+  // Desk jitter only: tiny area + huge zig-zag total. Real field loops that
+  // leave punch-in (fromStart large) or return home must keep full path.
+  if (
+    fromStart < TRACK_STATIONARY_RADIUS_M * 2 &&
+    scatter < TRACK_STATIONARY_RADIUS_M * 1.5 &&
+    total > Math.max(scatter, net) * 3 + 40 &&
+    net < 120
+  ) {
     return Math.round(Math.max(net, scatter));
   }
 
@@ -190,6 +227,7 @@ export function sessionTravelMeters(opts: {
   const path = filteredPathDistance(chain);
   const hasTrack = (opts.points?.length || 0) > 0 || Boolean(opts.live);
   if (!hasTrack && opts.punchOut) return Math.max(stored, path);
+  // Always keep peak stored distance (round-trip home must not wipe travel).
   return Math.max(stored, path);
 }
 

@@ -774,6 +774,7 @@ export default function DashboardPage() {
     if (!open) return null;
     const start = new Date(open.punchInAt).getTime();
     const sessionMeters = sessionTravelMeters({
+      stored: open.distanceMeters,
       punchIn: { lat: open.punchInLat, lng: open.punchInLng },
       punchInAt: open.punchInAt,
       points: open.points,
