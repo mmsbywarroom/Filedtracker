@@ -11,7 +11,7 @@ import { clientSourceLabel } from "@/lib/clientSource";
 import { absentOrInProgressHint, absentOrInProgressLabel } from "@/lib/dailyAttendance";
 
 type AttStatus = "present" | "half_day" | "absent" | "leave";
-type RowStatus = AttStatus | "pending";
+type RowStatus = AttStatus | "pending" | "in_progress";
 
 type Row = {
   userId: string;
@@ -123,14 +123,17 @@ function statusClass(status: string) {
   if (status === "present") return "bg-emerald-50 text-emerald-700";
   if (status === "half_day") return "bg-amber-50 text-amber-800";
   if (status === "leave") return "bg-sky-50 text-sky-800";
-  if (status === "pending") return "bg-orange-50 text-orange-800";
+  if (status === "pending" || status === "in_progress") return "bg-orange-50 text-orange-800";
   return "bg-red-50 text-red-700";
 }
 
-function statusTitle(status: RowStatus) {
+function statusTitle(status: RowStatus | string) {
   if (status === "half_day") return "Half-day";
-  if (status === "pending") return "Pending punch-in";
-  return status.charAt(0).toUpperCase() + status.slice(1);
+  if (status === "pending" || status === "in_progress") return "In progress";
+  if (status === "present") return "Present";
+  if (status === "leave") return "Leave";
+  if (status === "absent") return "Absent";
+  return String(status);
 }
 
 function unique(rows: Row[], key: keyof Row) {
@@ -241,7 +244,12 @@ export default function AttendanceModulePage() {
 
   const rows = useMemo(() => {
     return baseRows.filter((r) => {
-      if (statusFilter && r.status !== statusFilter) return false;
+      if (statusFilter === "in_progress") {
+        if (r.status !== "pending" && r.status !== "in_progress") return false;
+      } else if (statusFilter === "absent") {
+        // Red card: soft Absent before 4:30 (in_progress) + final Absent after 4:30
+        if (r.status !== "absent" && r.status !== "in_progress") return false;
+      } else if (statusFilter && r.status !== statusFilter) return false;
       if (flagFilter === "flagged" && !r.flagged) return false;
       if (flagFilter === "not_flagged" && r.flagged) return false;
       return true;
@@ -249,13 +257,21 @@ export default function AttendanceModulePage() {
   }, [baseRows, statusFilter, flagFilter]);
 
   const summary = useMemo(() => {
-    const s: Summary = { present: 0, halfDay: 0, absent: 0, leave: 0, pending: 0, flagged: 0, total: baseRows.length };
+    const s: Summary = {
+      present: 0,
+      halfDay: 0,
+      absent: 0,
+      leave: 0,
+      pending: 0,
+      flagged: 0,
+      total: baseRows.length,
+    };
     for (const r of baseRows) {
       if (r.status === "present") s.present += 1;
       else if (r.status === "half_day") s.halfDay += 1;
       else if (r.status === "leave") s.leave += 1;
       else if (r.status === "pending") s.pending += 1;
-      else s.absent += 1;
+      else if (r.status === "absent" || r.status === "in_progress") s.absent += 1;
       if (r.flagged) s.flagged += 1;
     }
     return s;
@@ -412,12 +428,11 @@ export default function AttendanceModulePage() {
       <p className="text-xs uppercase tracking-[0.2em] text-teal">Attendance</p>
       <h1 className="text-2xl font-semibold">Date-wise attendance</h1>
       <p className="mt-1 text-sm text-navy/55">
-        Auto: first punch 7:00–10:30 + ≥6.5h = Present · 3.5h to under 6.5h = Half-day · under 3.5h = Absent · after
-        10:30 before 1:00 = Half-day · only at/after 1:00 = Absent (Punched In) · no punch after 1:00 = Absent ·
-        until 1:00 no punch = Pending. Sessions combine until 8:00 PM. Punch-in from 7:00 AM (not before). Holiday:
-        full Present stays Present; else Leave. Manual change needs a reason. Cluster/ALC changes need DLC approval;
-        DLC changes need ZLC approval (see Attendance approvals). Flag (native): 8+ thirty-minute checks at same
-        lat/lng (admin review only).
+        Auto: Present / Half-day show as soon as rules are met. Until 4:30 PM everything else shows In progress;
+        after 4:30 PM remaining cases become Absent. Sessions combine until 8:00 PM. Punch-in from 7:00 AM.
+        Holiday: full Present stays Present; else Leave. Manual change needs a reason. Cluster/ALC changes need
+        DLC approval; DLC changes need ZLC approval (see Attendance approvals). Flag (native): 8+ thirty-minute
+        checks at same lat/lng (admin review only).
       </p>
 
       {intervalHealth ? (
@@ -551,7 +566,8 @@ export default function AttendanceModulePage() {
             <option value="">All statuses</option>
             <option value="present">Present</option>
             <option value="half_day">Half-day</option>
-            <option value="pending">Pending punch-in</option>
+            <option value="pending">Pending</option>
+            <option value="in_progress">In progress</option>
             <option value="absent">Absent</option>
             <option value="leave">Leave</option>
           </select>
@@ -784,12 +800,20 @@ export default function AttendanceModulePage() {
                   </td>
                   <td className="px-4 py-3">
                     <select
-                      value={r.status}
+                      value={
+                        r.status === "pending" || r.status === "in_progress" ? "in_progress" : r.status
+                      }
                       disabled={busy === r.userId}
-                      onChange={(e) => requestStatus(r.userId, r.name, e.target.value as AttStatus, r.status)}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        if (next === "in_progress") return;
+                        requestStatus(r.userId, r.name, next as AttStatus, r.status);
+                      }}
                       className={`rounded-xl border border-navy/10 px-2 py-1.5 text-xs font-semibold ${statusClass(r.status)}`}
                     >
-                      {r.status === "pending" ? <option value="pending">Pending punch-in</option> : null}
+                      {r.status === "pending" || r.status === "in_progress" ? (
+                        <option value="in_progress">In progress</option>
+                      ) : null}
                       <option value="present">Present</option>
                       <option value="half_day">Half-day</option>
                       <option value="absent">Absent</option>

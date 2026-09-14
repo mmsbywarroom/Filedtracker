@@ -2,8 +2,12 @@ import { AUTO_PUNCH_OUT_MS } from "@/lib/punchOut";
 
 export const ATTENDANCE_STATUSES = ["present", "half_day", "absent", "leave"] as const;
 export type AttendanceStatus = (typeof ATTENDANCE_STATUSES)[number];
-/** Display-only: no punch yet, and 1:00 PM IST cutoff has not passed. */
-export type ResolvedAttendanceStatus = AttendanceStatus | "pending";
+/**
+ * Display-only until day finalizes at 4:30 PM IST:
+ * - pending: no punch yet
+ * - in_progress: punched but not yet Present/Half-day (would be Absent after 4:30)
+ */
+export type ResolvedAttendanceStatus = AttendanceStatus | "pending" | "in_progress";
 
 /** Earliest valid punch-in (IST). Before this is not allowed / not counted. */
 export const EARLIEST_VALID_PUNCH_MINUTES = 7 * 60; // 7:00 AM
@@ -13,6 +17,8 @@ export const PRESENT_PUNCH_BEFORE_MINUTES = 10 * 60 + 30; // 10:30 AM
 export const HALF_DAY_PUNCH_BEFORE_MINUTES = 13 * 60; // 1:00 PM
 /** Duty hours stop counting at this IST time (combined sessions). */
 export const DUTY_HOURS_END_MINUTES = 20 * 60; // 8:00 PM
+/** Until this time, auto-Absent stays In Progress on dashboard/attendance. */
+export const DAY_STATUS_FINALIZE_MINUTES = 16 * 60 + 30; // 4:30 PM
 /** Min combined hours for Present (first punch 7:00–10:30). */
 export const PRESENT_MIN_HOURS = 6.5;
 /** Min combined hours for Half-day when first punch was 7:00–10:30 (below this → Absent). */
@@ -57,7 +63,7 @@ export function istTimeOnSameDay(d: Date, minutesFromMidnight: number) {
   return new Date(`${ymd}T${hh}:${mm}:00+05:30`);
 }
 
-/** 1:00 PM IST — no-punch users become Absent after this. */
+/** 1:00 PM IST — used for leave re-entry / morning-window helpers (unchanged). */
 export function noPunchAbsentCutoff(dateYmd: string) {
   return new Date(`${dateYmd}T13:00:00+05:30`);
 }
@@ -66,18 +72,34 @@ export function isAfterNoPunchAbsentCutoff(dateYmd: string, now = new Date()) {
   return now.getTime() >= noPunchAbsentCutoff(dateYmd).getTime();
 }
 
-export function absentOrInProgressLabel(dateYmd: string, now = new Date()) {
+/** 4:30 PM IST — auto Absent finalizes; until then show In Progress. */
+export function dayStatusFinalizeCutoff(dateYmd: string) {
+  const hh = String(Math.floor(DAY_STATUS_FINALIZE_MINUTES / 60)).padStart(2, "0");
+  const mm = String(DAY_STATUS_FINALIZE_MINUTES % 60).padStart(2, "0");
+  return new Date(`${dateYmd}T${hh}:${mm}:00+05:30`);
+}
+
+export function isDayStatusFinalized(dateYmd: string, now = new Date()) {
   const today = istDateString(now);
-  if (dateYmd < today) return "Absent";
-  if (!isAfterNoPunchAbsentCutoff(dateYmd, now)) return "In progress";
+  if (dateYmd < today) return true;
+  if (dateYmd > today) return false;
+  return now.getTime() >= dayStatusFinalizeCutoff(dateYmd).getTime();
+}
+
+export function absentOrInProgressLabel(dateYmd: string, now = new Date()) {
+  if (!isDayStatusFinalized(dateYmd, now)) return "In progress";
   return "Absent";
 }
 
 export function absentOrInProgressHint(dateYmd: string, now = new Date()) {
   if (absentOrInProgressLabel(dateYmd, now) === "In progress") {
-    return "Duty still running — after 1:00 PM this becomes Absent if there is still no punch";
+    return "Duty still running — after 4:30 PM this becomes Absent if not Present / Half-day";
   }
-  return "No punch-in by 1:00 PM, incomplete under 3.5h, or only punched at/after 1:00 PM";
+  return "No punch-in by 4:30 PM, incomplete under 3.5h, or only punched at/after 1:00 PM";
+}
+
+export function isInProgressStatus(status: string | null | undefined) {
+  return status === "pending" || status === "in_progress";
 }
 
 /** Sessions with punch-in at/after 7:00 AM IST (midnight–7:00 punches are ignored). */
@@ -163,7 +185,7 @@ export function statusLabel(status: ResolvedAttendanceStatus) {
   if (status === "present") return "Present";
   if (status === "half_day") return "Half-day";
   if (status === "leave") return "Leave";
-  if (status === "pending") return "Pending punch-in";
+  if (status === "pending" || status === "in_progress") return "In progress";
   return "Absent";
 }
 
@@ -181,7 +203,7 @@ export function autoReason(
   hadMorning = true
 ) {
   if (onLeave) return "Approved leave for this date";
-  if (!hadPunch || !firstPunchIn) return "No punch-in on this date — marked Absent after 1:00 PM";
+  if (!hadPunch || !firstPunchIn) return "No punch-in on this date — marked Absent after 4:30 PM";
   const punchLabel = firstPunchIn.toLocaleTimeString("en-IN", {
     timeZone: "Asia/Kolkata",
     hour: "2-digit",
@@ -294,16 +316,20 @@ export function resolveDayAttendanceStatus(opts: {
       sessionCount,
     };
   }
-  if (!hadPunch && !isAfterNoPunchAbsentCutoff(dateYmd)) {
+
+  const finalized = isDayStatusFinalized(dateYmd, asOf);
+
+  if (!hadPunch && !finalized) {
     return {
       status: "pending",
       source: "auto",
-      reason: "No punch-in yet — becomes Absent after 1:00 PM if still no punch",
+      reason: "No punch-in yet — In progress until 4:30 PM, then Absent if still no punch",
       hours,
       firstIn,
       sessionCount,
     };
   }
+
   const status = autoAttendanceStatus({
     firstPunchIn: firstIn,
     hours,
@@ -311,6 +337,24 @@ export function resolveDayAttendanceStatus(opts: {
     hadMorningWindowPunch: morning,
     allowBeforeEarliest: allowBefore,
   });
+
+  // Present / Half-day / Leave stay as-is. Soft-Absent stays In progress until 4:30 PM.
+  if (status === "absent" && !finalized) {
+    return {
+      status: "in_progress",
+      source: "auto",
+      reason: hadPunch
+        ? `${autoReason("absent", hours, hadPunch, false, firstIn, sessionCount, morning).replace(
+            /^Absent/,
+            "In progress"
+          )} — final Absent after 4:30 PM if still not Present / Half-day`
+        : "No punch-in yet — In progress until 4:30 PM",
+      hours,
+      firstIn,
+      sessionCount,
+    };
+  }
+
   return {
     status,
     source: "auto",

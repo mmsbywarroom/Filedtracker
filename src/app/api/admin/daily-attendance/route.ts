@@ -280,12 +280,14 @@ export async function GET(req: Request) {
   let absent = 0;
   let leave = 0;
   let pending = 0;
+  let inProgress = 0;
   let flagged = 0;
   for (const r of rows) {
     if (r.status === "present") present += 1;
     else if (r.status === "half_day") halfDay += 1;
     else if (r.status === "leave") leave += 1;
     else if (r.status === "pending") pending += 1;
+    else if (r.status === "in_progress") inProgress += 1;
     else absent += 1;
     if (r.flagged) flagged += 1;
   }
@@ -301,7 +303,17 @@ export async function GET(req: Request) {
   return NextResponse.json({
     date,
     rows,
-    summary: { present, halfDay, absent, leave, pending, flagged, total: rows.length },
+    summary: {
+      present,
+      halfDay,
+      absent,
+      leave,
+      pending,
+      inProgress,
+      inProgressTotal: pending + inProgress,
+      flagged,
+      total: rows.length,
+    },
     intervalHealth: {
       nativeUsers: nativeUsers.length,
       withAnySnapshot: withAnySnap.length,
@@ -313,7 +325,8 @@ export async function GET(req: Request) {
     rules: {
       present: `First punch 7:00–10:30 AM with ≥${PRESENT_MIN_HOURS}h combined (all sessions until 8:00 PM)`,
       halfDay: `First punch 7:00–10:30 with 3.5–${PRESENT_MIN_HOURS}h, OR first punch after 10:30 and before 1:00 PM`,
-      absent: `No punch after 1:00 PM, first punch only at/after 1:00 (Punched In), or under 3.5h when first punch was by 10:30`,
+      inProgress: "Until 4:30 PM: no punch yet, incomplete hours, or late punch — not final Absent",
+      absent: `After 4:30 PM: no punch, incomplete under 3.5h, or only punched at/after 1:00 PM`,
       leave: "Approved leave, holiday calendar (selected designations), or marked leave on Attendance",
     },
   });

@@ -22,9 +22,12 @@ export function istClock(d: Date | null) {
 
 function shortReason(reason: string) {
   const t = reason
+    .replace(/^No punch-in on this date — marked Absent after 4:30 PM$/i, "No punch")
     .replace(/^No punch-in on this date — marked Absent after 1:00 PM$/i, "No punch")
-    .replace(/^No punch-in yet — becomes Absent after 1:00 PM if still no punch$/i, "Pending till 1:00")
-    .replace(/^No punch-in yet — marked Absent after 1:00 PM$/i, "Pending till 1:00")
+    .replace(/^No punch-in yet — In progress until 4:30 PM, then Absent if still no punch$/i, "In progress till 4:30")
+    .replace(/^No punch-in yet — becomes Absent after 1:00 PM if still no punch$/i, "In progress till 4:30")
+    .replace(/^No punch-in yet — marked Absent after 1:00 PM$/i, "No punch")
+    .replace(/^No punch-in yet — In progress until 4:30 PM$/i, "In progress till 4:30")
     .replace(/^Approved leave for this date$/i, "Approved leave")
     .replace(/^Holiday \([^)]+\):\s*/i, "Holiday: ")
     .replace(/^Marked manually by admin$/i, "Manual")
@@ -32,7 +35,9 @@ function shortReason(reason: string) {
     .replace(/^Half-day: first punch (.+?) \(after 10:30.+/i, "After 10:30 $1")
     .replace(/^Half-day: first punch (.+?) \(7:00–10:30\).+/i, "Half 3.5–6.5h $1")
     .replace(/^Absent — Punched In: first punch (.+?).+/i, "Punched In $1")
+    .replace(/^In progress — Punched In: first punch (.+?).+/i, "Punched In $1")
     .replace(/^Absent: first punch (.+?) \(7:00–10:30\).+/i, "Under 3.5h $1")
+    .replace(/^In progress: first punch (.+?) \(7:00–10:30\).+/i, "Under 3.5h $1")
     .replace(/^Present: first punch (.+?) \(by 10:30\).*/i, "On time $1")
     .replace(/^Absent: first punch (.+?) \(by 10:30\).+/i, "Incomplete $1");
   return t.length > 48 ? `${t.slice(0, 46)}…` : t;
@@ -49,7 +54,7 @@ export function salaryCell(opts: {
   const today = opts.todayYmd ?? istDateString();
   if (opts.dateYmd > today) return "";
   const time = istClock(opts.firstIn);
-  if (opts.status === "pending") return "";
+  if (opts.status === "pending" || opts.status === "in_progress") return "";
   if (opts.status === "present") return time ? `P ${time}` : "P";
   if (opts.status === "half_day") return time ? `HD ${time}` : "HD";
   if (opts.status === "leave") {

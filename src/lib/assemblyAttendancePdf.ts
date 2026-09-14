@@ -18,7 +18,7 @@ function computeSummary(rows: AttendanceExportRow[]): Summary {
     if (r.status === "present") s.present += 1;
     else if (r.status === "half_day") s.halfDay += 1;
     else if (r.status === "leave") s.leave += 1;
-    else if (r.status === "pending") s.pending += 1;
+    else if (r.status === "pending" || r.status === "in_progress") s.pending += 1;
     else s.absent += 1;
   }
   return s;
@@ -46,7 +46,7 @@ function fmtDate(date: string) {
 function rowStatusLabel(status: string, label: string) {
   if (label) return label;
   if (status === "half_day") return "Half-day";
-  if (status === "pending") return "Pending punch-in";
+  if (status === "pending" || status === "in_progress") return "In progress";
   return status.charAt(0).toUpperCase() + status.slice(1);
 }
 
@@ -54,8 +54,8 @@ function drawSummaryCards(doc: jsPDF, summary: Summary, startY: number) {
   const cards: { label: string; value: number; color: [number, number, number]; sub?: string }[] = [
     { label: "Present", value: summary.present, color: [5, 150, 105] },
     { label: "Half-day", value: summary.halfDay, color: [245, 158, 11] },
-    { label: "Pending", value: summary.pending, color: [249, 115, 22] },
-    { label: "Absent", value: summary.absent, color: [220, 38, 38], sub: "After 1:00 PM" },
+    { label: "In progress", value: summary.pending, color: [249, 115, 22], sub: "Until 4:30 PM" },
+    { label: "Absent", value: summary.absent, color: [220, 38, 38], sub: "After 4:30 PM" },
     { label: "Leave", value: summary.leave, color: [2, 132, 199] },
     { label: "Total", value: summary.total, color: [15, 23, 42] },
   ];

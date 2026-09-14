@@ -670,7 +670,7 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
           className="bg-amber-600"
           label="Pending punchin"
           value={data?.pendingPunchIn || 0}
-          hint="Not punched yet — becomes Absent after 1:00 PM"
+          hint="Not punched yet — In progress until 4:30 PM, then Absent"
           active={metric === "pendingPunchIn" && !groupFilter}
           onClick={() => loadMetric("pendingPunchIn")}
         />

@@ -332,7 +332,14 @@ export async function GET(req: Request) {
       else if (resolved.status === "leave") {
         attendanceLeaveOnDate += 1;
         if (holidayAppliesTo(holiday, u.designation)) leaveIds.add(u.id);
-      } else if (resolved.status === "absent") absentOnDate += 1;
+      } else if (
+        resolved.status === "absent" ||
+        resolved.status === "in_progress" ||
+        resolved.status === "pending"
+      ) {
+        // Until 4:30 PM these show under In progress; after that as Absent.
+        absentOnDate += 1;
+      }
     }
 
     const activeUsers = users.filter((u) => u.isActive).length;
@@ -377,7 +384,12 @@ export async function GET(req: Request) {
       else if (metric === "leave") filtered = users.filter((u) => leaveIds.has(u.id));
       else if (metric === "present") filtered = users.filter((u) => dayStatusByUser.get(u.id) === "present");
       else if (metric === "halfDay") filtered = users.filter((u) => dayStatusByUser.get(u.id) === "half_day");
-      else if (metric === "absent") filtered = users.filter((u) => dayStatusByUser.get(u.id) === "absent");
+      else if (metric === "absent") {
+        filtered = users.filter((u) => {
+          const st = dayStatusByUser.get(u.id);
+          return st === "absent" || st === "in_progress" || st === "pending";
+        });
+      }
       else if (metric === "pendingPunchIn") {
         filtered = users.filter((u) => pendingPunchIds.has(u.id));
       } else if (metric === "pendingFace") filtered = users.filter((u) => u.isActive && !u.faceRegisteredAt);
