@@ -44,6 +44,9 @@ model User {
   isActive            Boolean  @default(true)
   /// When the user was marked inactive (IST day onward excluded from attendance lists/counts)
   deactivatedAt       DateTime?
+  /// Admin who marked the user inactive (id + display name snapshot)
+  deactivatedByAdminId String?
+  deactivatedByName   String?
   /// Native app: While using / When In Use location
   locationForeground  Boolean?
   /// Native app: Allow all the time / Always location (needed for 30-min FLAG)

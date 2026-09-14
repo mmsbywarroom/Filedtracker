@@ -66,8 +66,12 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   if (typeof parsed.data.isActive === "boolean") {
     if (parsed.data.isActive === false && existing.isActive) {
       data.deactivatedAt = new Date();
+      data.deactivatedByAdminId = s.admin.id;
+      data.deactivatedByName = (s.admin.name || "").trim() || s.admin.email;
     } else if (parsed.data.isActive === true) {
       data.deactivatedAt = null;
+      data.deactivatedByAdminId = null;
+      data.deactivatedByName = null;
     }
   }
   try {
@@ -88,7 +92,12 @@ export async function DELETE(_req: Request, { params }: { params: { id: string }
   // Soft-delete: remove from org / block login, keep attendance & history before this day.
   await prisma.user.update({
     where: { id: params.id },
-    data: { isActive: false, deactivatedAt: new Date() },
+    data: {
+      isActive: false,
+      deactivatedAt: new Date(),
+      deactivatedByAdminId: s.admin.id,
+      deactivatedByName: (s.admin.name || "").trim() || s.admin.email,
+    },
   });
   const openSessions = await prisma.attendance.findMany({
     where: { userId: params.id, punchOutAt: null },

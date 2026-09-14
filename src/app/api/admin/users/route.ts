@@ -142,6 +142,9 @@ export async function POST(req: Request) {
         cluster: parsed.data.cluster?.trim() || "",
         isActive: parsed.data.isActive ?? true,
         deactivatedAt: parsed.data.isActive === false ? new Date() : null,
+        deactivatedByAdminId: parsed.data.isActive === false ? s.admin.id : null,
+        deactivatedByName:
+          parsed.data.isActive === false ? (s.admin.name || "").trim() || s.admin.email : null,
       },
     });
     return NextResponse.json({ user });
@@ -169,7 +172,12 @@ export async function DELETE(req: Request) {
   // Soft-delete: keep attendance history before today; block login / remove from active org list.
   const result = await prisma.user.updateMany({
     where: { id: { in: allowed } },
-    data: { isActive: false, deactivatedAt: new Date() },
+    data: {
+      isActive: false,
+      deactivatedAt: new Date(),
+      deactivatedByAdminId: s.admin.id,
+      deactivatedByName: (s.admin.name || "").trim() || s.admin.email,
+    },
   });
   const openSessions = await prisma.attendance.findMany({
     where: { userId: { in: allowed }, punchOutAt: null },

@@ -54,6 +54,7 @@ type DetailRow = {
   zone: string;
   district: string;
   isActive: boolean;
+  deactivatedByName?: string | null;
   punchedToday: boolean;
   liveNow: boolean;
   punchInAt: string | null;
@@ -162,6 +163,7 @@ function buildDetailExport(
     .toLowerCase();
 
   const headers = ["Name", "Phone", "Designation", "Assembly", "Sector", "Zone", "District"];
+  if (metric === "inactive") headers.push("Deactivated by");
   if (metric === "face" || metric === "pendingFace") headers.push("Face registered");
   else if (metric === "leave") headers.push("Leave remark");
   else if (metric === "present" || metric === "halfDay" || metric === "absent") {
@@ -184,6 +186,9 @@ function buildDetailExport(
       r.zone,
       r.district,
     ];
+    if (metric === "inactive") {
+      row.push(r.deactivatedByName || "—");
+    }
     if (metric === "face" || metric === "pendingFace") {
       row.push(r.faceRegisteredAt ? formatKolkata(r.faceRegisteredAt) : "Not registered");
     } else if (metric === "leave") {
@@ -224,6 +229,13 @@ const METRIC_COLUMNS: { key: Metric; field: keyof Group; className?: string }[] 
 
 function todayIst() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+}
+
+/** Display count as `n/d` (e.g. 59/927). Total card stays a plain number. */
+function ratio(n: number | undefined | null, d: number | undefined | null) {
+  const num = Number(n) || 0;
+  const den = Number(d) || 0;
+  return `${num}/${den}`;
 }
 
 function Stat({
@@ -277,24 +289,26 @@ function CellBtn({
 }
 
 function dashboardSummaryCards(data: Dash | null, date: string): PdfSummaryCard[] {
+  const total = data?.totalUsers || 0;
+  const active = data?.activeUsers || 0;
   return [
-    { label: "Total users", value: data?.totalUsers || 0, background: "#0a1628", hint: "All users in scope" },
-    { label: "Inactive", value: data?.inactiveUsers || 0, background: "#3d4f66", hint: "Not in Absent counts" },
-    { label: "Face registered", value: data?.faceRegisteredUsers || 0, background: "#7c3aed" },
-    { label: "Live now", value: data?.liveNow || 0, background: "#059669" },
-    { label: "Punched today", value: data?.activeToday || 0, background: "#c45c12" },
-    { label: "Leave", value: data?.leaveOnDate || 0, background: "#0284c7" },
-    { label: "Present", value: data?.presentOnDate || 0, background: "#047857", hint: "7:00–10:30 · ≥6.5h" },
-    { label: "Half-day", value: data?.halfDayOnDate || 0, background: "#f59e0b", hint: "3.5–6.5h or after 10:30" },
+    { label: "Total users", value: total, background: "#0a1628", hint: "All users in scope" },
+    { label: "Inactive", value: ratio(data?.inactiveUsers, total), background: "#3d4f66", hint: "Not in Absent counts" },
+    { label: "Face registered", value: ratio(data?.faceRegisteredUsers, total), background: "#7c3aed" },
+    { label: "Live now", value: ratio(data?.liveNow, active), background: "#059669" },
+    { label: "Punched today", value: ratio(data?.activeToday, active), background: "#c45c12" },
+    { label: "Leave", value: ratio(data?.leaveOnDate, active), background: "#0284c7" },
+    { label: "Present", value: ratio(data?.presentOnDate, active), background: "#047857", hint: "7:00–10:30 · ≥6.5h" },
+    { label: "Half-day", value: ratio(data?.halfDayOnDate, active), background: "#f59e0b", hint: "3.5–6.5h or after 10:30" },
     {
       label: absentOrInProgressLabel(date),
-      value: data?.absentOnDate || 0,
+      value: ratio(data?.absentOnDate, active),
       background: "#dc2626",
       hint: absentOrInProgressHint(date),
     },
-    { label: "Pending punchin", value: data?.pendingPunchIn || 0, background: "#d97706" },
-    { label: "Pending face recog", value: data?.pendingFace || 0, background: "#e11d48" },
-    { label: "Pending live", value: data?.pendingLive || 0, background: "#0369a1" },
+    { label: "Pending punchin", value: ratio(data?.pendingPunchIn, active), background: "#d97706" },
+    { label: "Pending face recog", value: ratio(data?.pendingFace, active), background: "#e11d48" },
+    { label: "Pending live", value: ratio(data?.pendingLive, active), background: "#0369a1" },
   ];
 }
 
@@ -605,7 +619,7 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
         <Stat
           className="bg-navy/70"
           label="Inactive"
-          value={data?.inactiveUsers || 0}
+          value={ratio(data?.inactiveUsers, data?.totalUsers)}
           hint="Not counted in Absent / Present / Half-day"
           active={metric === "inactive" && !groupFilter}
           onClick={() => loadMetric("inactive")}
@@ -613,7 +627,7 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
         <Stat
           className="bg-violet-600"
           label="Face registered"
-          value={data?.faceRegisteredUsers || 0}
+          value={ratio(data?.faceRegisteredUsers, data?.totalUsers)}
           hint="Tap to view list"
           active={metric === "face" && !groupFilter}
           onClick={() => loadMetric("face")}
@@ -621,7 +635,7 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
         <Stat
           className="bg-emerald-600"
           label="Live now"
-          value={data?.liveNow || 0}
+          value={ratio(data?.liveNow, data?.activeUsers)}
           hint="Tap to view list"
           active={metric === "live" && !groupFilter}
           onClick={() => loadMetric("live")}
@@ -629,7 +643,7 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
         <Stat
           className="bg-[#c45c12]"
           label="Punched today"
-          value={data?.activeToday || 0}
+          value={ratio(data?.activeToday, data?.activeUsers)}
           hint="Tap to view list"
           active={metric === "punched" && !groupFilter}
           onClick={() => loadMetric("punched")}
@@ -637,7 +651,7 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
         <Stat
           className="bg-sky-600"
           label="Leave"
-          value={data?.leaveOnDate || 0}
+          value={ratio(data?.leaveOnDate, data?.activeUsers)}
           hint="Marked leave (not counted in Live/Punched)"
           active={metric === "leave" && !groupFilter}
           onClick={() => loadMetric("leave")}
@@ -645,7 +659,7 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
         <Stat
           className="bg-emerald-700"
           label="Present"
-          value={data?.presentOnDate || 0}
+          value={ratio(data?.presentOnDate, data?.activeUsers)}
           hint="First punch 7:00–10:30 · ≥6.5h (sessions until 8:00 PM)"
           active={metric === "present" && !groupFilter}
           onClick={() => loadMetric("present")}
@@ -653,7 +667,7 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
         <Stat
           className="bg-amber-500"
           label="Half-day"
-          value={data?.halfDayOnDate || 0}
+          value={ratio(data?.halfDayOnDate, data?.activeUsers)}
           hint="3.5–6.5h on time, or first punch after 10:30 before 1:00"
           active={metric === "halfDay" && !groupFilter}
           onClick={() => loadMetric("halfDay")}
@@ -661,7 +675,7 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
         <Stat
           className="bg-red-600"
           label={absentOrInProgressLabel(date)}
-          value={data?.absentOnDate || 0}
+          value={ratio(data?.absentOnDate, data?.activeUsers)}
           hint={absentOrInProgressHint(date)}
           active={metric === "absent" && !groupFilter}
           onClick={() => loadMetric("absent")}
@@ -669,7 +683,7 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
         <Stat
           className="bg-amber-600"
           label="Pending punchin"
-          value={data?.pendingPunchIn || 0}
+          value={ratio(data?.pendingPunchIn, data?.activeUsers)}
           hint="Not punched yet — In progress until 4:30 PM, then Absent"
           active={metric === "pendingPunchIn" && !groupFilter}
           onClick={() => loadMetric("pendingPunchIn")}
@@ -677,7 +691,7 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
         <Stat
           className="bg-rose-600"
           label="Pending face recog"
-          value={data?.pendingFace || 0}
+          value={ratio(data?.pendingFace, data?.activeUsers)}
           hint="Active users, face pending"
           active={metric === "pendingFace" && !groupFilter}
           onClick={() => loadMetric("pendingFace")}
@@ -685,7 +699,7 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
         <Stat
           className="bg-sky-700"
           label="Pending live"
-          value={data?.pendingLive || 0}
+          value={ratio(data?.pendingLive, data?.activeUsers)}
           hint="Punched today, not live now"
           active={metric === "pendingLive" && !groupFilter}
           onClick={() => loadMetric("pendingLive")}
@@ -842,6 +856,7 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
                     <th className="px-4 py-2">Designation</th>
                     <th className="px-4 py-2">Assembly / Sector</th>
                     <th className="px-4 py-2">Zone</th>
+                    {metric === "inactive" ? <th className="px-4 py-2">Deactivated by</th> : null}
                     {metric === "face" || metric === "pendingFace" ? <th className="px-4 py-2">Face registered</th> : null}
                     {metric === "leave" && <th className="px-4 py-2">Leave remark</th>}
                     {(metric === "live" ||
@@ -871,6 +886,9 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
                         <p className="text-xs text-navy/50">{r.sectorAllotted}</p>
                       </td>
                       <td className="px-4 py-2">{r.zone}</td>
+                      {metric === "inactive" ? (
+                        <td className="px-4 py-2 text-sm text-navy/70">{r.deactivatedByName || "—"}</td>
+                      ) : null}
                       {(metric === "face" || metric === "pendingFace") && (
                         <td className="px-4 py-2 text-xs">
                           {r.faceRegisteredAt

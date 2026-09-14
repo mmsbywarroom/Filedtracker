@@ -195,6 +195,7 @@ export async function GET(req: Request) {
         cluster: true,
         isActive: true,
         deactivatedAt: true,
+        deactivatedByName: true,
         faceRegisteredAt: true,
       },
     });
@@ -422,6 +423,7 @@ export async function GET(req: Request) {
             district: u.district,
             cluster: u.cluster,
             isActive: u.isActive,
+            deactivatedByName: u.deactivatedByName || null,
             faceRegistered: Boolean(u.faceRegisteredAt),
             faceRegisteredAt: u.faceRegisteredAt?.toISOString() || null,
             punchedToday: punchedIds.has(u.id),
