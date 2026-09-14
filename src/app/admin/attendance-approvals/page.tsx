@@ -43,6 +43,7 @@ function statusLabel(s: string) {
   if (s === "half_day") return "Half-day";
   if (s === "leave") return "Leave";
   if (s === "absent") return "Absent";
+  if (s === "pending" || s === "in_progress") return "In progress";
   return s;
 }
 
@@ -163,6 +164,7 @@ export default function AttendanceApprovalsPage() {
             <tr>
               <th className="px-3 py-2">Date</th>
               <th className="px-3 py-2">User</th>
+              <th className="px-3 py-2">Previous</th>
               <th className="px-3 py-2">Proposed</th>
               <th className="px-3 py-2">Requested by</th>
               <th className="px-3 py-2">Queue</th>
@@ -185,11 +187,9 @@ export default function AttendanceApprovalsPage() {
                   </div>
                 </td>
                 <td className="px-3 py-2">
-                  <div>{statusLabel(r.proposedStatus)}</div>
-                  {r.previousStatus ? (
-                    <div className="text-xs text-navy/45">Was: {statusLabel(r.previousStatus)}</div>
-                  ) : null}
+                  {r.previousStatus ? statusLabel(r.previousStatus) : "—"}
                 </td>
+                <td className="px-3 py-2 font-medium">{statusLabel(r.proposedStatus)}</td>
                 <td className="px-3 py-2">
                   <div>{r.requestedByName || r.requestedByEmail}</div>
                   <div className="text-xs text-navy/45">{r.requestedByLevel}</div>
@@ -238,7 +238,7 @@ export default function AttendanceApprovalsPage() {
             ))}
             {!pageRows.length ? (
               <tr>
-                <td colSpan={8} className="px-3 py-10 text-center text-navy/40">
+                <td colSpan={9} className="px-3 py-10 text-center text-navy/40">
                   No attendance change requests.
                 </td>
               </tr>

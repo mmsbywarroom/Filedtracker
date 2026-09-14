@@ -350,12 +350,14 @@ export async function PATCH(req: Request) {
   }
 
   const { userId, date, status, note } = parsed.data;
-  const { dateOnly } = istDayBounds(date);
+  const { start, end, dateOnly } = istDayBounds(date);
+  const asOf = date === istDateString() ? new Date() : end;
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
       id: true,
+      phone: true,
       designation: true,
       zone: true,
       district: true,
@@ -372,10 +374,42 @@ export async function PATCH(req: Request) {
 
   // Cluster / ALC → DLC approval; DLC → ZLC approval
   if (reviewLevel) {
-    const existingMark = await prisma.dailyAttendanceMark.findUnique({
-      where: { userId_date: { userId, date: dateOnly } },
-      select: { status: true },
+    const [sessions, existingMark, approvedLeave, holiday] = await Promise.all([
+      prisma.attendance.findMany({
+        where: { userId, punchInAt: { gte: start, lte: end } },
+        select: { punchInAt: true, punchOutAt: true },
+      }),
+      prisma.dailyAttendanceMark.findUnique({
+        where: { userId_date: { userId, date: dateOnly } },
+        select: { status: true, source: true, note: true },
+      }),
+      prisma.leaveRequest.findFirst({
+        where: {
+          userId,
+          status: "approved",
+          fromDate: { lte: end },
+          toDate: { gte: start },
+        },
+        select: { id: true },
+      }),
+      prisma.holiday.findUnique({ where: { date: dateOnly } }),
+    ]);
+
+    const resolved = resolveDayAttendanceStatus({
+      sessions,
+      asOf,
+      dateYmd: date,
+      onApprovedLeave: Boolean(approvedLeave),
+      isHoliday: holidayAppliesTo(holiday, user.designation),
+      holidayReason: holidayAppliesTo(holiday, user.designation)
+        ? holidayLeaveReason(holiday!.reason, user.designation)
+        : null,
+      manual: existingMark
+        ? { status: existingMark.status, source: existingMark.source, note: existingMark.note }
+        : null,
+      allowBeforeEarliest: isUnrestrictedPunchPhone(user.phone),
     });
+
     await prisma.attendanceChangeRequest.updateMany({
       where: { userId, date: dateOnly, status: "pending" },
       data: { status: "cancelled" },
@@ -385,7 +419,7 @@ export async function PATCH(req: Request) {
         userId,
         date: dateOnly,
         proposedStatus: status,
-        previousStatus: existingMark?.status || null,
+        previousStatus: resolved.status,
         note,
         status: "pending",
         requestedById: s.admin.id,
