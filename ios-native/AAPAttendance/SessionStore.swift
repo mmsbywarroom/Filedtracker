@@ -5,6 +5,7 @@ enum SessionStore {
     private static let tokenKey = "ft_token"
     private static let apiBaseKey = "ft_api_base"
     private static let phoneKey = "ft_phone"
+    private static let kindKey = "ft_kind"
     private static let punchInKey = "ft_punch_in"
     private static let lastHourlyKey = "ft_last_hourly_security"
     private static let sentSlotsKey = "ft_sent_slots"
@@ -29,6 +30,15 @@ enum SessionStore {
         set { defaults.set(newValue, forKey: phoneKey) }
     }
 
+    static var kind: String {
+        get { defaults.string(forKey: kindKey) ?? "field" }
+        set { defaults.set(newValue, forKey: kindKey) }
+    }
+
+    static var isRallyUser: Bool {
+        kind.lowercased() == "rally"
+    }
+
     static var punchInAt: String {
         get { defaults.string(forKey: punchInKey) ?? "" }
         set { defaults.set(newValue, forKey: punchInKey) }
@@ -48,10 +58,11 @@ enum SessionStore {
         set { defaults.set(newValue, forKey: lastHourlyKey) }
     }
 
-    static func save(token: String, apiBase: String, phone: String) {
+    static func save(token: String, apiBase: String, phone: String, kind: String = "field") {
         self.token = token
         self.apiBase = apiBase.isEmpty ? AppConfig.apiBase : apiBase
         if !phone.isEmpty { self.phone = phone }
+        self.kind = kind.lowercased() == "rally" ? "rally" : "field"
     }
 
     static func hasSentSlot(_ slot: Int) -> Bool {
@@ -74,6 +85,7 @@ enum SessionStore {
     static func clearAll() {
         token = ""
         phone = ""
+        kind = "field"
         clearTracking()
     }
 }

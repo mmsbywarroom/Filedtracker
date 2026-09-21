@@ -185,8 +185,11 @@ export async function POST(req: Request) {
     );
   }
 
-  const field = await prisma.user.findUnique({ where: { phone } });
-  const rally = field ? null : await prisma.rallyUser.findUnique({ where: { phone } });
+  // Soft-deleted field users keep phone; look up rally anyway so inactive field + active rally can OTP.
+  const [field, rally] = await Promise.all([
+    prisma.user.findUnique({ where: { phone } }),
+    prisma.rallyUser.findUnique({ where: { phone } }),
+  ]);
   if ((!field || !field.isActive) && (!rally || !rally.isActive)) {
     await logOtpRequest({
       phone,

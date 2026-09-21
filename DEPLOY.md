@@ -4,7 +4,7 @@ Target:
 
 - GitHub: `https://github.com/mmsbywarroom/Filedtracker.git`
 - EC2 Mumbai (`ap-south-1`, `t3.medium`, Elastic IP `13.234.95.134`) — host stored in GitHub secret `EC2_HOST`
-- Domain: `https://filed.videh.co.in`
+- Domain: `https://filed.videh.co.in` (field attendance) · `https://rally.videh.co.in` (rally check-in)
 - Database: PostgreSQL **on the same EC2** (Docker). Do not use RDS in `us-east-1` — too slow from Mumbai.
 
 If you already run another app on this instance, stop/conflict-check port 80, 443, and 3000 first.
@@ -70,10 +70,12 @@ Set strong values for:
 
 ```bash
 sudo apt install -y certbot python3-certbot-nginx
-sudo certbot --nginx -d filed.videh.co.in
+# Field + rally on the same EC2 / nginx upstream
+sudo certbot --nginx -d filed.videh.co.in -d rally.videh.co.in
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
+**Rally subdomain DNS:** point `rally.videh.co.in` A/CNAME at the same Elastic IP as `filed.videh.co.in`, then issue/expand the cert as above. Mobile browsers use OTP login on the rally host; field phones on `filed.videh.co.in` still see the APK download landing.
 ### Google Maps API key (rotate if ever exposed)
 
 1. Google Cloud Console → APIs & Services → Credentials
@@ -91,6 +93,8 @@ docker compose up -d --build
 ```
 
 App: `https://filed.videh.co.in`
+
+Rally (mobile web OTP + check-in): `https://rally.videh.co.in`
 
 Admin: `https://filed.videh.co.in/admin/login`
 

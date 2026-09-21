@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { jwtVerify } from "jose";
+import { isRallyPublicHost } from "@/lib/rallyHost";
 
 const USER_COOKIE = "ft_user_session";
 const ADMIN_COOKIE = "ft_admin_session";
@@ -50,16 +51,40 @@ export async function middleware(req: NextRequest) {
   const userTok = await userTokFrom(req);
   const adminRole = await adminRoleFrom(req);
   const { pathname } = req.nextUrl;
+  const host = req.headers.get("host");
+  const rallyHost = isRallyPublicHost(host);
   const ua = req.headers.get("user-agent") || "";
   const nativeWebView = ua.includes("AAPNative/");
-  const androidBrowser = /Android/i.test(ua) && !nativeWebView;
   const mobileBrowser =
     (/Android|iPhone|iPad|iPod/i.test(ua) && !nativeWebView) || false;
-  // Desktop escape only — never unlock phone browser web punch (Android or Safari).
+  // Desktop escape only — never unlock phone browser web punch (Android or Safari) on filed host.
   const staffWeb =
     req.nextUrl.searchParams.get("staff") === "1" && !mobileBrowser;
   const fieldWebOk = nativeWebView || staffWeb;
 
+  // --- Rally public host: login + /rally only (no field dashboard / admin) ---
+  if (rallyHost) {
+    if (pathname.startsWith("/admin") || pathname.startsWith("/dashboard")) {
+      if (userTok?.kind === "rally") {
+        return NextResponse.redirect(new URL("/rally", req.url));
+      }
+      return NextResponse.redirect(new URL("/", req.url));
+    }
+    if (pathname.startsWith("/rally")) {
+      if (userTok?.role !== "user") return NextResponse.redirect(new URL("/", req.url));
+      if (userTok.kind !== "rally") return NextResponse.redirect(new URL("/", req.url));
+      return NextResponse.next();
+    }
+    if (pathname === "/") {
+      if (userTok?.role === "user" && userTok.kind === "rally" && !req.nextUrl.searchParams.has("relogin")) {
+        return NextResponse.redirect(new URL("/rally", req.url));
+      }
+      return NextResponse.next();
+    }
+    return NextResponse.next();
+  }
+
+  // --- Filed host (existing rules) ---
   if (pathname.startsWith("/dashboard")) {
     if (!fieldWebOk) {
       return NextResponse.redirect(new URL("/", req.url));
@@ -89,7 +114,7 @@ export async function middleware(req: NextRequest) {
       if (userTok.kind === "field" && fieldWebOk) {
         return NextResponse.redirect(new URL("/dashboard", req.url));
       }
-      // Phone browser with old cookie → stay on download landing (clear session redirect).
+      // Phone browser with old cookie → stay on download landing.
     }
     return NextResponse.next();
   }

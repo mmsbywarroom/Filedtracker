@@ -13,6 +13,16 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   if (data.phone) {
     const phone = normalizePhone(data.phone);
     if (!phone) return NextResponse.json({ error: "Invalid mobile number." }, { status: 400 });
+    const fieldClash = await prisma.user.findUnique({ where: { phone } });
+    if (fieldClash?.isActive) {
+      return NextResponse.json(
+        {
+          error:
+            "This number already belongs to an active field attendance user. Remove/deactivate them under Field users, or use a different number.",
+        },
+        { status: 409 }
+      );
+    }
     data.phone = phone;
   }
   if (data.pocNumber) data.pocNumber = normalizePhone(data.pocNumber) || data.pocNumber;

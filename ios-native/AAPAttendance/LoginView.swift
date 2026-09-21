@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct LoginView: View {
-    var onLoggedIn: () -> Void
+    var onLoggedIn: (_ kind: String) -> Void
     @State private var phone = ""
     @State private var otp = ""
     @State private var otpSent = false
@@ -147,8 +147,9 @@ struct LoginView: View {
                     let res = try await ApiClient.verifyOtp(phone: phone, otp: otp)
                     let token = res.string("token") ?? ""
                     guard !token.isEmpty else { throw ApiError(statusCode: 0, message: "No session token returned.") }
-                    SessionStore.save(token: token, apiBase: AppConfig.apiBase, phone: phone)
-                    onLoggedIn()
+                    let kind = res.string("kind") ?? "field"
+                    SessionStore.save(token: token, apiBase: AppConfig.apiBase, phone: phone, kind: kind)
+                    onLoggedIn(kind)
                 } catch {
                     isError = true
                     message = error.localizedDescription

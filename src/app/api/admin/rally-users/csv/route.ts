@@ -51,8 +51,11 @@ export async function POST(req: Request) {
       continue;
     }
     const fieldClash = await prisma.user.findUnique({ where: { phone } });
-    if (fieldClash) {
-      errors.push({ row: i + 2, error: `${phone} is already a field attendance user` });
+    if (fieldClash?.isActive) {
+      errors.push({
+        row: i + 2,
+        error: `${phone} is an active field attendance user — deactivate under Field users first`,
+      });
       continue;
     }
     const data = { rallyId, name, phone, zone, district, acName, villageWard, vehicleNo, pocName, pocNumber, vehicleType };

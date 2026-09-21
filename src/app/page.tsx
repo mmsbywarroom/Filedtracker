@@ -6,15 +6,18 @@ import { BrandMark } from "@/components/BrandMark";
 import { LangToggle, useLang } from "@/lib/i18n";
 import { isAndroidBrowser, isIosBrowser } from "@/lib/clientDevice";
 import { isPureNativeApp, saveNativeSession } from "@/lib/pureNativeApp";
+import { isRallyWebEntry } from "@/lib/rallyHost";
 
 /**
  * - Pure native WebView: OTP login
- * - Phone browsers (Android + Safari): download landing (APK + TestFlight)
- * - Desktop: same download landing (?staff=1 for web login escape)
+ * - rally.videh.co.in (or localhost?rally=1): OTP login on phone + desktop
+ * - Phone browsers on filed host: download landing (APK + TestFlight)
+ * - Desktop filed: download landing (?staff=1 for web login escape)
  */
 export default function HomePage() {
   const { t } = useLang();
   const [mode, setMode] = useState<"loading" | "native-login" | "download">("loading");
+  const [rallyHost, setRallyHost] = useState(false);
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
   const [step, setStep] = useState<"phone" | "otp">("phone");
@@ -23,12 +26,18 @@ export default function HomePage() {
   const [cooldownSec, setCooldownSec] = useState(0);
 
   useEffect(() => {
+    const onRally = isRallyWebEntry();
+    setRallyHost(onRally);
     if (isPureNativeApp()) {
       setMode("native-login");
       return;
     }
+    if (onRally) {
+      setMode("native-login");
+      return;
+    }
     const staff = new URLSearchParams(window.location.search).get("staff") === "1";
-    // Desktop staff escape only — never phone browser web punch.
+    // Desktop staff escape only — never phone browser web punch on filed host.
     if (staff && !isAndroidBrowser() && !isIosBrowser()) {
       setMode("native-login");
       return;
@@ -105,7 +114,15 @@ export default function HomePage() {
           phone
         );
       }
-      window.location.href = data.kind === "rally" ? "/rally" : "/dashboard";
+      if (data.kind === "rally") {
+        window.location.href = "/rally";
+        return;
+      }
+      if (rallyHost || isRallyWebEntry()) {
+        setError("This number is for field attendance, not rally. Use the field app or filed.videh.co.in.");
+        return;
+      }
+      window.location.href = "/dashboard";
     } catch {
       setError("Could not verify OTP. Try again.");
     } finally {
@@ -133,7 +150,7 @@ export default function HomePage() {
             <BrandMark size={56} tone="onDark" />
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-teal-bright">{t("aap")}</p>
-              <h1 className="text-lg font-semibold">{t("app")}</h1>
+              <h1 className="text-lg font-semibold">{rallyHost ? "Rally check-in" : t("app")}</h1>
             </div>
           </div>
           <LangToggle />
@@ -144,10 +161,12 @@ export default function HomePage() {
         <div className="w-full max-w-md rounded-[2rem] bg-white p-6 shadow-float md:p-8">
           <BrandMark size={88} className="mb-4" />
           <p className="inline-flex rounded-full bg-sand px-3 py-1 text-xs font-semibold uppercase tracking-wider text-teal">
-            {t("faceBadge")}
+            {rallyHost ? "Rally" : t("faceBadge")}
           </p>
           <h3 className="mt-4 text-xl font-semibold">{t("login")}</h3>
-          <p className="mt-1 text-sm text-navy/60">{t("loginHint")}</p>
+          <p className="mt-1 text-sm text-navy/60">
+            {rallyHost ? "Enter your registered rally mobile number to continue." : t("loginHint")}
+          </p>
           {step === "phone" ? (
             <form onSubmit={requestOtp} className="mt-6 space-y-4" autoComplete="on">
               <label className="block text-sm font-medium">{t("mobile")}</label>

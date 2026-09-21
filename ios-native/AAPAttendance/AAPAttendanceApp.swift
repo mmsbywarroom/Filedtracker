@@ -14,14 +14,28 @@ struct AAPAttendanceApp: App {
 
 struct RootView: View {
     @State private var loggedIn = !SessionStore.token.isEmpty
+    @State private var isRally = SessionStore.isRallyUser
 
     var body: some View {
         ZStack {
             AapTheme.navyDeep.ignoresSafeArea()
             if loggedIn {
-                HomeView(onLoggedOut: { loggedIn = false })
+                if isRally {
+                    WebShellView(initialPath: "/rally", onLoggedOut: {
+                        loggedIn = false
+                        isRally = false
+                    })
+                } else {
+                    HomeView(onLoggedOut: {
+                        loggedIn = false
+                        isRally = false
+                    })
+                }
             } else {
-                LoginView(onLoggedIn: { loggedIn = true })
+                LoginView(onLoggedIn: { kind in
+                    isRally = kind.lowercased() == "rally"
+                    loggedIn = true
+                })
             }
         }
     }

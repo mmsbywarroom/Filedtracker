@@ -1,6 +1,7 @@
 package `in`.videh.filedtracker.nativeapp.compose
 
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.compose.setContent
@@ -32,6 +33,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import `in`.videh.filedtracker.nativeapp.LocaleHelper
 import `in`.videh.filedtracker.nativeapp.SessionStore
+import `in`.videh.filedtracker.nativeapp.WebShellActivity
 
 /** Native Compose host: login, home, map, leave, footprints, fast face punch. */
 class ComposeMainActivity : AppCompatActivity() {
@@ -40,8 +42,21 @@ class ComposeMainActivity : AppCompatActivity() {
         super.attachBaseContext(LocaleHelper.wrap(newBase))
     }
 
+    private fun openRallyWebShell() {
+        val i = Intent(this, WebShellActivity::class.java)
+        i.putExtra(WebShellActivity.EXTRA_PATH, "/rally")
+        i.putExtra(WebShellActivity.EXTRA_TITLE, "Rally")
+        startActivity(i)
+        finish()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        if (SessionStore.isLoggedIn(this) && SessionStore.isRallyUser(this)) {
+            openRallyWebShell()
+            return
+        }
 
         val startDestination = if (SessionStore.isLoggedIn(this)) Routes.HOME else Routes.LOGIN
 
@@ -52,9 +67,13 @@ class ComposeMainActivity : AppCompatActivity() {
                     NavHost(navController = nav, startDestination = startDestination) {
                         composable(Routes.LOGIN) {
                             LoginScreen(
-                                onLoggedIn = {
-                                    nav.navigate(Routes.HOME) {
-                                        popUpTo(Routes.LOGIN) { inclusive = true }
+                                onLoggedIn = { kind ->
+                                    if (kind.equals("rally", ignoreCase = true)) {
+                                        openRallyWebShell()
+                                    } else {
+                                        nav.navigate(Routes.HOME) {
+                                            popUpTo(Routes.LOGIN) { inclusive = true }
+                                        }
                                     }
                                 }
                             )

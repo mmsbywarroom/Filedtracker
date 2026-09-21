@@ -73,9 +73,17 @@ public class LoginActivity extends AppCompatActivity {
                     JSONObject res = ApiClient.verifyOtp(pendingPhone, otp);
                     String token = res.optString("token", "");
                     if (token.isEmpty()) throw new ApiClient.ApiError(401, "No session token returned.");
-                    SessionStore.save(LoginActivity.this, token, AppConfig.API_BASE, pendingPhone, "");
+                    String kind = res.optString("kind", "field");
+                    SessionStore.save(LoginActivity.this, token, AppConfig.API_BASE, pendingPhone, "", kind);
                     runOnUiThread(() -> {
-                        startActivity(new Intent(this, DashboardActivity.class));
+                        if ("rally".equalsIgnoreCase(kind)) {
+                            Intent i = new Intent(this, WebShellActivity.class);
+                            i.putExtra(WebShellActivity.EXTRA_PATH, "/rally");
+                            i.putExtra(WebShellActivity.EXTRA_TITLE, "Rally");
+                            startActivity(i);
+                        } else {
+                            startActivity(new Intent(this, DashboardActivity.class));
+                        }
                         finish();
                     });
                 } catch (Exception e) {

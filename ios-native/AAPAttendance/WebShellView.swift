@@ -5,13 +5,14 @@ extension Notification.Name {
     static let ftLoggedOut = Notification.Name("ftLoggedOut")
 }
 
-/// Embeds the production web dashboard (client-side face-api punch — fast like browser).
+/// Embeds the production web dashboard (or rally check-in) in a WebView.
 struct WebShellView: UIViewControllerRepresentable {
+    var initialPath: String = "/dashboard"
     var onLoggedOut: () -> Void
 
     func makeUIViewController(context: Context) -> WebShellViewController {
         _ = context.coordinator
-        return WebShellViewController()
+        return WebShellViewController(initialPath: initialPath)
     }
 
     func updateUIViewController(_ uiViewController: WebShellViewController, context: Context) {}

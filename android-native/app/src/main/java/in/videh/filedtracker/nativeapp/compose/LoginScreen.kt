@@ -73,7 +73,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-fun LoginScreen(onLoggedIn: () -> Unit) {
+fun LoginScreen(onLoggedIn: (kind: String) -> Unit) {
     val context = LocalContext.current
     val activity = context.findActivity()
     val scope = rememberCoroutineScope()
@@ -252,9 +252,10 @@ fun LoginScreen(onLoggedIn: () -> Unit) {
                                         val res = withContext(Dispatchers.IO) { ApiClient.verifyOtp(phone, otp) }
                                         val token = res.optString("token", "")
                                         if (token.isBlank()) throw IllegalStateException("No session token returned.")
+                                        val kind = res.optString("kind", "field")
                                         // Force Elastic IP base — server apiBaseUrl may still be the DNS hostname.
-                                        SessionStore.save(context, token, AppConfig.API_BASE, phone, "")
-                                        onLoggedIn()
+                                        SessionStore.save(context, token, AppConfig.API_BASE, phone, "", kind)
+                                        onLoggedIn(kind)
                                     } catch (e: Exception) {
                                         isError = true
                                         message = errorText(e, "Verification failed")

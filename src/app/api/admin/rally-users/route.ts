@@ -34,9 +34,16 @@ export async function POST(req: Request) {
   if (!parsed.success) return NextResponse.json({ error: "Fill required user fields." }, { status: 400 });
   const phone = normalizePhone(parsed.data.phone);
   if (!phone) return NextResponse.json({ error: "Invalid mobile number." }, { status: 400 });
+  // Soft-deleted field users keep the phone row; only active field accounts block rally.
   const fieldClash = await prisma.user.findUnique({ where: { phone } });
-  if (fieldClash) {
-    return NextResponse.json({ error: "This number already belongs to a field attendance user." }, { status: 409 });
+  if (fieldClash?.isActive) {
+    return NextResponse.json(
+      {
+        error:
+          "This number already belongs to an active field attendance user. Remove/deactivate them under Field users, or use a different number.",
+      },
+      { status: 409 }
+    );
   }
   try {
     const user = await prisma.rallyUser.create({

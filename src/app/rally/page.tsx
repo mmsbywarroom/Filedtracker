@@ -10,7 +10,7 @@ type Lang = "pa" | "en";
 const COPY = {
   pa: {
     aap: "ਆਮ ਆਦਮੀ ਪਾਰਟੀ",
-    title: "ਰੈਲੀ ਫੋਟੋ",
+    title: "ਰੈਲੀ ਚੈੱਕ-ਇਨ",
     hello: "ਸਤਿ ਸ੍ਰੀ ਅਕਾਲ",
     venue: "ਵੇਨਿਊ",
     capture: "ਫੋਟੋ ਖਿੱਚੋ",
@@ -33,10 +33,16 @@ const COPY = {
     camErr: "ਕੈਮਰਾ ਖੋਲ੍ਹਣ ਵਿੱਚ ਸਮੱਸਿਆ। ਇਜਾਜ਼ਤ ਦਿਓ ਜਾਂ ਫੋਟੋ ਅਪਲੋਡ ਕਰੋ।",
     sendErr: "ਭੇਜ ਨਹੀਂ ਸਕੇ।",
     hint: "ਬੱਸ, ਕਾਰ, ਟੈਂਪੋ, ਟਰੈਕਟਰ — ਕਿਸੇ ਵੀ ਗੱਡੀ ਜਾਂ ਥਾਂ ਦੀ ਫੋਟੋ ਖਿੱਚੋ। ਲੋਕ ਆਪਣੇ ਆਪ ਗਿਣੇ ਜਾਣਗੇ।",
+    stepPhoto: "1 · ਫੋਟੋ",
+    stepSend: "2 · ਭੇਜੋ",
+    stepTrack: "3 · ਰਸਤਾ",
+    reached: "ਤੁਸੀਂ ਵੇਨਿਊ ਪਹੁੰਚ ਗਏ ਹੋ",
+    maps: "ਨਕਸ਼ੇ ਵਿੱਚ ਖੋਲ੍ਹੋ",
+    tracking: "ਰਸਤਾ ਟ੍ਰੈਕ ਹੋ ਰਿਹਾ ਹੈ (ਐਪ ਖੁੱਲ੍ਹੀ ਰੱਖੋ)",
   },
   en: {
     aap: "Aam Aadmi Party",
-    title: "Rally photo",
+    title: "Rally check-in",
     hello: "Hello",
     venue: "Venue",
     capture: "Take photo",
@@ -59,6 +65,12 @@ const COPY = {
     camErr: "Could not open camera. Allow permission or upload a photo.",
     sendErr: "Could not send.",
     hint: "Photo from any vehicle or place — bus, car, tempo, tractor. People are counted automatically.",
+    stepPhoto: "1 · Photo",
+    stepSend: "2 · Send",
+    stepTrack: "3 · Track",
+    reached: "You have reached the venue",
+    maps: "Open in Maps",
+    tracking: "Tracking your journey (keep this page open)",
   },
 };
 
@@ -84,6 +96,8 @@ export default function RallyCapturePage() {
   const t = COPY[lang];
   const [name, setName] = useState("");
   const [rallyName, setRallyName] = useState("");
+  const [rallyLat, setRallyLat] = useState<number | null>(null);
+  const [rallyLng, setRallyLng] = useState<number | null>(null);
   const [rallyOpensOn, setRallyOpensOn] = useState("");
   const [preview, setPreview] = useState("");
   const [heads, setHeads] = useState<number | null>(null);
@@ -108,6 +122,8 @@ export default function RallyCapturePage() {
     const data = await res.json();
     setName(data.user?.name || "");
     setRallyName(data.rally?.name || "");
+    setRallyLat(typeof data.rally?.lat === "number" ? data.rally.lat : null);
+    setRallyLng(typeof data.rally?.lng === "number" ? data.rally.lng : null);
     setRallyOpensOn(data.rallyOpensOn || "");
     if (data.last) {
       setLast({
@@ -149,27 +165,28 @@ export default function RallyCapturePage() {
       try {
         const pos = await locateDevice();
         if (!alive) return;
-        await fetch("/api/rally/track", {
+        const res = await fetch("/api/rally/track", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
         });
+        if (res.ok) void loadMe();
       } catch {
-        /* app closed / GPS denied — stay at 0 m so admin can flag after 1h */
+        /* GPS denied — stay at last known */
       }
     }
     void ping();
-    const t = window.setInterval(() => void ping(), 25000);
+    const timer = window.setInterval(() => void ping(), 25000);
     const onVis = () => {
       if (document.visibilityState === "visible") void ping();
     };
     document.addEventListener("visibilitychange", onVis);
     return () => {
       alive = false;
-      window.clearInterval(t);
+      window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onVis);
     };
-  }, [last]);
+  }, [last, loadMe]);
 
   async function startCam(mode: "environment" | "user" = facing) {
     setErr("");
@@ -283,15 +300,22 @@ export default function RallyCapturePage() {
     window.location.href = "/?relogin=1";
   }
 
+  const mapsHref =
+    rallyLat != null && rallyLng != null
+      ? `https://www.google.com/maps/dir/?api=1&destination=${rallyLat},${rallyLng}`
+      : null;
+
+  const stepIndex = last ? 2 : preview ? 1 : 0;
+
   return (
-    <main className="min-h-screen bg-sand">
-      <header className="bg-ink text-white">
-        <div className="mx-auto flex max-w-lg items-center justify-between gap-2 px-4 py-3">
+    <main className="native-safe-bottom min-h-[100dvh] bg-sand">
+      <header className="app-header-safe bg-ink text-white">
+        <div className="mx-auto flex w-full max-w-lg items-center justify-between gap-2 px-4 py-3 sm:max-w-xl md:max-w-2xl">
           <div className="flex min-w-0 items-center gap-3">
             <BrandMark size={44} tone="onDark" />
             <div className="min-w-0">
               <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-teal-bright">{t.aap}</p>
-              <h1 className="truncate text-base font-semibold">{t.title}</h1>
+              <h1 className="truncate text-base font-semibold sm:text-lg">{t.title}</h1>
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -311,78 +335,136 @@ export default function RallyCapturePage() {
                 ਪੰ
               </button>
             </div>
-            <button type="button" onClick={logout} className="rounded-lg border border-white/20 px-3 py-1.5 text-sm">
+            <button
+              type="button"
+              onClick={logout}
+              className="rounded-xl border border-white/20 px-3 py-2 text-sm font-medium"
+            >
               {t.logout}
             </button>
           </div>
         </div>
       </header>
 
-      <section className="mx-auto max-w-lg px-4 py-6">
-        <div className="rounded-[1.75rem] bg-white p-5 shadow-float">
-          <p className="text-lg font-semibold text-ink">
-            {t.hello}, {name}
+      <section className="mx-auto w-full max-w-lg px-4 py-5 sm:max-w-xl sm:py-6 md:max-w-2xl">
+        <div className="mb-4 grid grid-cols-3 gap-2 text-center text-[11px] font-semibold uppercase tracking-wide text-navy/45 sm:text-xs">
+          {[t.stepPhoto, t.stepSend, t.stepTrack].map((label, i) => (
+            <div
+              key={label}
+              className={`rounded-xl px-2 py-2 ${
+                i <= stepIndex ? "bg-teal text-white" : "bg-white/80 text-navy/40 shadow-sm"
+              }`}
+            >
+              {label}
+            </div>
+          ))}
+        </div>
+
+        <div className="rounded-[1.75rem] bg-white p-5 shadow-float sm:p-6 md:p-8">
+          <p className="text-xl font-semibold text-ink sm:text-2xl">
+            {t.hello}, {name || "—"}
           </p>
-          <p className="mt-1 text-sm text-navy/60">
-            {t.venue}: {rallyName || "—"}
+          <p className="mt-1 text-sm text-navy/60 sm:text-base">
+            {t.venue}: <span className="font-medium text-navy/80">{rallyName || "—"}</span>
           </p>
-          <p className="mt-3 text-sm text-navy/70">{t.hint}</p>
+          {mapsHref && rallyName ? (
+            <a
+              href={mapsHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-2 inline-flex text-sm font-semibold text-teal underline-offset-2 hover:underline"
+            >
+              {t.maps}
+            </a>
+          ) : null}
+          <p className="mt-3 text-sm leading-relaxed text-navy/70">{t.hint}</p>
+
+          {last?.reached ? (
+            <div className="mt-4 rounded-2xl bg-emerald-50 px-4 py-4 text-center text-emerald-800">
+              <p className="text-lg font-semibold">{t.reached}</p>
+            </div>
+          ) : null}
 
           {last && (
-            <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs">
-              <div className="rounded-xl bg-sand px-2 py-3">
+            <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs sm:gap-3">
+              <div className="rounded-2xl bg-sand px-2 py-3 sm:py-4">
                 <p className="text-navy/50">{t.heads}</p>
-                <p className="mt-1 text-lg font-semibold">{last.headCount}</p>
+                <p className="mt-1 text-xl font-semibold tabular-nums sm:text-2xl">{last.headCount}</p>
               </div>
-              <div className="rounded-xl bg-sand px-2 py-3">
+              <div className="rounded-2xl bg-sand px-2 py-3 sm:py-4">
                 <p className="text-navy/50">{t.eta}</p>
-                <p className="mt-1 text-sm font-semibold">{last.etaLabel}</p>
+                <p className="mt-1 text-sm font-semibold sm:text-base">{last.etaLabel}</p>
               </div>
-              <div className="rounded-xl bg-sand px-2 py-3">
+              <div className="rounded-2xl bg-sand px-2 py-3 sm:py-4">
                 <p className="text-navy/50">{t.remaining}</p>
-                <p className="mt-1 text-sm font-semibold">{last.remainingLabel}</p>
+                <p className="mt-1 text-sm font-semibold sm:text-base">{last.remainingLabel}</p>
               </div>
             </div>
           )}
 
-          <video
-            ref={videoRef}
-            playsInline
-            muted
-            className={`mt-4 w-full rounded-2xl bg-black ${camOn ? "block" : "hidden"} ${facing === "user" ? "scale-x-[-1]" : ""}`}
-          />
+          {last && !last.reached ? (
+            <p className="mt-3 text-center text-xs font-medium text-teal sm:text-sm">{t.tracking}</p>
+          ) : null}
 
-          {preview && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={preview} alt="" className="mt-4 w-full rounded-2xl object-cover" />
-          )}
+          <div className="relative mt-4 overflow-hidden rounded-2xl bg-ink/90">
+            <video
+              ref={videoRef}
+              playsInline
+              muted
+              className={`aspect-[3/4] w-full object-cover sm:aspect-[4/5] ${camOn ? "block" : "hidden"} ${
+                facing === "user" ? "scale-x-[-1]" : ""
+              }`}
+            />
+            {preview ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={preview} alt="" className="aspect-[3/4] w-full object-cover sm:aspect-[4/5]" />
+            ) : null}
+            {!camOn && !preview ? (
+              <div className="flex aspect-[3/4] w-full flex-col items-center justify-center gap-2 px-6 text-center text-white/60 sm:aspect-[4/5]">
+                <BrandMark size={56} tone="onDark" />
+                <p className="text-sm">{t.stepPhoto}</p>
+              </div>
+            ) : null}
+          </div>
 
           {heads != null && preview && (
-            <p className="mt-2 text-sm font-medium text-teal">
+            <p className="mt-3 text-sm font-semibold text-teal sm:text-base">
               {t.heads}: {heads}
             </p>
           )}
 
-          {err && <p className="mt-3 text-sm text-red-600">{err}</p>}
-          {msg && !err && <p className="mt-3 text-sm text-teal">{msg}</p>}
+          {err && <p className="mt-3 text-sm font-medium text-red-600">{err}</p>}
+          {msg && !err && <p className="mt-3 text-sm font-medium text-teal">{msg}</p>}
           {!rallyName && (
-            <p className="mt-3 text-sm text-amber-700">
+            <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-800">
               {rallyOpensOn ? `${t.opensOn} ${rallyOpensOn}` : t.noRally}
             </p>
           )}
 
-          <div className="mt-4 flex flex-col gap-2">
+          <div className="mt-5 flex flex-col gap-3">
             {!camOn && !preview && (
-              <button type="button" onClick={() => startCam()} className="w-full rounded-2xl bg-teal py-3 font-semibold text-white">
+              <button
+                type="button"
+                onClick={() => startCam()}
+                className="min-h-[52px] w-full rounded-2xl bg-teal py-3.5 text-base font-semibold text-white shadow-sm"
+              >
                 {t.cam}
               </button>
             )}
             {camOn && (
               <>
-                <button type="button" onClick={snap} className="w-full rounded-2xl bg-teal py-3 font-semibold text-white">
+                <button
+                  type="button"
+                  onClick={snap}
+                  className="min-h-[52px] w-full rounded-2xl bg-teal py-3.5 text-base font-semibold text-white"
+                >
                   {t.capture}
                 </button>
-                <button type="button" onClick={flipCam} className="w-full rounded-2xl border border-navy/15 py-3 font-semibold">
+                <button
+                  type="button"
+                  onClick={flipCam}
+                  className="min-h-[48px] w-full rounded-2xl border border-navy/15 py-3 font-semibold"
+                >
                   {t.flip} · {facing === "environment" ? "Back" : "Front"}
                 </button>
               </>
@@ -393,7 +475,7 @@ export default function RallyCapturePage() {
                   type="button"
                   disabled={busy}
                   onClick={submit}
-                  className="w-full rounded-2xl bg-teal py-3 font-semibold text-white disabled:opacity-40"
+                  className="min-h-[52px] w-full rounded-2xl bg-teal py-3.5 text-base font-semibold text-white disabled:opacity-40"
                 >
                   {busy ? t.sending : t.send}
                 </button>
@@ -404,7 +486,7 @@ export default function RallyCapturePage() {
                     setPreview("");
                     setHeads(null);
                   }}
-                  className="w-full rounded-2xl border border-navy/15 py-3 font-semibold"
+                  className="min-h-[48px] w-full rounded-2xl border border-navy/15 py-3 font-semibold"
                 >
                   {t.retake}
                 </button>
@@ -413,7 +495,7 @@ export default function RallyCapturePage() {
             <button
               type="button"
               onClick={() => fileRef.current?.click()}
-              className="w-full rounded-2xl border border-navy/15 py-3 font-semibold"
+              className="min-h-[48px] w-full rounded-2xl border border-navy/15 py-3 font-semibold"
             >
               {t.upload}
             </button>
@@ -421,6 +503,7 @@ export default function RallyCapturePage() {
               ref={fileRef}
               type="file"
               accept="image/*"
+              capture="environment"
               className="hidden"
               onChange={(e) => {
                 const f = e.target.files?.[0];

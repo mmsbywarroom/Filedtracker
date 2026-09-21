@@ -9,6 +9,7 @@ public final class SessionStore {
     private static final String KEY_API_BASE = "api_base";
     private static final String KEY_PHONE = "phone";
     private static final String KEY_NAME = "name";
+    private static final String KEY_KIND = "kind";
 
     private SessionStore() {}
 
@@ -17,17 +18,27 @@ public final class SessionStore {
     }
 
     public static void save(Context ctx, String token, String apiBase, String phone, String name) {
+        save(ctx, token, apiBase, phone, name, "field");
+    }
+
+    public static void save(Context ctx, String token, String apiBase, String phone, String name, String kind) {
+        String k = kind != null && kind.equalsIgnoreCase("rally") ? "rally" : "field";
         prefs(ctx).edit()
                 .putString(KEY_TOKEN, token)
                 .putString(KEY_API_BASE, apiBase != null && !apiBase.isEmpty() ? apiBase : AppConfig.API_BASE)
                 .putString(KEY_PHONE, phone)
                 .putString(KEY_NAME, name)
+                .putString(KEY_KIND, k)
                 .apply();
     }
 
     public static boolean isLoggedIn(Context ctx) {
         String t = prefs(ctx).getString(KEY_TOKEN, "");
         return t != null && !t.isEmpty();
+    }
+
+    public static boolean isRallyUser(Context ctx) {
+        return "rally".equalsIgnoreCase(prefs(ctx).getString(KEY_KIND, "field"));
     }
 
     public static String token(Context ctx) {

@@ -38,8 +38,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Incorrect OTP." }, { status: 400 });
   }
 
-  const field = await prisma.user.findUnique({ where: { phone } });
-  const rally = field ? null : await prisma.rallyUser.findUnique({ where: { phone } });
+  // Inactive field users still hold the phone row; still allow active rally on same number.
+  const [field, rally] = await Promise.all([
+    prisma.user.findUnique({ where: { phone } }),
+    prisma.rallyUser.findUnique({ where: { phone } }),
+  ]);
   const account = field?.isActive
     ? { id: field.id, phone: field.phone, name: field.name, kind: "field" as const }
     : rally?.isActive

@@ -4,6 +4,17 @@ import WebKit
 final class WebShellViewController: UIViewController, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
     private var webView: WKWebView!
     private let apiBase = SessionStore.apiBase
+    private let initialPath: String
+
+    init(initialPath: String = "/dashboard") {
+        self.initialPath = initialPath.hasPrefix("/") ? initialPath : "/\(initialPath)"
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) {
+        self.initialPath = "/dashboard"
+        super.init(coder: coder)
+    }
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -47,7 +58,8 @@ final class WebShellViewController: UIViewController, WKNavigationDelegate, WKUI
     private func loadApp() {
         // Always load the public domain in WebView (TLS + cookie domain).
         let webBase = AppConfig.apiBase
-        guard let url = URL(string: webBase + "/dashboard") else { return }
+        let path = initialPath.isEmpty ? "/dashboard" : initialPath
+        guard let url = URL(string: webBase + path) else { return }
         var req = URLRequest(url: url)
         req.cachePolicy = .reloadIgnoringLocalCacheData
         setSessionCookie(token: SessionStore.token) {
