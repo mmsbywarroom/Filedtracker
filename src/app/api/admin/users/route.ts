@@ -99,6 +99,8 @@ export async function GET() {
         district: u.district,
         cluster: u.cluster,
         isActive: u.isActive,
+        deactivatedAt: u.deactivatedAt?.toISOString() || null,
+        deactivatedByName: u.deactivatedByName || null,
         onLeaveToday: approvedLeave || holidayLeave,
         faceRegistered: Boolean(u.faceRegisteredAt),
         faceImage: u.faceImage,

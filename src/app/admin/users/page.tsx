@@ -18,10 +18,24 @@ type UserRow = {
   district: string;
   cluster: string;
   isActive: boolean;
+  deactivatedAt?: string | null;
+  deactivatedByName?: string | null;
   onLeaveToday?: boolean;
   faceRegistered: boolean;
   faceImage: string | null;
 };
+
+function formatLeftAt(iso: string | null | undefined) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
 
 function unique(rows: UserRow[], key: keyof UserRow) {
   return Array.from(new Set(rows.map((r) => String(r[key])).filter(Boolean))).sort();
@@ -147,7 +161,26 @@ export default function AdminUsersPage() {
       body: JSON.stringify({ isActive: !u.isActive }),
     });
     if (res.ok) {
-      setUsers((prev) => prev.map((row) => (row.id === u.id ? { ...row, isActive: !u.isActive } : row)));
+      const data = await res.json().catch(() => null);
+      const next = data?.user;
+      setUsers((prev) =>
+        prev.map((row) =>
+          row.id === u.id
+            ? {
+                ...row,
+                isActive: next ? Boolean(next.isActive) : !u.isActive,
+                deactivatedAt: next
+                  ? next.deactivatedAt
+                    ? new Date(next.deactivatedAt).toISOString()
+                    : null
+                  : !u.isActive
+                    ? null
+                    : new Date().toISOString(),
+                deactivatedByName: next ? next.deactivatedByName || null : row.deactivatedByName,
+              }
+            : row
+        )
+      );
     }
   }
 
@@ -380,12 +413,14 @@ export default function AdminUsersPage() {
                 <th className="px-4 py-3">District</th>
                 <th className="px-4 py-3">Face</th>
                 <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3">Left at</th>
+                <th className="px-4 py-3">Left by</th>
                 <th className="px-4 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
               {pageRows.map((u) => (
-                <tr key={u.id} className={`border-t border-navy/5 hover:bg-[#f7f9fd] ${u.isActive ? "" : "opacity-70"}`}>
+                <tr key={u.id} className={`border-t border-navy/5 hover:bg-[#f7f9fd] ${u.isActive ? "" : "bg-[#f3f4f6]"}`}>
                   {isSuper && (
                     <td className="px-3 py-3">
                       <input
@@ -429,6 +464,12 @@ export default function AdminUsersPage() {
                         <span className="admin-badge-info">On leave today</span>
                       )}
                     </div>
+                  </td>
+                  <td className="px-4 py-3 text-xs text-navy/70">
+                    {u.isActive ? "—" : <span className="font-medium text-navy/80">{formatLeftAt(u.deactivatedAt)}</span>}
+                  </td>
+                  <td className="px-4 py-3 text-xs text-navy/70">
+                    {u.isActive ? "—" : u.deactivatedByName || "—"}
                   </td>
                   <td className="px-4 py-3">
                     <div className="admin-actions">
