@@ -289,11 +289,10 @@ function CellBtn({
 }
 
 function dashboardSummaryCards(data: Dash | null, date: string): PdfSummaryCard[] {
-  const total = data?.totalUsers || 0;
   const active = data?.activeUsers || 0;
   return [
-    { label: "Total users", value: total, background: "#0a1628", hint: "All users in scope" },
-    { label: "Face registered", value: ratio(data?.faceRegisteredUsers, total), background: "#7c3aed" },
+    { label: "Total users", value: active, background: "#0a1628", hint: "Active users · Left excluded" },
+    { label: "Face registered", value: ratio(data?.faceRegisteredUsers, active), background: "#7c3aed" },
     { label: "Live now", value: ratio(data?.liveNow, active), background: "#059669" },
     { label: "Punched today", value: ratio(data?.activeToday, active), background: "#c45c12" },
     { label: "Leave", value: ratio(data?.leaveOnDate, active), background: "#0284c7" },
@@ -610,15 +609,15 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
         <Stat
           className="bg-ink"
           label="Total users"
-          value={data?.totalUsers || 0}
-          hint="Tap to view list"
+          value={data?.activeUsers || 0}
+          hint="Active only · Left excluded"
           active={metric === "total" && !groupFilter}
           onClick={() => loadMetric("total")}
         />
         <Stat
           className="bg-violet-600"
           label="Face registered"
-          value={ratio(data?.faceRegisteredUsers, data?.totalUsers)}
+          value={ratio(data?.faceRegisteredUsers, data?.activeUsers)}
           hint="Tap to view list"
           active={metric === "face" && !groupFilter}
           onClick={() => loadMetric("face")}

@@ -52,11 +52,16 @@ function groupCounts(
       pendingFace: 0,
       pendingLive: 0,
     };
+    // Users column = active only; Left kept separately
+    if (!u.isActive) {
+      row.inactive += 1;
+      map.set(name, row);
+      continue;
+    }
     row.users += 1;
-    if (u.isActive) row.active += 1;
-    else row.inactive += 1;
+    row.active += 1;
     if (u.faceRegistered) row.faceRegistered += 1;
-    else if (u.isActive) row.pendingFace += 1;
+    else row.pendingFace += 1;
 
     // Attendance Leave mark wins for the day — do not also count Live / Punched
     if (leaveIds.has(u.id)) {
@@ -344,7 +349,7 @@ export async function GET(req: Request) {
     }
 
     const activeUsers = users.filter((u) => u.isActive).length;
-    const faceRegisteredUsers = users.filter((u) => u.faceRegisteredAt).length;
+    const faceRegisteredUsers = users.filter((u) => u.isActive && u.faceRegisteredAt).length;
     const leaveOnDate = users.filter((u) => leaveIds.has(u.id)).length;
     // Leave overrides punch/live for dashboard day counts (no double counting)
     const punchedNotLeave = users.filter(
@@ -377,9 +382,9 @@ export async function GET(req: Request) {
 
     if (metric && METRICS.has(metric)) {
       let filtered = users;
-      if (metric === "active") filtered = users.filter((u) => u.isActive);
+      if (metric === "total" || metric === "active") filtered = users.filter((u) => u.isActive);
       else if (metric === "inactive") filtered = users.filter((u) => !u.isActive);
-      else if (metric === "face") filtered = users.filter((u) => u.faceRegisteredAt);
+      else if (metric === "face") filtered = users.filter((u) => u.isActive && u.faceRegisteredAt);
       else if (metric === "live") filtered = users.filter((u) => liveIds.has(u.id) && !leaveIds.has(u.id) && isAttendanceEligibleOnDay({ isActive: u.isActive, deactivatedAt: u.deactivatedAt, dateYmd: date }));
       else if (metric === "punched") filtered = users.filter((u) => punchedIds.has(u.id) && !leaveIds.has(u.id) && isAttendanceEligibleOnDay({ isActive: u.isActive, deactivatedAt: u.deactivatedAt, dateYmd: date }));
       else if (metric === "leave") filtered = users.filter((u) => leaveIds.has(u.id));
@@ -483,7 +488,8 @@ export async function GET(req: Request) {
 
     return NextResponse.json({
       date,
-      totalUsers: users.length,
+      // Total on dashboard = active only (Left excluded)
+      totalUsers: activeUsers,
       activeUsers,
       inactiveUsers: users.length - activeUsers,
       faceRegisteredUsers,
