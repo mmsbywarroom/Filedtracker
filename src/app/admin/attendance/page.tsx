@@ -161,13 +161,16 @@ export default function AttendanceModulePage() {
   const [pageSize, setPageSize] = useState(25);
   const [visibleDens, setVisibleDens] = useState<string[]>(() => hierarchyDesignations());
   const [pending, setPending] = useState<{
-    userId: string;
-    name: string;
+    userIds: string[];
+    label: string;
     status: AttStatus;
   } | null>(null);
   const [reason, setReason] = useState("");
   const [statusErr, setStatusErr] = useState("");
   const [zipBusy, setZipBusy] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
+  const [bulkDesignation, setBulkDesignation] = useState("");
   const [mapUsers, setMapUsers] = useState<LiveMapUser[]>([]);
   const [mapLiveOnly, setMapLiveOnly] = useState(false);
   const [mapSelectedUserId, setMapSelectedUserId] = useState<string | null>(null);
@@ -294,43 +297,102 @@ export default function AttendanceModulePage() {
 
   useEffect(() => {
     setPage(1);
-  }, [zone, district, assembly, designation, sector, statusFilter, flagFilter, sameCoordsFilter, clientFilter, q, pageSize]);
+    setSelected({});
+  }, [zone, district, assembly, designation, sector, statusFilter, flagFilter, sameCoordsFilter, clientFilter, q, pageSize, date]);
 
   async function applyStatus() {
-    if (!pending) return;
+    if (!pending?.userIds.length) return;
     if (reason.trim().length < 3) {
       setStatusErr("Reason is required (at least 3 characters).");
       return;
     }
-    setBusy(pending.userId);
+    const note = reason.trim();
+    const targets = pending.userIds;
+    const status = pending.status;
+    setBulkBusy(true);
+    setBusy(targets[0] || null);
     setStatusErr("");
-    const res = await fetch("/api/admin/daily-attendance", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId: pending.userId, date, status: pending.status, note: reason.trim() }),
-    });
-    setBusy(null);
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      setStatusErr(data.error || "Could not update status.");
-      return;
+    let applied = 0;
+    let queued = 0;
+    let failed = 0;
+    const errors: string[] = [];
+    for (const userId of targets) {
+      setBusy(userId);
+      const res = await fetch("/api/admin/daily-attendance", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, date, status, note }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        failed += 1;
+        if (errors.length < 3 && data.error) errors.push(String(data.error));
+        continue;
+      }
+      if (data.pendingApproval) queued += 1;
+      else applied += 1;
     }
+    setBusy(null);
+    setBulkBusy(false);
     setPending(null);
     setReason("");
-    if (data.pendingApproval) {
-      window.alert(String(data.message || "Sent for approval."));
+    setSelected({});
+    const parts = [
+      applied ? `${applied} updated` : null,
+      queued ? `${queued} sent for approval` : null,
+      failed ? `${failed} failed` : null,
+    ].filter(Boolean);
+    if (parts.length || errors.length) {
+      window.alert([parts.join(", ") || "Done.", ...errors].filter(Boolean).join("\n"));
     }
     load();
   }
 
   function requestStatus(userId: string, name: string, status: AttStatus, current: string) {
     if (status === current) return;
-    setPending({ userId, name, status });
+    setPending({ userIds: [userId], label: name, status });
+    setReason("");
+    setStatusErr("");
+  }
+
+  function requestBulkPresent(userIds: string[], label: string) {
+    if (!userIds.length) return;
+    setPending({ userIds, label, status: "present" });
     setReason("");
     setStatusErr("");
   }
 
   const pageRows = useMemo(() => rows.slice((page - 1) * pageSize, (page - 1) * pageSize + pageSize), [rows, page, pageSize]);
+
+  const selectedCount = useMemo(() => Object.values(selected).filter(Boolean).length, [selected]);
+  const pageAllSelected = pageRows.length > 0 && pageRows.every((r) => selected[r.userId]);
+  const notPresentFiltered = useMemo(() => rows.filter((r) => r.status !== "present"), [rows]);
+  const designationPresentTargets = useMemo(() => {
+    const dens = bulkDesignation || designation;
+    if (!dens) return [];
+    return allRows.filter((r) => r.designation === dens && r.status !== "present");
+  }, [allRows, bulkDesignation, designation]);
+
+  function toggleOne(id: string) {
+    setSelected((s) => ({ ...s, [id]: !s[id] }));
+  }
+
+  function togglePage() {
+    setSelected((s) => {
+      const next = { ...s };
+      const turnOn = !pageAllSelected;
+      for (const r of pageRows) next[r.userId] = turnOn;
+      return next;
+    });
+  }
+
+  function selectAllFilteredNotPresent() {
+    setSelected((s) => {
+      const next = { ...s };
+      for (const r of notPresentFiltered) next[r.userId] = true;
+      return next;
+    });
+  }
 
   const rowUserIds = useMemo(() => new Set(rows.map((r) => r.userId)), [rows]);
   const filteredMapUsers = useMemo(
@@ -685,6 +747,105 @@ export default function AttendanceModulePage() {
             lat/lng match (with coordinates).
           </p>
         </div>
+        <div className="md:col-span-3 lg:col-span-4 xl:col-span-8 rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-3">
+          <p className="text-xs font-semibold uppercase tracking-wider text-emerald-800">Bulk Present</p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={selectAllFilteredNotPresent}
+              disabled={!notPresentFiltered.length}
+              className="h-9 rounded-lg border border-emerald-200 bg-white px-3 text-xs font-semibold text-emerald-900 disabled:opacity-40"
+            >
+              Select all filtered not Present ({notPresentFiltered.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelected({})}
+              disabled={!selectedCount}
+              className="h-9 rounded-lg border border-navy/15 bg-white px-3 text-xs font-semibold text-navy/70 disabled:opacity-40"
+            >
+              Clear selection
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const ids = Object.keys(selected).filter((id) => selected[id]);
+                const targets = ids.filter((id) => {
+                  const row = allRows.find((r) => r.userId === id);
+                  return row && row.status !== "present";
+                });
+                if (!targets.length) {
+                  window.alert("Select users who are not already Present.");
+                  return;
+                }
+                requestBulkPresent(targets, `${targets.length} selected users`);
+              }}
+              disabled={!selectedCount || bulkBusy}
+              className="h-9 rounded-lg bg-emerald-700 px-3 text-xs font-semibold text-white disabled:opacity-40"
+            >
+              Present selected ({selectedCount})
+            </button>
+          </div>
+          <div className="mt-3 flex flex-wrap items-end gap-2">
+            <label className="text-xs font-medium text-navy/55">
+              Designation (Present all)
+              <select
+                value={bulkDesignation || designation}
+                onChange={(e) => setBulkDesignation(e.target.value)}
+                className={`${selectClass} mt-1 min-w-[12rem]`}
+              >
+                <option value="">Choose designation</option>
+                {visibleDens.map((v) => (
+                  <option key={v} value={v}>
+                    {v}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              disabled={!designationPresentTargets.length || bulkBusy}
+              onClick={() => {
+                const dens = bulkDesignation || designation;
+                if (!dens) {
+                  window.alert("Choose a designation first.");
+                  return;
+                }
+                if (
+                  !window.confirm(
+                    `Mark ${designationPresentTargets.length} ${dens} user(s) as Present for ${date}? Already Present are skipped.`
+                  )
+                ) {
+                  return;
+                }
+                requestBulkPresent(designationPresentTargets.map((r) => r.userId), `All ${dens} (${designationPresentTargets.length})`);
+              }}
+              className="h-11 rounded-xl bg-emerald-800 px-4 text-sm font-semibold text-white disabled:opacity-40"
+            >
+              Present all · {bulkDesignation || designation || "designation"} ({designationPresentTargets.length})
+            </button>
+            <button
+              type="button"
+              disabled={!notPresentFiltered.length || bulkBusy}
+              onClick={() => {
+                if (
+                  !window.confirm(
+                    `Mark ${notPresentFiltered.length} filtered user(s) as Present for ${date}? Already Present are skipped.`
+                  )
+                ) {
+                  return;
+                }
+                requestBulkPresent(
+                  notPresentFiltered.map((r) => r.userId),
+                  `All filtered (${notPresentFiltered.length})`
+                );
+              }}
+              className="h-11 rounded-xl border border-emerald-700 bg-white px-4 text-sm font-semibold text-emerald-900 disabled:opacity-40"
+            >
+              Present all filtered ({notPresentFiltered.length})
+            </button>
+          </div>
+        </div>
       </div>
 
       <section className="admin-panel mb-4 p-4">
@@ -742,6 +903,15 @@ export default function AttendanceModulePage() {
           <table className="min-w-full text-left text-sm">
             <thead className="sticky top-0 bg-[#eef3fb] text-[11px] font-semibold uppercase tracking-wider text-navy/55">
               <tr>
+                <th className="px-3 py-3">
+                  <input
+                    type="checkbox"
+                    checked={pageAllSelected}
+                    onChange={togglePage}
+                    aria-label="Select page"
+                    className="h-4 w-4 rounded border-navy/20"
+                  />
+                </th>
                 <th className="px-4 py-3">User</th>
                 <th className="px-4 py-3">Assembly / Sector</th>
                 <th className="px-4 py-3">Zone / District</th>
@@ -757,6 +927,16 @@ export default function AttendanceModulePage() {
             <tbody>
               {pageRows.map((r) => (
                 <tr key={r.userId} className="border-t border-navy/5 hover:bg-[#f7f9fd]">
+                  <td className="px-3 py-3">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(selected[r.userId])}
+                      onChange={() => toggleOne(r.userId)}
+                      disabled={r.status === "present"}
+                      aria-label={`Select ${r.name}`}
+                      className="h-4 w-4 rounded border-navy/20 disabled:opacity-40"
+                    />
+                  </td>
                   <td className="px-4 py-3">
                     <p className="font-semibold">{r.name}</p>
                     <p className="text-xs text-navy/50">{r.phone}</p>
@@ -986,9 +1166,14 @@ export default function AttendanceModulePage() {
       {pending && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-navy/40 p-4">
           <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-card">
-            <h2 className="text-lg font-semibold">Change attendance status</h2>
+            <h2 className="text-lg font-semibold">
+              {pending.userIds.length > 1 ? "Bulk change attendance" : "Change attendance status"}
+            </h2>
             <p className="mt-1 text-sm text-navy/60">
-              {pending.name} → <span className="font-semibold">{statusTitle(pending.status)}</span>
+              {pending.label} → <span className="font-semibold">{statusTitle(pending.status)}</span>
+              {pending.userIds.length > 1 ? (
+                <span className="block mt-1 text-xs text-navy/45">{pending.userIds.length} users · same reason for all</span>
+              ) : null}
             </p>
             <label className="mt-4 block text-xs font-medium text-navy/55">
               Reason (required)
@@ -1009,17 +1194,18 @@ export default function AttendanceModulePage() {
                   setReason("");
                   setStatusErr("");
                 }}
-                className="admin-btn-secondary"
+                disabled={bulkBusy}
+                className="admin-btn-secondary disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={applyStatus}
-                disabled={busy === pending.userId}
+                disabled={bulkBusy}
                 className="admin-btn-ink disabled:opacity-50"
               >
-                Apply
+                {bulkBusy ? "Applying…" : pending.userIds.length > 1 ? `Apply to ${pending.userIds.length}` : "Apply"}
               </button>
             </div>
           </div>
