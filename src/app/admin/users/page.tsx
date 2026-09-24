@@ -232,7 +232,7 @@ export default function AdminUsersPage() {
           <p className="text-xs uppercase tracking-[0.2em] text-teal">Users</p>
           <h1 className="text-2xl font-semibold text-ink">Field users</h1>
           <p className="mt-1 text-sm text-navy/55">
-            {filtered.length} of {users.length} users · Inactive / Remove = left organization (cannot log in). Attendance
+            {filtered.length} of {users.length} users · Left / Remove = left organization (cannot log in). Attendance
             history is kept with name and phone.
           </p>
         </div>
@@ -324,7 +324,7 @@ export default function AdminUsersPage() {
         <select value={status} onChange={(e) => setStatus(e.target.value)} className={selectClass}>
           <option value="">Status: all</option>
           <option value="active">Active</option>
-          <option value="inactive">Inactive</option>
+          <option value="inactive">Left</option>
         </select>
       </div>
 
@@ -423,7 +423,7 @@ export default function AdminUsersPage() {
                         onClick={() => toggleActive(u)}
                         className={`${u.isActive ? "admin-badge-success" : "admin-badge-muted"} cursor-pointer`}
                       >
-                        {u.isActive ? "Active" : "Inactive"}
+                        {u.isActive ? "Active" : "Left"}
                       </button>
                       {u.onLeaveToday && (
                         <span className="admin-badge-info">On leave today</span>

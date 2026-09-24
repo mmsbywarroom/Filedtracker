@@ -212,7 +212,7 @@ export async function POST(req: Request) {
       },
     });
     if (!user || !user.isActive) {
-      return NextResponse.json({ error: "Account not found or inactive." }, { status: 403 });
+      return NextResponse.json({ error: "Account not found or left." }, { status: 403 });
     }
 
     const { start, end } = istDayBounds();

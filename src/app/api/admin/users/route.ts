@@ -192,7 +192,7 @@ export async function DELETE(req: Request) {
         punchOutLat: sess.lastKnownLat ?? sess.punchInLat,
         punchOutLng: sess.lastKnownLng ?? sess.punchInLng,
         punchOutReason: "manual",
-        punchOutAddress: "User removed from organization (inactive)",
+        punchOutAddress: "User removed from organization (left)",
       },
     });
   }

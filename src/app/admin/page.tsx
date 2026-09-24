@@ -88,7 +88,7 @@ type GroupBy = "designation" | "zone" | "district" | "assembly" | "callCenterSit
 const METRIC_LABELS: Record<Metric, string> = {
   total: "Total users",
   active: "Active users",
-  inactive: "Inactive users",
+  inactive: "Left users",
   face: "Face registered",
   live: "Live now",
   punched: "Punched today",
@@ -293,7 +293,6 @@ function dashboardSummaryCards(data: Dash | null, date: string): PdfSummaryCard[
   const active = data?.activeUsers || 0;
   return [
     { label: "Total users", value: total, background: "#0a1628", hint: "All users in scope" },
-    { label: "Inactive", value: ratio(data?.inactiveUsers, total), background: "#3d4f66", hint: "Not in Absent counts" },
     { label: "Face registered", value: ratio(data?.faceRegisteredUsers, total), background: "#7c3aed" },
     { label: "Live now", value: ratio(data?.liveNow, active), background: "#059669" },
     { label: "Punched today", value: ratio(data?.activeToday, active), background: "#c45c12" },
@@ -304,7 +303,7 @@ function dashboardSummaryCards(data: Dash | null, date: string): PdfSummaryCard[
       label: absentOrInProgressLabel(date),
       value: ratio(data?.absentOnDate, active),
       background: "#dc2626",
-      hint: absentOrInProgressHint(date),
+      hint: `${absentOrInProgressHint(date)} · Left users excluded`,
     },
     { label: "Pending punchin", value: ratio(data?.pendingPunchIn, active), background: "#d97706" },
     { label: "Pending face recog", value: ratio(data?.pendingFace, active), background: "#e11d48" },
@@ -347,7 +346,7 @@ function GroupTable({
     const headers = [
       hideName ? null : "Name",
       "Users",
-      "Inactive",
+      "Left",
       "Face reg",
       "Punched",
       "Live",
@@ -403,7 +402,7 @@ function GroupTable({
             <tr>
               {!hideName && <th className="px-4 py-2">Name</th>}
               <th className="px-4 py-2">Users</th>
-              <th className="px-4 py-2">Inactive</th>
+              <th className="px-4 py-2">Left</th>
               <th className="px-4 py-2">Face reg</th>
               <th className="px-4 py-2">Punched</th>
               <th className="px-4 py-2">Live</th>
@@ -617,14 +616,6 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
           onClick={() => loadMetric("total")}
         />
         <Stat
-          className="bg-navy/70"
-          label="Inactive"
-          value={ratio(data?.inactiveUsers, data?.totalUsers)}
-          hint="Not counted in Absent / Present / Half-day"
-          active={metric === "inactive" && !groupFilter}
-          onClick={() => loadMetric("inactive")}
-        />
-        <Stat
           className="bg-violet-600"
           label="Face registered"
           value={ratio(data?.faceRegisteredUsers, data?.totalUsers)}
@@ -676,7 +667,7 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
           className="bg-red-600"
           label={absentOrInProgressLabel(date)}
           value={ratio(data?.absentOnDate, data?.activeUsers)}
-          hint={absentOrInProgressHint(date)}
+          hint={`${absentOrInProgressHint(date)} · Left users excluded`}
           active={metric === "absent" && !groupFilter}
           onClick={() => loadMetric("absent")}
         />
