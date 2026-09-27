@@ -9,6 +9,10 @@ const MAX_PER_PHONE_HOUR = 3;
 const MAX_PER_IP_HOUR = 8;
 const MAX_IP_BURST = 4;
 
+/** Google Play review login only. No SMS. Every other number still gets a random OTP. */
+const PLAY_REVIEW_PHONE = "9000000001";
+const PLAY_REVIEW_OTP = "482916";
+
 function blockedPhones(): Set<string> {
   const raw = process.env.OTP_BLOCKED_PHONES || "";
   return new Set(
@@ -141,13 +145,17 @@ export async function POST(req: Request) {
   const userAgent = req.headers.get("user-agent") || "";
   const clientSource = parseClientSource(req);
 
-  const rlIp = rateLimit(`otp:${ip}`, MAX_IP_BURST, 15 * 60 * 1000);
-  if (!rlIp.ok) {
-    return NextResponse.json({ error: "Too many OTP requests. Try later." }, { status: 429 });
-  }
-
   const body = await req.json().catch(() => null);
   const phone = normalizePhone(String(body?.phone || ""));
+  const isPlayReview = phone === PLAY_REVIEW_PHONE;
+
+  if (!isPlayReview) {
+    const rlIp = rateLimit(`otp:${ip}`, MAX_IP_BURST, 15 * 60 * 1000);
+    if (!rlIp.ok) {
+      return NextResponse.json({ error: "Too many OTP requests. Try later." }, { status: 429 });
+    }
+  }
+
   const appInstallationId = String(body?.appInstallationId || body?.clientId || "").trim();
   const androidId = String(body?.androidId || "").trim();
   const appVersion = String(body?.appVersion || "").trim();
@@ -198,6 +206,24 @@ export async function POST(req: Request) {
       ...meta,
     });
     return NextResponse.json({ error: "This number is not registered. Contact admin." }, { status: 404 });
+  }
+
+  if (isPlayReview) {
+    await prisma.otpChallenge.deleteMany({ where: { phone } });
+    await prisma.otpChallenge.create({
+      data: {
+        phone,
+        codeHash: hashOtp(phone, PLAY_REVIEW_OTP),
+        expiresAt: new Date(Date.now() + 30 * 60 * 1000),
+      },
+    });
+    await logOtpRequest({
+      phone,
+      outcome: "sent",
+      detail: "play-review-fixed-otp",
+      ...meta,
+    });
+    return NextResponse.json({ ok: true, message: "OTP sent", cooldownSec: 0 });
   }
 
   // In-memory burst (single instance) + DB cooldown (multi-instance safe)
