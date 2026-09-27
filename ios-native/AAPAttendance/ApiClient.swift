@@ -47,10 +47,12 @@ enum ApiClient {
         try await authed(path: "/api/calls", method: "GET")
     }
 
-    static func saveCallOutcome(contactId: String, status: String) async throws -> [String: Any] {
+    static func saveCallOutcome(contactId: String, status: String, attending: String, companions: String) async throws -> [String: Any] {
         try await authed(path: "/api/calls", method: "PATCH", body: [
             "contactId": contactId,
             "status": status,
+            "attending": attending,
+            "companions": companions,
         ])
     }
 

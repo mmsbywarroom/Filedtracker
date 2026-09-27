@@ -314,9 +314,13 @@ model CallOutcome {
   contactId String
   user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   contact   CallContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
-  /// connected | no_answer | busy | call_later | wrong_number
-  status    String
-  updatedAt DateTime    @updatedAt
+  /// call_complete | call_disconnected | call_back_later | not_interested | party_left | wrong_number | call_not_received | out_of_service | invalid_number | switched_off
+  status     String
+  /// coming | not_coming
+  attending  String   @default("")
+  /// yes | no — other people coming in the car
+  companions String   @default("")
+  updatedAt  DateTime @updatedAt
   createdAt DateTime    @default(now())
 
   @@unique([userId, contactId])

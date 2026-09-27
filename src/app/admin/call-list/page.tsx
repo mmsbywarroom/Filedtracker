@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { CallCampaignPanel } from "@/components/CallCampaignPanel";
 
 type Contact = {
   id: string;
@@ -26,6 +27,7 @@ export default function CallListAdminPage() {
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
+  const [reloadToken, setReloadToken] = useState(0);
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function load() {
@@ -74,7 +76,10 @@ export default function CallListAdminPage() {
       return;
     }
     const errs = Array.isArray(data.errors) ? data.errors.length : 0;
-    setMsg(`Created ${data.created || 0}, updated ${data.updated || 0}${errs ? `, ${errs} row errors` : ""}.`);
+    setMsg(
+      `Created ${data.created || 0}, updated ${data.updated || 0}, auto-assigned ${data.assigned || 0}${errs ? `, ${errs} row errors` : ""}.`
+    );
+    setReloadToken((n) => n + 1);
     load();
   }
 
@@ -104,7 +109,7 @@ export default function CallListAdminPage() {
   const filteredUsers = users;
 
   function downloadTemplate() {
-    const blob = new Blob(["Person Name,Mobile,Vehicle Number\n"], { type: "text/csv;charset=utf-8" });
+    const blob = new Blob(["Person Name,Mobile,Vehicle Number,Assign User Mobile\n"], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -118,8 +123,9 @@ export default function CallListAdminPage() {
       <p className="text-xs uppercase tracking-[0.2em] text-teal">People</p>
       <h1 className="text-2xl font-semibold text-ink">Call list</h1>
       <p className="mt-1 max-w-3xl text-sm text-navy/55">
-        Upload numbers, then choose which field user can see which numbers. Users only see numbers assigned to them.
+        Upload numbers with the field user&apos;s mobile in Assign User Mobile. Matching users are assigned automatically. You can still assign from the list below.
       </p>
+      <CallCampaignPanel reloadToken={reloadToken} />
 
       <div className="mt-4 flex flex-wrap gap-2">
         <button type="button" onClick={downloadTemplate} className="admin-btn-secondary">
@@ -140,7 +146,9 @@ export default function CallListAdminPage() {
           }}
         />
       </div>
-      <p className="mt-2 text-xs text-navy/45">Columns: Person Name, Mobile, Vehicle Number</p>
+      <p className="mt-2 text-xs text-navy/45">
+        Columns: Person Name, Mobile, Vehicle Number, Assign User Mobile
+      </p>
       {msg ? <p className="mt-3 text-sm text-navy/70">{msg}</p> : null}
 
       <section className="admin-panel mt-5 p-4">

@@ -328,11 +328,13 @@ public final class ApiClient {
         }
     }
 
-    public JSONObject saveCallOutcome(String contactId, String status) throws IOException, ApiError {
+    public JSONObject saveCallOutcome(String contactId, String status, String attending, String companions) throws IOException, ApiError {
         JSONObject body = new JSONObject();
         try {
             body.put("contactId", contactId);
             body.put("status", status);
+            body.put("attending", attending == null ? "" : attending);
+            body.put("companions", companions == null ? "" : companions);
         } catch (JSONException e) {
             throw new IOException(e);
         }
