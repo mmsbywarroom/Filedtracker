@@ -2,6 +2,7 @@ package `in`.videh.filedtracker.nativeapp.compose
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -216,6 +217,7 @@ fun CallListScreen(onBack: () -> Unit) {
                     Surface(
                         shape = RoundedCornerShape(16.dp),
                         color = AapColors.Navy.copy(alpha = 0.08f),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.55f)),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -279,7 +281,7 @@ fun CallListScreen(onBack: () -> Unit) {
                                     expanded = openMenu == row.id,
                                     onOpen = { openMenu = row.id },
                                     onDismiss = { openMenu = null },
-                                    modifier = Modifier.weight(1f),
+                                    modifier = Modifier.width(92.dp),
                                     options = OUTCOMES.map { Triple(it.value, it.label, it.color) },
                                     onPick = { value ->
                                         openMenu = null
@@ -294,11 +296,11 @@ fun CallListScreen(onBack: () -> Unit) {
                                     save(next)
                                 }
                                 ChoiceButton("No", row.attending == "not_coming", Color(0xFFB91C1C)) {
-                                    val next = row.copy(attending = "not_coming")
+                                    val next = row.copy(attending = "not_coming", companions = "")
                                     rows = rows.map { if (it.id == row.id) next else it }
                                     save(next)
                                 }
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                if (row.attending == "coming") Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                     Text(if (punjabi) "ਨਾਲ" else "With you", color = AapColors.TextMuted, fontSize = 9.sp, maxLines = 1)
                                     BasicTextField(
                                         value = row.companions.filter { it.isDigit() },
@@ -362,14 +364,14 @@ private fun ColorMenu(
 ) {
     Column(modifier) {
         if (color == null) {
-            OutlinedButton(onClick = onOpen, contentPadding = TinyButton, modifier = Modifier.fillMaxWidth().height(30.dp)) {
+            OutlinedButton(onClick = onOpen, contentPadding = TinyButton, modifier = Modifier.fillMaxWidth().height(26.dp)) {
                 Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 11.sp)
             }
         } else {
             Button(
                 onClick = onOpen,
                 contentPadding = TinyButton,
-                modifier = Modifier.fillMaxWidth().height(30.dp),
+                modifier = Modifier.fillMaxWidth().height(26.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = color, contentColor = Color.White)
             ) {
                 Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 11.sp)

@@ -149,7 +149,7 @@ struct CallListView: View {
                                                 .lineLimit(1)
                                                 .padding(.horizontal, 8)
                                                 .padding(.vertical, 6)
-                                                .frame(maxWidth: .infinity)
+                                                .frame(width: 92)
                                                 .background(picked?.color ?? AapTheme.textMuted)
                                                 .cornerRadius(8)
                                         }
@@ -157,8 +157,9 @@ struct CallListView: View {
                                             update(row.id, attending: "coming")
                                         }
                                         choice("No", selected: row.attending == "not_coming", color: Color(red: 0.73, green: 0.11, blue: 0.11)) {
-                                            update(row.id, attending: "not_coming")
+                                            update(row.id, attending: "not_coming", companions: "")
                                         }
+                                        if row.attending == "coming" {
                                         VStack(spacing: 1) {
                                             Text(punjabi ? "ਨਾਲ" : "With you")
                                                 .font(.caption2)
@@ -170,9 +171,11 @@ struct CallListView: View {
                                                 .frame(width: 42, height: 28)
                                                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(AapTheme.textMuted.opacity(0.5), lineWidth: 1))
                                         }
+                                        }
                                     }
                                 }
                             }
+                            .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(Color.white.opacity(0.55), lineWidth: 1))
                         }
                     }
                     .padding(16)
