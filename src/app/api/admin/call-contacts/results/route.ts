@@ -33,7 +33,17 @@ export async function GET() {
       where: { userId: { in: userIds } },
       include: {
         user: { select: { name: true, phone: true, designation: true } },
-        contact: { select: { name: true, phone: true, vehicleNumber: true } },
+        contact: {
+          select: {
+            name: true,
+            phone: true,
+            vehicleNumber: true,
+            zone: true,
+            district: true,
+            halka: true,
+            villageWard: true,
+          },
+        },
       },
       orderBy: { updatedAt: "desc" },
       take: 4000,
@@ -48,7 +58,8 @@ export async function GET() {
     if (row.status in byStatus) byStatus[row.status] += 1;
     if (row.attending === "coming") coming += 1;
     if (row.attending === "not_coming") notComing += 1;
-    if (row.companions === "yes") withOthers += 1;
+    const people = Number(row.companions);
+    if (Number.isFinite(people) && people > 0) withOthers += people;
   }
 
   return NextResponse.json({
@@ -70,6 +81,10 @@ export async function GET() {
       personName: row.contact.name,
       mobile: row.contact.phone,
       vehicleNumber: row.contact.vehicleNumber,
+      zone: row.contact.zone,
+      district: row.contact.district,
+      halka: row.contact.halka,
+      villageWard: row.contact.villageWard,
       status: row.status,
       statusLabel: callOutcomeLabel(row.status) || row.status,
       attending: row.attending,

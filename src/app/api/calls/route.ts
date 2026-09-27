@@ -15,7 +15,18 @@ export async function GET(req: Request) {
   const rows = await prisma.callAssignment.findMany({
     where: { userId: s.sub },
     include: {
-      contact: { select: { id: true, name: true, phone: true, vehicleNumber: true } },
+      contact: {
+        select: {
+          id: true,
+          name: true,
+          phone: true,
+          vehicleNumber: true,
+          zone: true,
+          district: true,
+          halka: true,
+          villageWard: true,
+        },
+      },
     },
     orderBy: { contact: { name: "asc" } },
   });
@@ -47,6 +58,10 @@ export async function GET(req: Request) {
         name: row.contact.name,
         phone: row.contact.phone,
         vehicleNumber: row.contact.vehicleNumber,
+        zone: row.contact.zone,
+        district: row.contact.district,
+        halka: row.contact.halka,
+        villageWard: row.contact.villageWard,
         outcome: saved?.status || "",
         attending: saved?.attending || "",
         companions: saved?.companions || "",
@@ -87,14 +102,9 @@ export async function PATCH(req: Request) {
       : parsed.data.attending === "coming" || parsed.data.attending === "not_coming"
         ? parsed.data.attending
         : "";
-  const nextCompanions =
-    nextAttending === "coming"
-      ? parsed.data.companions === "yes" || parsed.data.companions === "no"
-        ? parsed.data.companions
-        : parsed.data.companions === undefined
-          ? existing?.companions || ""
-          : ""
-      : "";
+  const nextCompanions = cleanCompanionCount(
+    parsed.data.companions === undefined ? existing?.companions || "" : parsed.data.companions
+  );
 
   const outcome = await prisma.callOutcome.upsert({
     where: { userId_contactId: { userId: s.sub, contactId } },
@@ -108,4 +118,10 @@ export async function PATCH(req: Request) {
     update: { status: nextStatus, attending: nextAttending, companions: nextCompanions },
   });
   return NextResponse.json({ ok: true, outcome: outcome.status, attending: outcome.attending, companions: outcome.companions });
+}
+
+function cleanCompanionCount(value: string) {
+  const trimmed = value.trim();
+  if (/^\d{1,3}$/.test(trimmed)) return String(Number(trimmed));
+  return "";
 }

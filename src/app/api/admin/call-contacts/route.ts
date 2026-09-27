@@ -14,6 +14,10 @@ export async function GET(req: Request) {
           OR: [
             { name: { contains: q, mode: "insensitive" } },
             { vehicleNumber: { contains: q, mode: "insensitive" } },
+            { zone: { contains: q, mode: "insensitive" } },
+            { district: { contains: q, mode: "insensitive" } },
+            { halka: { contains: q, mode: "insensitive" } },
+            { villageWard: { contains: q, mode: "insensitive" } },
             ...(digits ? [{ phone: { contains: digits } }] : []),
           ],
         }
@@ -34,6 +38,10 @@ export async function GET(req: Request) {
       name: c.name,
       phone: c.phone,
       vehicleNumber: c.vehicleNumber,
+      zone: c.zone,
+      district: c.district,
+      halka: c.halka,
+      villageWard: c.villageWard,
       assignedUsers: c._count.assignments,
     })),
     users,
@@ -43,7 +51,12 @@ export async function GET(req: Request) {
 export async function DELETE(req: Request) {
   const s = await requireAdmin();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  const id = new URL(req.url).searchParams.get("id") || "";
+  const url = new URL(req.url);
+  if (url.searchParams.get("all") === "1") {
+    const deleted = await prisma.callContact.deleteMany();
+    return NextResponse.json({ ok: true, deleted: deleted.count });
+  }
+  const id = url.searchParams.get("id") || "";
   if (!id) return NextResponse.json({ error: "Contact id required." }, { status: 400 });
   await prisma.callContact.delete({ where: { id } }).catch(() => null);
   return NextResponse.json({ ok: true });

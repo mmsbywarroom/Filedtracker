@@ -10,6 +10,10 @@ const NAME_KEYS = ["Person Name", "Name", "User Name"];
 const PHONE_KEYS = ["Mobile", "Mobile Number", "Phone", "Number"];
 const VEHICLE_KEYS = ["Vehicle Number", "Vehicle No", "Vehicle"];
 const ASSIGN_KEYS = ["Assign User Mobile", "Assign User", "Assigned User Mobile", "User Mobile"];
+const ZONE_KEYS = ["Zone"];
+const DISTRICT_KEYS = ["District"];
+const HALKA_KEYS = ["Halka", "Vidhansabha", "Assembly", "AC Name", "Ac Name"];
+const VILLAGE_KEYS = ["Village/Ward", "Village Ward", "Village", "Ward"];
 
 export async function POST(req: Request) {
   const s = await requireAdmin();
@@ -56,6 +60,10 @@ export async function POST(req: Request) {
     const name = pickCsv(row, NAME_KEYS);
     const phone = normalizePhone(pickCsv(row, PHONE_KEYS)) || "";
     const vehicleNumber = pickCsv(row, VEHICLE_KEYS);
+    const zone = pickCsv(row, ZONE_KEYS);
+    const district = pickCsv(row, DISTRICT_KEYS);
+    const halka = pickCsv(row, HALKA_KEYS);
+    const villageWard = pickCsv(row, VILLAGE_KEYS);
     const assignPhone = normalizePhone(pickCsv(row, ASSIGN_KEYS)) || "";
     if (!name || !phone) {
       errors.push({ row: i + 2, error: "Person Name and a valid 10-digit Mobile are required." });
@@ -65,9 +73,9 @@ export async function POST(req: Request) {
     const contact = existing
       ? await prisma.callContact.update({
           where: { id: existing.id },
-          data: { name, vehicleNumber },
+          data: { name, vehicleNumber, zone, district, halka, villageWard },
         })
-      : await prisma.callContact.create({ data: { name, phone, vehicleNumber } });
+      : await prisma.callContact.create({ data: { name, phone, vehicleNumber, zone, district, halka, villageWard } });
     if (existing) updated += 1;
     else created += 1;
 

@@ -88,6 +88,12 @@ export default function AdminShell({ children }: { children: ReactNode }) {
       match: (p: string) => p.startsWith("/admin/call-list"),
       group: "People",
     },
+    {
+      href: "/admin/call-dashboard",
+      label: t("callDashboard"),
+      match: (p: string) => p.startsWith("/admin/call-dashboard"),
+      group: "People",
+    },
     ...(isSuper
       ? [{ href: "/admin/create", label: t("createUser"), match: (p: string) => p.startsWith("/admin/create"), group: "People" }]
       : []),

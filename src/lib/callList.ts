@@ -6,9 +6,9 @@ export const CALL_OUTCOMES = [
   { value: "party_left", label: "Party Left", color: "#be123c", text: "#ffffff" },
   { value: "wrong_number", label: "Wrong Number", color: "#b91c1c", text: "#ffffff" },
   { value: "call_not_received", label: "Call Not Received", color: "#1d4ed8", text: "#ffffff" },
-  { value: "out_of_service", label: "Out of Service", color: "#475569", text: "#ffffff" },
-  { value: "invalid_number", label: "Invalid Number", color: "#9f1239", text: "#ffffff" },
-  { value: "switched_off", label: "Switched Off", color: "#0f172a", text: "#ffffff" },
+  { value: "out_of_service", label: "Out of Service", color: "#0369a1", text: "#ffffff" },
+  { value: "invalid_number", label: "Invalid Number", color: "#be123c", text: "#ffffff" },
+  { value: "switched_off", label: "Switched Off", color: "#334155", text: "#ffffff" },
 ] as const;
 
 export type CallOutcomeValue = (typeof CALL_OUTCOMES)[number]["value"];
@@ -27,3 +27,20 @@ export function callOutcomeColor(value: string | null | undefined) {
 
 export const CALL_SCRIPT =
   "Hello, I am {name} calling on behalf of the Aam Aadmi Party. I am calling you regarding the Jashan-e-Inquilab event.";
+
+/** Someone answered. Call Complete is included here and also shown on its own. */
+export const CONNECTED_CALL_STATUSES = [
+  "call_complete",
+  "call_disconnected",
+  "call_back_later",
+  "not_interested",
+  "party_left",
+] as const;
+
+export const NOT_CONNECTED_CALL_STATUSES = [
+  "wrong_number",
+  "call_not_received",
+  "out_of_service",
+  "invalid_number",
+  "switched_off",
+] as const;

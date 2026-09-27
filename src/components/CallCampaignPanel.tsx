@@ -21,6 +21,10 @@ type Row = {
   personName: string;
   mobile: string;
   vehicleNumber: string;
+  zone: string;
+  district: string;
+  halka: string;
+  villageWard: string;
   status: string;
   statusLabel: string;
   attending: string;
@@ -67,7 +71,7 @@ export function CallCampaignPanel({ showDetails = true, reloadToken = 0 }: { sho
         <Stat label="Not called yet" value={summary.pending} />
         <Stat label="Coming" value={summary.coming} />
         <Stat label="Not coming" value={summary.notComing} />
-        <Stat label="Others in the car" value={summary.withOthers} />
+        <Stat label="People with them" value={summary.withOthers} />
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
         {CALL_OUTCOMES.map((status) => (
@@ -88,13 +92,16 @@ export function CallCampaignPanel({ showDetails = true, reloadToken = 0 }: { sho
                 <tr>
                   {[
                     "Caller",
-                    "Caller mobile",
                     "Person",
                     "Mobile",
                     "Vehicle",
+                    "Zone",
+                    "District",
+                    "Vidhansabha",
+                    "Village/Ward",
                     "Call status",
                     "Attending",
-                    "Others in car",
+                    "People with them",
                     "Updated",
                   ].map((h) => (
                     <th key={h} className="sticky top-0 z-10 bg-[#eef3fb] px-3 py-3 whitespace-nowrap">
@@ -111,11 +118,15 @@ export function CallCampaignPanel({ showDetails = true, reloadToken = 0 }: { sho
                       <td className="px-3 py-2">
                         <div className="font-medium">{row.callerName}</div>
                         <div className="text-xs text-navy/45">{row.callerDesignation}</div>
+                        <div className="text-xs text-navy/45">{row.callerPhone}</div>
                       </td>
-                      <td className="px-3 py-2">{row.callerPhone}</td>
                       <td className="px-3 py-2 font-medium">{row.personName}</td>
                       <td className="px-3 py-2">{row.mobile}</td>
                       <td className="px-3 py-2">{row.vehicleNumber || "—"}</td>
+                      <td className="px-3 py-2">{row.zone || "—"}</td>
+                      <td className="px-3 py-2">{row.district || "—"}</td>
+                      <td className="px-3 py-2">{row.halka || "—"}</td>
+                      <td className="px-3 py-2">{row.villageWard || "—"}</td>
                       <td className="px-3 py-2">
                         <span
                           className="inline-block rounded-full px-2 py-0.5 text-xs font-semibold"
@@ -158,7 +169,6 @@ function attendingLabel(value: string) {
 }
 
 function companionsLabel(value: string) {
-  if (value === "yes") return "Yes";
-  if (value === "no") return "No";
+  if (/^\d+$/.test(value)) return value;
   return "—";
 }

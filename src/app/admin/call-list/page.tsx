@@ -8,6 +8,10 @@ type Contact = {
   name: string;
   phone: string;
   vehicleNumber: string;
+  zone: string;
+  district: string;
+  halka: string;
+  villageWard: string;
   assignedUsers: number;
 };
 
@@ -105,11 +109,30 @@ export default function CallListAdminPage() {
     load();
   }
 
+  async function deleteAll() {
+    if (!window.confirm("Delete all call numbers and saved results? This cannot be undone.")) return;
+    setBusy(true);
+    const res = await fetch("/api/admin/call-contacts?all=1", { method: "DELETE" });
+    const data = await res.json().catch(() => ({}));
+    setBusy(false);
+    if (!res.ok) {
+      setMsg(data.error || "Could not delete call numbers.");
+      return;
+    }
+    setSelected({});
+    setMsg(`Deleted ${data.deleted || 0} numbers.`);
+    setReloadToken((n) => n + 1);
+    load();
+  }
+
   const assignedCount = useMemo(() => Object.values(selected).filter(Boolean).length, [selected]);
   const filteredUsers = users;
 
   function downloadTemplate() {
-    const blob = new Blob(["Person Name,Mobile,Vehicle Number,Assign User Mobile\n"], { type: "text/csv;charset=utf-8" });
+    const blob = new Blob(
+      ["Person Name,Mobile,Vehicle Number,Zone,District,Halka,Village/Ward,Assign User Mobile\n"],
+      { type: "text/csv;charset=utf-8" }
+    );
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -147,7 +170,7 @@ export default function CallListAdminPage() {
         />
       </div>
       <p className="mt-2 text-xs text-navy/45">
-        Columns: Person Name, Mobile, Vehicle Number, Assign User Mobile
+        Columns: Person Name, Mobile, Vehicle Number, Zone, District, Halka, Village/Ward, Assign User Mobile
       </p>
       {msg ? <p className="mt-3 text-sm text-navy/70">{msg}</p> : null}
 
@@ -187,6 +210,9 @@ export default function CallListAdminPage() {
           <button type="button" onClick={() => setSelected({})} className="admin-btn-secondary">
             Clear
           </button>
+          <button type="button" onClick={deleteAll} disabled={busy} className="admin-btn-secondary text-red-700 disabled:opacity-50">
+            Delete all
+          </button>
         </div>
         <label className="mt-3 block text-xs font-medium text-navy/55">
           Search numbers
@@ -210,7 +236,7 @@ export default function CallListAdminPage() {
           <table className="min-w-full text-left text-sm">
             <thead>
               <tr>
-                {["Show", "Person name", "Mobile", "Vehicle number", "Assigned users"].map((h) => (
+                {["Show", "Person name", "Mobile", "Vehicle number", "Zone", "District", "Halka", "Village/Ward", "Assigned users"].map((h) => (
                   <th key={h} className="sticky top-0 z-10 bg-[#eef3fb] px-4 py-3">
                     {h}
                   </th>
@@ -232,6 +258,10 @@ export default function CallListAdminPage() {
                   <td className="px-4 py-2 font-medium">{c.name}</td>
                   <td className="px-4 py-2">{c.phone}</td>
                   <td className="px-4 py-2">{c.vehicleNumber || "—"}</td>
+                  <td className="px-4 py-2">{c.zone || "—"}</td>
+                  <td className="px-4 py-2">{c.district || "—"}</td>
+                  <td className="px-4 py-2">{c.halka || "—"}</td>
+                  <td className="px-4 py-2">{c.villageWard || "—"}</td>
                   <td className="px-4 py-2">{c.assignedUsers}</td>
                 </tr>
               ))}

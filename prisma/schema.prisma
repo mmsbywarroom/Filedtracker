@@ -289,6 +289,11 @@ model CallContact {
   name          String
   phone         String   @unique
   vehicleNumber String   @default("")
+  zone          String   @default("")
+  district      String   @default("")
+  /// Vidhansabha / assembly
+  halka         String   @default("")
+  villageWard   String   @default("")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   assignments   CallAssignment[]
