@@ -13,6 +13,7 @@ import {
   istDateString,
   istDayBounds,
   resolveDayAttendanceStatus,
+  statusLabel,
   type ResolvedAttendanceStatus,
 } from "@/lib/dailyAttendance";
 import { holidayAppliesTo, holidayLeaveReason } from "@/lib/holidays";
@@ -162,9 +163,13 @@ export async function GET(req: Request) {
       },
       select: {
         id: true,
+        name: true,
         phone: true,
         designation: true,
         assemblyName: true,
+        sectorAllotted: true,
+        zone: true,
+        district: true,
         cluster: true,
         isActive: true,
         deactivatedAt: true,
@@ -222,6 +227,21 @@ export async function GET(req: Request) {
   for (const admin of clusterAdmins) buckets.set(admin.id, emptyBucket());
   const unassigned = emptyBucket();
   const summary = emptyBucket();
+  const people: {
+    id: string;
+    name: string;
+    phone: string;
+    designation: string;
+    assemblyName: string;
+    sectorAllotted: string;
+    zone: string;
+    district: string;
+    clusterAdminId: string;
+    clusterAdminName: string;
+    status: ResolvedAttendanceStatus;
+    statusLabel: string;
+    punched: boolean;
+  }[] = [];
 
   for (const u of eligible) {
     const mark = markByUser.get(u.id);
@@ -242,7 +262,23 @@ export async function GET(req: Request) {
     const bucket = owner ? buckets.get(owner.id)! : unassigned;
     addStatus(bucket, u.designation, resolved.status, punched);
     addStatus(summary, u.designation, resolved.status, punched);
+    people.push({
+      id: u.id,
+      name: u.name,
+      phone: u.phone,
+      designation: u.designation,
+      assemblyName: u.assemblyName,
+      sectorAllotted: u.sectorAllotted,
+      zone: u.zone,
+      district: u.district,
+      clusterAdminId: owner?.id || "unassigned",
+      clusterAdminName: owner ? (owner.name || "").trim() || owner.email : "Not mapped to a cluster admin",
+      status: resolved.status,
+      statusLabel: statusLabel(resolved.status),
+      punched,
+    });
   }
+  people.sort((a, b) => a.name.localeCompare(b.name));
 
   const rows = clusterAdmins.map((a) => ({
     id: a.id,
@@ -274,5 +310,6 @@ export async function GET(req: Request) {
     clusterAdmins: clusterAdmins.length,
     summary,
     rows,
+    people,
   });
 }

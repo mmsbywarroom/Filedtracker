@@ -109,6 +109,12 @@ export default function AdminShell({ children }: { children: ReactNode }) {
       group: "Attendance",
       badge: approvalPending,
     },
+    {
+      href: "/admin/attendance-direct-log",
+      label: t("attendanceDirectLog"),
+      match: (p: string) => p.startsWith("/admin/attendance-direct-log"),
+      group: "Attendance",
+    },
     ...(isSuper
       ? [
           {

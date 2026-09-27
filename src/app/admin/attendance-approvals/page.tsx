@@ -11,6 +11,10 @@ type ChangeRequest = {
   note: string;
   status: string;
   reviewLevel: string;
+  dlcDecision?: string;
+  clusterDecision?: string;
+  dlcReviewedByName?: string;
+  clusterReviewedByName?: string;
   requestedByName: string;
   requestedByLevel: string;
   requestedByEmail: string;
@@ -56,6 +60,15 @@ function statusLabel(s: string) {
   return s;
 }
 
+function canActOn(r: ChangeRequest, viewerLevel: string) {
+  if (r.status !== "pending") return false;
+  if (r.reviewLevel !== "BOTH") return true;
+  if (viewerLevel === "State" || viewerLevel === "") return true;
+  if (viewerLevel === "DLC") return (r.dlcDecision || "pending") === "pending";
+  if (viewerLevel === "Cluster") return (r.clusterDecision || "pending") === "pending";
+  return true;
+}
+
 function uniqueSorted(values: string[]) {
   return Array.from(new Set(values.map((v) => v.trim()).filter(Boolean))).sort((a, b) =>
     a.localeCompare(b)
@@ -77,6 +90,7 @@ export default function AttendanceApprovalsPage() {
   const [busyId, setBusyId] = useState("");
   const [note, setNote] = useState<Record<string, string>>({});
   const [canDecide, setCanDecide] = useState(false);
+  const [viewerLevel, setViewerLevel] = useState("");
   const [pendingCount, setPendingCount] = useState(0);
   const [hint, setHint] = useState<string | null>(null);
   const [err, setErr] = useState("");
@@ -98,6 +112,7 @@ export default function AttendanceApprovalsPage() {
     setRequests(data.requests || []);
     setPendingCount(typeof data.pendingCount === "number" ? data.pendingCount : 0);
     setCanDecide(Boolean(data.canDecide));
+    setViewerLevel(String(data.viewerLevel || ""));
     setHint(data.reviewLevelHint || null);
     setPage(1);
   }
@@ -321,11 +336,22 @@ export default function AttendanceApprovalsPage() {
                   <div>{r.requestedByName || r.requestedByEmail}</div>
                   <div className="text-xs text-navy/45">{r.requestedByLevel}</div>
                 </td>
-                <td className="px-3 py-2 font-medium">{r.reviewLevel}</td>
+                <td className="px-3 py-2 font-medium">
+                  {r.reviewLevel === "BOTH" ? "DLC + Cluster" : r.reviewLevel}
+                  {r.reviewLevel === "BOTH" ? (
+                    <div className="mt-1 text-[11px] font-normal normal-case text-navy/55">
+                      DLC: {r.dlcDecision || "pending"}
+                      {r.dlcReviewedByName ? ` · ${r.dlcReviewedByName}` : ""}
+                      <br />
+                      Cluster: {r.clusterDecision || "pending"}
+                      {r.clusterReviewedByName ? ` · ${r.clusterReviewedByName}` : ""}
+                    </div>
+                  ) : null}
+                </td>
                 <td className="px-3 py-2 max-w-[220px]">{r.note}</td>
                 <td className="px-3 py-2 capitalize">{r.status}</td>
                 <td className="px-3 py-2">
-                  {r.status === "pending" && canDecide ? (
+                  {r.status === "pending" && canDecide && canActOn(r, viewerLevel) ? (
                     <div className="flex min-w-[180px] flex-col gap-2">
                       <input
                         value={note[r.id] || ""}
@@ -358,7 +384,9 @@ export default function AttendanceApprovalsPage() {
                       {r.adminNote ? <div>{r.adminNote}</div> : null}
                     </div>
                   ) : (
-                    <span className="text-xs text-navy/45">Awaiting {r.reviewLevel}</span>
+                    <span className="text-xs text-navy/45">
+                      {r.reviewLevel === "BOTH" ? "Waiting for the other approval" : `Awaiting ${r.reviewLevel}`}
+                    </span>
                   )}
                 </td>
               </tr>

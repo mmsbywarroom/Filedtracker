@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { canSeeUser, userScopeWhere } from "@/lib/hierarchy";
+import { canSeeUser, normalizeAccessLevel, userScopeWhere } from "@/lib/hierarchy";
 import {
   PRESENT_MIN_HOURS,
   istDayBounds,
@@ -371,8 +371,9 @@ export async function PATCH(req: Request) {
   }
 
   const reviewLevel = attendanceChangeReviewLevel(s.admin.accessLevel, s.admin.isSuper);
+  const actorLevel = normalizeAccessLevel(s.admin.accessLevel);
 
-  // Cluster / ALC → DLC approval; DLC → ZLC approval
+  // ALC → both DLC and Cluster must approve before the mark is applied.
   if (reviewLevel) {
     const [sessions, existingMark, approvedLeave, holiday] = await Promise.all([
       prisma.attendance.findMany({
@@ -427,6 +428,8 @@ export async function PATCH(req: Request) {
         requestedByEmail: s.admin.email,
         requestedByLevel: s.admin.accessLevel,
         reviewLevel,
+        dlcDecision: reviewLevel === "BOTH" ? "pending" : "",
+        clusterDecision: reviewLevel === "BOTH" ? "pending" : "",
       },
     });
     return NextResponse.json({
@@ -435,11 +438,48 @@ export async function PATCH(req: Request) {
       reviewLevel,
       requestId: request.id,
       message:
-        reviewLevel === "DLC"
-          ? "Sent to DLC for approval. Attendance will update after DLC approves."
-          : "Sent to ZLC for approval. Attendance will update after ZLC approves.",
+        reviewLevel === "BOTH"
+          ? "Sent to DLC and Cluster for approval. Attendance updates after both approve."
+          : reviewLevel === "DLC"
+            ? "Sent to DLC for approval. Attendance will update after DLC approves."
+            : "Sent to ZLC for approval. Attendance will update after ZLC approves.",
     });
   }
+
+  const [sessions, existingMark, approvedLeave, holiday] = await Promise.all([
+    prisma.attendance.findMany({
+      where: { userId, punchInAt: { gte: start, lte: end } },
+      select: { punchInAt: true, punchOutAt: true },
+    }),
+    prisma.dailyAttendanceMark.findUnique({
+      where: { userId_date: { userId, date: dateOnly } },
+      select: { status: true, source: true, note: true },
+    }),
+    prisma.leaveRequest.findFirst({
+      where: {
+        userId,
+        status: "approved",
+        fromDate: { lte: end },
+        toDate: { gte: start },
+      },
+      select: { id: true },
+    }),
+    prisma.holiday.findUnique({ where: { date: dateOnly } }),
+  ]);
+  const resolved = resolveDayAttendanceStatus({
+    sessions,
+    asOf,
+    dateYmd: date,
+    onApprovedLeave: Boolean(approvedLeave),
+    isHoliday: holidayAppliesTo(holiday, user.designation),
+    holidayReason: holidayAppliesTo(holiday, user.designation)
+      ? holidayLeaveReason(holiday!.reason, user.designation)
+      : null,
+    manual: existingMark
+      ? { status: existingMark.status, source: existingMark.source, note: existingMark.note }
+      : null,
+    allowBeforeEarliest: isUnrestrictedPunchPhone(user.phone),
+  });
 
   const mark = await applyManualAttendanceMark({
     userId,
@@ -450,6 +490,22 @@ export async function PATCH(req: Request) {
     adminName: s.admin.name,
     adminEmail: s.admin.email,
   });
+
+  if (actorLevel === "DLC" || actorLevel === "Cluster") {
+    await prisma.attendanceDirectChange.create({
+      data: {
+        userId,
+        date: dateOnly,
+        previousStatus: resolved.status,
+        newStatus: status,
+        note,
+        changedById: s.admin.id,
+        changedByName: (s.admin.name || "").trim() || s.admin.email,
+        changedByEmail: s.admin.email,
+        changedByLevel: actorLevel,
+      },
+    });
+  }
 
   return NextResponse.json({ ok: true, mark, pendingApproval: false });
 }

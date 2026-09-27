@@ -4,7 +4,7 @@ import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import {
   applyManualAttendanceMark,
-  canReviewAttendanceChangeRequest,
+  attendanceReviewSide,
   type AttendanceMarkStatus,
 } from "@/lib/attendanceChangeApproval";
 
@@ -36,51 +36,107 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       },
     },
   });
-  if (!request || !canReviewAttendanceChangeRequest(s.admin, request)) {
+  const side = request ? attendanceReviewSide(s.admin, request) : null;
+  if (!request || !side) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
-  if (request.status !== "pending") {
-    return NextResponse.json({ error: "This request is already reviewed." }, { status: 400 });
-  }
+
+  const noteText = parsed.data.adminNote?.trim() || null;
+  const reviewerName = (s.admin.name || "").trim() || s.admin.email;
+  const now = new Date();
 
   if (parsed.data.status === "rejected") {
+    const data: Record<string, unknown> = {
+      status: "rejected",
+      adminNote: noteText,
+      reviewedAt: now,
+      reviewedById: s.admin.id,
+      reviewedByEmail: s.admin.email,
+    };
+    if (request.reviewLevel === "BOTH") {
+      if (side === "dlc" || side === "both") {
+        data.dlcDecision = "rejected";
+        data.dlcReviewedAt = now;
+        data.dlcReviewedById = s.admin.id;
+        data.dlcReviewedByName = reviewerName;
+        data.dlcNote = noteText;
+      }
+      if (side === "cluster" || side === "both") {
+        data.clusterDecision = "rejected";
+        data.clusterReviewedAt = now;
+        data.clusterReviewedById = s.admin.id;
+        data.clusterReviewedByName = reviewerName;
+        data.clusterNote = noteText;
+      }
+    }
     const updated = await prisma.attendanceChangeRequest.update({
       where: { id: request.id },
-      data: {
-        status: "rejected",
-        adminNote: parsed.data.adminNote?.trim() || null,
-        reviewedAt: new Date(),
-        reviewedById: s.admin.id,
-        reviewedByEmail: s.admin.email,
-      },
+      data,
     });
     return NextResponse.json({ ok: true, request: updated });
   }
 
-  const dateYmd =
-    request.date instanceof Date
-      ? request.date.toISOString().slice(0, 10)
-      : String(request.date).slice(0, 10);
-  const mark = await applyManualAttendanceMark({
-    userId: request.userId,
-    dateYmd,
-    status: request.proposedStatus as AttendanceMarkStatus,
-    note: request.note,
-    adminId: request.requestedById,
-    adminName: request.requestedByName,
-    adminEmail: request.requestedByEmail || s.admin.email,
-  });
+  const dlcDecision =
+    request.reviewLevel === "BOTH" && (side === "dlc" || side === "both")
+      ? "approved"
+      : request.dlcDecision;
+  const clusterDecision =
+    request.reviewLevel === "BOTH" && (side === "cluster" || side === "both")
+      ? "approved"
+      : request.clusterDecision;
+  const bothApproved =
+    request.reviewLevel !== "BOTH" || (dlcDecision === "approved" && clusterDecision === "approved");
+
+  let mark = null;
+  if (bothApproved) {
+    const dateYmd =
+      request.date instanceof Date
+        ? request.date.toISOString().slice(0, 10)
+        : String(request.date).slice(0, 10);
+    mark = await applyManualAttendanceMark({
+      userId: request.userId,
+      dateYmd,
+      status: request.proposedStatus as AttendanceMarkStatus,
+      note: request.note,
+      adminId: request.requestedById,
+      adminName: request.requestedByName,
+      adminEmail: request.requestedByEmail || s.admin.email,
+    });
+  }
+
+  const data: Record<string, unknown> = {
+    status: bothApproved ? "approved" : "pending",
+    adminNote: noteText || request.adminNote,
+    reviewedAt: bothApproved ? now : request.reviewedAt,
+    reviewedById: bothApproved ? s.admin.id : request.reviewedById,
+    reviewedByEmail: bothApproved ? s.admin.email : request.reviewedByEmail,
+  };
+  if (request.reviewLevel === "BOTH") {
+    if (side === "dlc" || side === "both") {
+      data.dlcDecision = "approved";
+      data.dlcReviewedAt = now;
+      data.dlcReviewedById = s.admin.id;
+      data.dlcReviewedByName = reviewerName;
+      data.dlcNote = noteText;
+    }
+    if (side === "cluster" || side === "both") {
+      data.clusterDecision = "approved";
+      data.clusterReviewedAt = now;
+      data.clusterReviewedById = s.admin.id;
+      data.clusterReviewedByName = reviewerName;
+      data.clusterNote = noteText;
+    }
+  }
 
   const updated = await prisma.attendanceChangeRequest.update({
     where: { id: request.id },
-    data: {
-      status: "approved",
-      adminNote: parsed.data.adminNote?.trim() || null,
-      reviewedAt: new Date(),
-      reviewedById: s.admin.id,
-      reviewedByEmail: s.admin.email,
-    },
+    data,
   });
 
-  return NextResponse.json({ ok: true, request: updated, mark });
+  return NextResponse.json({
+    ok: true,
+    request: updated,
+    mark,
+    waitingForOther: request.reviewLevel === "BOTH" && !bothApproved,
+  });
 }

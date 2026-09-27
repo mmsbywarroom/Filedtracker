@@ -60,6 +60,7 @@ model User {
   leaveRequests       LeaveRequest[]
   dailyAttendanceMarks DailyAttendanceMark[]
   attendanceChangeRequests AttendanceChangeRequest[]
+  attendanceDirectChanges AttendanceDirectChange[]
 }
 
 model DailyAttendanceMark {
@@ -235,8 +236,19 @@ model AttendanceChangeRequest {
   requestedByName  String   @default("")
   requestedByEmail String   @default("")
   requestedByLevel String   @default("")
-  /// DLC | ZLC
+  /// DLC | ZLC | BOTH (ALC marks need DLC and Cluster)
   reviewLevel      String
+  /// pending | approved | rejected — used when reviewLevel is BOTH
+  dlcDecision      String   @default("")
+  clusterDecision  String   @default("")
+  dlcReviewedAt    DateTime?
+  clusterReviewedAt DateTime?
+  dlcReviewedById  String?
+  clusterReviewedById String?
+  dlcReviewedByName String  @default("")
+  clusterReviewedByName String @default("")
+  dlcNote          String?
+  clusterNote      String?
   reviewedAt       DateTime?
   reviewedById     String?
   reviewedByEmail  String?
@@ -247,6 +259,27 @@ model AttendanceChangeRequest {
   @@index([status, reviewLevel, createdAt])
   @@index([userId, date])
   @@index([requestedById, createdAt])
+}
+
+/// Immediate attendance edits by DLC or Cluster (no approval).
+model AttendanceDirectChange {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date            DateTime @db.Date
+  previousStatus  String?
+  newStatus       String
+  note            String
+  changedById     String
+  changedByName   String   @default("")
+  changedByEmail  String   @default("")
+  /// DLC | Cluster
+  changedByLevel  String
+  createdAt       DateTime @default(now())
+
+  @@index([changedByLevel, createdAt])
+  @@index([date, createdAt])
+  @@index([userId, date])
 }
 
 model Rally {

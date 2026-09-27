@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { attendanceChangeListWhere } from "@/lib/attendanceChangeApproval";
+import { attendanceChangeListWhere, attendanceChangePendingWhere } from "@/lib/attendanceChangeApproval";
 import { normalizeAccessLevel, isSuperAdmin } from "@/lib/hierarchy";
 
 export async function GET(req: Request) {
@@ -15,12 +15,17 @@ export async function GET(req: Request) {
 
   const level = normalizeAccessLevel(s.admin.accessLevel);
   const canDecide =
-    isSuperAdmin(s.admin) || level === "State" || level === "DLC" || level === "ZLC";
+    isSuperAdmin(s.admin) ||
+    level === "State" ||
+    level === "DLC" ||
+    level === "Cluster" ||
+    level === "ZLC";
 
   const scopeWhere = attendanceChangeListWhere(s.admin);
+  const pendingWhere = attendanceChangePendingWhere(s.admin);
 
   const pendingCount = await prisma.attendanceChangeRequest.count({
-    where: { AND: [scopeWhere, { status: "pending" }] },
+    where: pendingWhere,
   });
 
   if (summaryOnly) {
@@ -28,17 +33,25 @@ export async function GET(req: Request) {
       pendingCount,
       canDecide,
       reviewLevelHint:
-        level === "DLC" ? "DLC" : level === "ZLC" ? "ZLC" : isSuperAdmin(s.admin) || level === "State" ? "all" : null,
+        level === "DLC"
+          ? "DLC"
+          : level === "Cluster"
+            ? "Cluster"
+            : level === "ZLC"
+              ? "ZLC"
+              : isSuperAdmin(s.admin) || level === "State"
+                ? "all"
+                : null,
     });
   }
 
   const rows = await prisma.attendanceChangeRequest.findMany({
-    where: {
-      AND: [
-        scopeWhere,
-        status && status !== "all" ? { status } : {},
-      ],
-    },
+    where:
+      status === "pending"
+        ? pendingWhere
+        : {
+            AND: [scopeWhere, status && status !== "all" ? { status } : {}],
+          },
     include: {
       user: {
         select: {
@@ -68,7 +81,16 @@ export async function GET(req: Request) {
     requests: filtered,
     pendingCount,
     canDecide,
+    viewerLevel: isSuperAdmin(s.admin) ? "State" : level,
     reviewLevelHint:
-      level === "DLC" ? "DLC" : level === "ZLC" ? "ZLC" : isSuperAdmin(s.admin) || level === "State" ? "all" : null,
+      level === "DLC"
+        ? "DLC"
+        : level === "Cluster"
+          ? "Cluster"
+          : level === "ZLC"
+            ? "ZLC"
+            : isSuperAdmin(s.admin) || level === "State"
+              ? "all"
+              : null,
   });
 }
