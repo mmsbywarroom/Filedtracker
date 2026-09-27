@@ -79,9 +79,10 @@ export default function CallListAdminPage() {
       setMsg(data.error || "CSV upload failed.");
       return;
     }
-    const errs = Array.isArray(data.errors) ? data.errors.length : 0;
+    const errs = Array.isArray(data.errors) ? data.errors : [];
+    const first = errs[0] ? ` Row ${errs[0].row}: ${errs[0].error}` : "";
     setMsg(
-      `Created ${data.created || 0}, updated ${data.updated || 0}, auto-assigned ${data.assigned || 0}${errs ? `, ${errs} row errors` : ""}.`
+      `Created ${data.created || 0}, updated ${data.updated || 0}, auto-assigned ${data.assigned || 0}${errs.length ? `, ${errs.length} row errors.${first}` : ""}.`
     );
     setReloadToken((n) => n + 1);
     load();
@@ -170,7 +171,7 @@ export default function CallListAdminPage() {
         />
       </div>
       <p className="mt-2 text-xs text-navy/45">
-        Columns: Person Name, Mobile, Vehicle Number, Zone, District, Halka, Village/Ward, Assign User Mobile
+        Columns: Person Name, Mobile, Vehicle Number, Zone, District, Halka, Village/Ward, Assign User Mobile. In Excel use Save As → CSV UTF-8 so names are not saved as question marks.
       </p>
       {msg ? <p className="mt-3 text-sm text-navy/70">{msg}</p> : null}
 

@@ -15,7 +15,7 @@ export const rallyUserFields = z.object({
 });
 
 export function pickCsv(row: Record<string, string>, keys: string[]) {
-  const map = new Map(Object.keys(row).map((k) => [k.trim().toLowerCase(), k]));
+  const map = new Map(Object.keys(row).map((k) => [k.replace(/^\uFEFF/, "").trim().toLowerCase(), k]));
   for (const key of keys) {
     const found = map.get(key.toLowerCase());
     if (found) return String(row[found] || "").trim();
