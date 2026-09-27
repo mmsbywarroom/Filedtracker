@@ -1,0 +1,50 @@
+import { NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { userScopeWhere } from "@/lib/hierarchy";
+
+export async function GET(req: Request) {
+  const s = await requireAdmin();
+  if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const q = new URL(req.url).searchParams.get("q")?.trim() || "";
+  const digits = q.replace(/\D/g, "");
+  const contacts = await prisma.callContact.findMany({
+    where: q
+      ? {
+          OR: [
+            { name: { contains: q, mode: "insensitive" } },
+            { vehicleNumber: { contains: q, mode: "insensitive" } },
+            ...(digits ? [{ phone: { contains: digits } }] : []),
+          ],
+        }
+      : {},
+    orderBy: { name: "asc" },
+    take: 2000,
+    include: { _count: { select: { assignments: true } } },
+  });
+  const users = await prisma.user.findMany({
+    where: { AND: [userScopeWhere(s.admin), { isActive: true }] },
+    select: { id: true, name: true, phone: true, designation: true, assemblyName: true },
+    orderBy: { name: "asc" },
+    take: 2000,
+  });
+  return NextResponse.json({
+    contacts: contacts.map((c) => ({
+      id: c.id,
+      name: c.name,
+      phone: c.phone,
+      vehicleNumber: c.vehicleNumber,
+      assignedUsers: c._count.assignments,
+    })),
+    users,
+  });
+}
+
+export async function DELETE(req: Request) {
+  const s = await requireAdmin();
+  if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const id = new URL(req.url).searchParams.get("id") || "";
+  if (!id) return NextResponse.json({ error: "Contact id required." }, { status: 400 });
+  await prisma.callContact.delete({ where: { id } }).catch(() => null);
+  return NextResponse.json({ ok: true });
+}

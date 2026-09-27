@@ -91,6 +91,7 @@ class ComposeMainActivity : AppCompatActivity() {
                         composable(Routes.MAP) { MapScreen(onBack = { nav.popBackStack() }) }
                         composable(Routes.LEAVE) { LeaveScreen(onBack = { nav.popBackStack() }) }
                         composable(Routes.FOOTPRINTS) { FootprintsScreen(onBack = { nav.popBackStack() }) }
+                        composable(Routes.CALLS) { CallListScreen(onBack = { nav.popBackStack() }) }
                         composable(
                             Routes.FACE,
                             arguments = listOf(navArgument("mode") { type = NavType.StringType })
@@ -114,6 +115,7 @@ object Routes {
     const val MAP = "map"
     const val LEAVE = "leave"
     const val FOOTPRINTS = "footprints"
+    const val CALLS = "calls"
     const val FACE = "face/{mode}"
 
     /** [mode] is register / punch_in / punch_out / check. */

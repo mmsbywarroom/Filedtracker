@@ -27,6 +27,8 @@
     <string name="today_distance">Today distance</string>
     <string name="hours_worked">Hours worked</string>
     <string name="face_check">Face check</string>
+    <string name="do_the_call">Do the call</string>
+    <string name="do_the_call_sub">Assigned numbers</string>
     <string name="route_today">Your route today</string>
     <string name="past_sessions">Past sessions</string>
     <string name="apply_leave">Apply &amp; track</string>

@@ -61,6 +61,8 @@ model User {
   dailyAttendanceMarks DailyAttendanceMark[]
   attendanceChangeRequests AttendanceChangeRequest[]
   attendanceDirectChanges AttendanceDirectChange[]
+  callAssignments CallAssignment[]
+  callOutcomes CallOutcome[]
 }
 
 model DailyAttendanceMark {
@@ -280,6 +282,45 @@ model AttendanceDirectChange {
   @@index([changedByLevel, createdAt])
   @@index([date, createdAt])
   @@index([userId, date])
+}
+
+model CallContact {
+  id            String   @id @default(cuid())
+  name          String
+  phone         String   @unique
+  vehicleNumber String   @default("")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  assignments   CallAssignment[]
+  outcomes      CallOutcome[]
+}
+
+model CallAssignment {
+  id        String      @id @default(cuid())
+  userId    String
+  contactId String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contact   CallContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  createdAt DateTime    @default(now())
+
+  @@unique([userId, contactId])
+  @@index([userId])
+  @@index([contactId])
+}
+
+model CallOutcome {
+  id        String      @id @default(cuid())
+  userId    String
+  contactId String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contact   CallContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  /// connected | no_answer | busy | call_later | wrong_number
+  status    String
+  updatedAt DateTime    @updatedAt
+  createdAt DateTime    @default(now())
+
+  @@unique([userId, contactId])
+  @@index([userId])
 }
 
 model Rally {

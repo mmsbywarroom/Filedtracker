@@ -27,6 +27,8 @@
     <string name="today_distance">ਅੱਜ ਦੀ ਦੂਰੀ</string>
     <string name="hours_worked">ਕੰਮ ਦੇ ਘੰਟੇ</string>
     <string name="face_check">ਚਿਹਰਾ ਜਾਂਚ</string>
+    <string name="do_the_call">ਕਾਲ ਕਰੋ</string>
+    <string name="do_the_call_sub">ਦਿੱਤੇ ਨੰਬਰ</string>
     <string name="route_today">ਅੱਜ ਦਾ ਰਸਤਾ</string>
     <string name="past_sessions">ਪਿਛਲੀਆਂ ਸੈਸ਼ਨ</string>
     <string name="apply_leave">ਬੇਨਤੀ ਤੇ ਸਥਿਤੀ</string>

@@ -24,6 +24,7 @@ struct HomeView: View {
     @State private var mapOpen = false
     @State private var leaveOpen = false
     @State private var printsOpen = false
+    @State private var callsOpen = false
     @State private var lastPunchLoc: CLLocation?
     @State private var nowTick = Date()
     @State private var localDistanceTick = 0
@@ -99,6 +100,7 @@ struct HomeView: View {
                     action(LocaleStore.t("Footprints", "ਰਸਤੇ"), LocaleStore.t("Past sessions", "ਪਿਛਲੀਆਂ ਸੈਸ਼ਨ"), "point.topleft.down.curvedto.point.bottomright.up") { printsOpen = true }
                     action(LocaleStore.t("Leave", "ਛੁੱਟੀ"), LocaleStore.t("Apply & track", "ਬੇਨਤੀ ਤੇ ਸਥਿਤੀ"), "calendar") { leaveOpen = true }
                     action(LocaleStore.t("Face check", "ਚਿਹਰਾ ਜਾਂਚ"), LocaleStore.t("Camera self-test", "ਕੈਮਰਾ ਟੈਸਟ"), "faceid") { route = .check }
+                    action(LocaleStore.t("Do the call", "ਕਾਲ ਕਰੋ"), LocaleStore.t("Assigned numbers", "ਦਿੱਤੇ ਨੰਬਰ"), "phone.fill") { callsOpen = true }
                 }
                 Button {
                     LocationTracker.shared.stop()
@@ -142,6 +144,7 @@ struct HomeView: View {
         .sheet(isPresented: $mapOpen) { MapRouteView() }
         .sheet(isPresented: $leaveOpen) { LeaveView() }
         .sheet(isPresented: $printsOpen) { FootprintsView() }
+        .sheet(isPresented: $callsOpen) { CallListView() }
     }
 
     private var header: some View {

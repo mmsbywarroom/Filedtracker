@@ -43,6 +43,17 @@ enum ApiClient {
         try await authed(path: "/api/attendance/history", method: "GET")
     }
 
+    static func getCalls() async throws -> [String: Any] {
+        try await authed(path: "/api/calls", method: "GET")
+    }
+
+    static func saveCallOutcome(contactId: String, status: String) async throws -> [String: Any] {
+        try await authed(path: "/api/calls", method: "PATCH", body: [
+            "contactId": contactId,
+            "status": status,
+        ])
+    }
+
     static func getLeave() async throws -> [String: Any] {
         try await authed(path: "/api/leave", method: "GET")
     }

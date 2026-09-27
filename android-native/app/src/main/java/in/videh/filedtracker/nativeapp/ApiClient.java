@@ -318,6 +318,33 @@ public final class ApiClient {
         return body;
     }
 
+    public JSONObject getCalls() throws IOException, ApiError {
+        try (Response res = executeAuthFailover("/api/calls", "GET", null)) {
+            return readJson(res);
+        } catch (ApiError e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IOException(e);
+        }
+    }
+
+    public JSONObject saveCallOutcome(String contactId, String status) throws IOException, ApiError {
+        JSONObject body = new JSONObject();
+        try {
+            body.put("contactId", contactId);
+            body.put("status", status);
+        } catch (JSONException e) {
+            throw new IOException(e);
+        }
+        try (Response res = executeAuthFailover("/api/calls", "PATCH", RequestBody.create(body.toString(), JSON))) {
+            return readJson(res);
+        } catch (ApiError e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IOException(e);
+        }
+    }
+
     public JSONObject getLeave() throws IOException, ApiError {
         try (Response res = executeAuthFailover("/api/leave", "GET", null)) {
             return readJson(res);

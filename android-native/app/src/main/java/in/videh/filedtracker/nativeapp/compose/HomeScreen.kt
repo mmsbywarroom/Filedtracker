@@ -37,6 +37,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Login
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.EventAvailable
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Map
@@ -536,6 +537,14 @@ fun HomeScreen(
                 onClick = { onOpen(Routes.face(FACE_MODE_CHECK)) }
             )
         }
+        Spacer(Modifier.height(14.dp))
+        ActionCard(
+            title = stringResource(R.string.do_the_call),
+            subtitle = stringResource(R.string.do_the_call_sub),
+            icon = { Icon(Icons.Filled.Call, null, tint = AapColors.Navy) },
+            modifier = Modifier.fillMaxWidth(),
+            onClick = { onOpen(Routes.CALLS) }
+        )
 
         Spacer(Modifier.height(26.dp))
 
