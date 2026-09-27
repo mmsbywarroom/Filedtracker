@@ -94,6 +94,12 @@ export default function AdminShell({ children }: { children: ReactNode }) {
       match: (p: string) => p.startsWith("/admin/attendance") && !p.startsWith("/admin/attendance-approvals"),
       group: "Attendance",
     },
+    {
+      href: "/admin/cluster-coverage",
+      label: t("clusterCoverage"),
+      match: (p: string) => p.startsWith("/admin/cluster-coverage"),
+      group: "Attendance",
+    },
     { href: "/admin/records", label: t("dailyRecords"), match: (p: string) => p.startsWith("/admin/records"), group: "Attendance" },
     { href: "/admin/leaves", label: t("leaveModule"), match: (p: string) => p.startsWith("/admin/leaves"), group: "Attendance" },
     {
