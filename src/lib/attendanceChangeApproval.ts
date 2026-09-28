@@ -20,7 +20,7 @@ export type AttendanceMarkStatus = "present" | "half_day" | "absent" | "leave";
 export type AttendanceReviewLevel = "DLC" | "ZLC" | "BOTH";
 export type AttendanceReviewSide = "dlc" | "cluster" | "both";
 
-/** ALC → DLC and Cluster must both approve. DLC and Cluster apply immediately (logged separately). */
+/** ALC → DLC and Cluster. Either approval applies the change and closes the other queue. DLC and Cluster apply their own edits immediately. */
 export function attendanceChangeReviewLevel(
   accessLevel: string,
   isSuper?: boolean
@@ -193,4 +193,45 @@ export async function applyManualAttendanceMark(opts: {
   });
 
   return mark;
+}
+
+/** Older rows waited for both sides. One approval is now enough, so finish those and drop them from the other queue. */
+export async function finishEitherAlreadyApproved() {
+  const rows = await prisma.attendanceChangeRequest.findMany({
+    where: {
+      status: "pending",
+      reviewLevel: "BOTH",
+      OR: [{ dlcDecision: "approved" }, { clusterDecision: "approved" }],
+    },
+    take: 100,
+  });
+  for (const row of rows) {
+    const dateYmd =
+      row.date instanceof Date ? row.date.toISOString().slice(0, 10) : String(row.date).slice(0, 10);
+    try {
+      await applyManualAttendanceMark({
+        userId: row.userId,
+        dateYmd,
+        status: row.proposedStatus as AttendanceMarkStatus,
+        note: row.note,
+        adminId: row.requestedById,
+        adminName: row.requestedByName,
+        adminEmail: row.requestedByEmail || row.requestedByName || "admin",
+      });
+    } catch {
+      continue;
+    }
+    const dlcApproved = row.dlcDecision === "approved";
+    const clusterApproved = row.clusterDecision === "approved";
+    await prisma.attendanceChangeRequest.updateMany({
+      where: { id: row.id, status: "pending" },
+      data: {
+        status: "approved",
+        reviewedAt: row.dlcReviewedAt || row.clusterReviewedAt || new Date(),
+        reviewedById: (dlcApproved ? row.dlcReviewedById : row.clusterReviewedById) || undefined,
+        dlcDecision: dlcApproved ? "approved" : "closed",
+        clusterDecision: clusterApproved ? "approved" : "closed",
+      },
+    });
+  }
 }

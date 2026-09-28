@@ -238,9 +238,9 @@ model AttendanceChangeRequest {
   requestedByName  String   @default("")
   requestedByEmail String   @default("")
   requestedByLevel String   @default("")
-  /// DLC | ZLC | BOTH (ALC marks need DLC and Cluster)
+  /// DLC | ZLC | BOTH (ALC marks go to DLC and Cluster; either approval is enough)
   reviewLevel      String
-  /// pending | approved | rejected — used when reviewLevel is BOTH
+  /// pending | approved | rejected | closed — used when reviewLevel is BOTH
   dlcDecision      String   @default("")
   clusterDecision  String   @default("")
   dlcReviewedAt    DateTime?

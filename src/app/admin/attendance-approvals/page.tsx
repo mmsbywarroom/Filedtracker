@@ -60,6 +60,14 @@ function statusLabel(s: string) {
   return s;
 }
 
+function decisionLabel(value?: string) {
+  if (!value || value === "pending") return "Pending";
+  if (value === "approved") return "Approved";
+  if (value === "rejected") return "Rejected";
+  if (value === "closed") return "Closed";
+  return value;
+}
+
 function canActOn(r: ChangeRequest, viewerLevel: string) {
   if (r.status !== "pending") return false;
   if (r.reviewLevel !== "BOTH") return true;
@@ -192,9 +200,10 @@ export default function AttendanceApprovalsPage() {
       <p className="text-xs uppercase tracking-[0.2em] text-teal">Approvals</p>
       <h1 className="text-2xl font-semibold">Attendance change approvals</h1>
       <p className="mt-1 text-sm text-navy/55">
-        Cluster / ALC manual changes go to DLC. DLC manual changes go to ZLC. Status updates only after approval.
-        Each request shows the requester&apos;s reason. Use Approve / Reject on pending rows.
+        ALC status changes go to both DLC and Cluster. Either one can approve. One approval applies the
+        change and removes it from the other queue. One rejection closes it for both.
         {hint === "DLC" ? " You are reviewing the DLC queue." : null}
+        {hint === "Cluster" ? " You are reviewing the Cluster queue." : null}
         {hint === "ZLC" ? " You are reviewing the ZLC queue." : null}
       </p>
 
@@ -340,10 +349,10 @@ export default function AttendanceApprovalsPage() {
                   {r.reviewLevel === "BOTH" ? "DLC + Cluster" : r.reviewLevel}
                   {r.reviewLevel === "BOTH" ? (
                     <div className="mt-1 text-[11px] font-normal normal-case text-navy/55">
-                      DLC: {r.dlcDecision || "pending"}
+                      DLC: {decisionLabel(r.dlcDecision)}
                       {r.dlcReviewedByName ? ` · ${r.dlcReviewedByName}` : ""}
                       <br />
-                      Cluster: {r.clusterDecision || "pending"}
+                      Cluster: {decisionLabel(r.clusterDecision)}
                       {r.clusterReviewedByName ? ` · ${r.clusterReviewedByName}` : ""}
                     </div>
                   ) : null}
@@ -385,7 +394,7 @@ export default function AttendanceApprovalsPage() {
                     </div>
                   ) : (
                     <span className="text-xs text-navy/45">
-                      {r.reviewLevel === "BOTH" ? "Waiting for the other approval" : `Awaiting ${r.reviewLevel}`}
+                      {r.reviewLevel === "BOTH" ? "Closed after the other decision" : `Awaiting ${r.reviewLevel}`}
                     </span>
                   )}
                 </td>

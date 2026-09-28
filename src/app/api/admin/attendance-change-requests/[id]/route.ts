@@ -68,6 +68,12 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
         data.clusterReviewedByName = reviewerName;
         data.clusterNote = noteText;
       }
+      if (side === "dlc" && (request.clusterDecision || "pending") === "pending") {
+        data.clusterDecision = "closed";
+      }
+      if (side === "cluster" && (request.dlcDecision || "pending") === "pending") {
+        data.dlcDecision = "closed";
+      }
     }
     const updated = await prisma.attendanceChangeRequest.update({
       where: { id: request.id },
@@ -76,19 +82,10 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     return NextResponse.json({ ok: true, request: updated });
   }
 
-  const dlcDecision =
-    request.reviewLevel === "BOTH" && (side === "dlc" || side === "both")
-      ? "approved"
-      : request.dlcDecision;
-  const clusterDecision =
-    request.reviewLevel === "BOTH" && (side === "cluster" || side === "both")
-      ? "approved"
-      : request.clusterDecision;
-  const bothApproved =
-    request.reviewLevel !== "BOTH" || (dlcDecision === "approved" && clusterDecision === "approved");
+  const finishesNow = request.reviewLevel !== "BOTH" || side === "dlc" || side === "cluster" || side === "both";
 
   let mark = null;
-  if (bothApproved) {
+  if (finishesNow) {
     const dateYmd =
       request.date instanceof Date
         ? request.date.toISOString().slice(0, 10)
@@ -105,11 +102,11 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   }
 
   const data: Record<string, unknown> = {
-    status: bothApproved ? "approved" : "pending",
+    status: finishesNow ? "approved" : "pending",
     adminNote: noteText || request.adminNote,
-    reviewedAt: bothApproved ? now : request.reviewedAt,
-    reviewedById: bothApproved ? s.admin.id : request.reviewedById,
-    reviewedByEmail: bothApproved ? s.admin.email : request.reviewedByEmail,
+    reviewedAt: finishesNow ? now : request.reviewedAt,
+    reviewedById: finishesNow ? s.admin.id : request.reviewedById,
+    reviewedByEmail: finishesNow ? s.admin.email : request.reviewedByEmail,
   };
   if (request.reviewLevel === "BOTH") {
     if (side === "dlc" || side === "both") {
@@ -126,6 +123,12 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
       data.clusterReviewedByName = reviewerName;
       data.clusterNote = noteText;
     }
+    if (side === "dlc" && (request.clusterDecision || "pending") === "pending") {
+      data.clusterDecision = "closed";
+    }
+    if (side === "cluster" && (request.dlcDecision || "pending") === "pending") {
+      data.dlcDecision = "closed";
+    }
   }
 
   const updated = await prisma.attendanceChangeRequest.update({
@@ -137,6 +140,6 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
     ok: true,
     request: updated,
     mark,
-    waitingForOther: request.reviewLevel === "BOTH" && !bothApproved,
+    waitingForOther: false,
   });
 }

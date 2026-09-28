@@ -373,7 +373,7 @@ export async function PATCH(req: Request) {
   const reviewLevel = attendanceChangeReviewLevel(s.admin.accessLevel, s.admin.isSuper);
   const actorLevel = normalizeAccessLevel(s.admin.accessLevel);
 
-  // ALC → both DLC and Cluster must approve before the mark is applied.
+  // ALC → DLC and Cluster. Either approval applies the mark and removes it from the other queue.
   if (reviewLevel) {
     const [sessions, existingMark, approvedLeave, holiday] = await Promise.all([
       prisma.attendance.findMany({
@@ -439,7 +439,7 @@ export async function PATCH(req: Request) {
       requestId: request.id,
       message:
         reviewLevel === "BOTH"
-          ? "Sent to DLC and Cluster for approval. Attendance updates after both approve."
+          ? "Sent to DLC and Cluster. Attendance updates when either one approves, and it leaves the other queue."
           : reviewLevel === "DLC"
             ? "Sent to DLC for approval. Attendance will update after DLC approves."
             : "Sent to ZLC for approval. Attendance will update after ZLC approves.",

@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { attendanceChangeListWhere, attendanceChangePendingWhere } from "@/lib/attendanceChangeApproval";
+import {
+  attendanceChangeListWhere,
+  attendanceChangePendingWhere,
+  finishEitherAlreadyApproved,
+} from "@/lib/attendanceChangeApproval";
 import { normalizeAccessLevel, isSuperAdmin } from "@/lib/hierarchy";
 
 export async function GET(req: Request) {
@@ -20,6 +24,8 @@ export async function GET(req: Request) {
     level === "DLC" ||
     level === "Cluster" ||
     level === "ZLC";
+
+  await finishEitherAlreadyApproved();
 
   const scopeWhere = attendanceChangeListWhere(s.admin);
   const pendingWhere = attendanceChangePendingWhere(s.admin);
