@@ -16,6 +16,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -82,12 +83,23 @@ fun FastFacePunchScreen(
         scope.launch {
             try {
                 completeFaceAction(context, activity, faceMode, payloadJson, image) { status = it }
-                onSuccess()
+                val punchIn = faceMode == DashboardActivity.MODE_PUNCH_IN
+                val punchOut = faceMode == DashboardActivity.MODE_PUNCH_OUT
+                if (punchIn || punchOut) {
+                    AttendanceAds.showPunch(activity, punchIn) { onSuccess() }
+                } else {
+                    onSuccess()
+                }
             } catch (e: Exception) {
                 error = errorText(e, "Could not finish punch")
                 status = ""
             }
         }
+    }
+
+    DisposableEffect(Unit) {
+        AttendanceAds.punchFlow = true
+        onDispose { AttendanceAds.punchFlow = false }
     }
 
     LaunchedEffect(Unit) {

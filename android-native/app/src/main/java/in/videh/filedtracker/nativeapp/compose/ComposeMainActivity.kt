@@ -52,6 +52,7 @@ class ComposeMainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AttendanceAds.start(this)
 
         if (SessionStore.isLoggedIn(this) && SessionStore.isRallyUser(this)) {
             openRallyWebShell()
@@ -63,6 +64,8 @@ class ComposeMainActivity : AppCompatActivity() {
         setContent {
             AapTheme {
                 AapBackground {
+                    Column(Modifier.fillMaxSize()) {
+                    Box(Modifier.weight(1f)) {
                     val nav = rememberNavController()
                     NavHost(navController = nav, startDestination = startDestination) {
                         composable(Routes.LOGIN) {
@@ -103,9 +106,22 @@ class ComposeMainActivity : AppCompatActivity() {
                             )
                         }
                     }
+                    }
+                    ScreenBanner()
+                    }
                 }
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        AttendanceAds.onActivityStarted(this)
+    }
+
+    override fun onStop() {
+        AttendanceAds.onActivityStopped(this)
+        super.onStop()
     }
 }
 

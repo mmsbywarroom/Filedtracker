@@ -14,7 +14,7 @@ export default function PrivacyPolicyPage() {
       <article className="mx-auto max-w-3xl px-5 py-10 sm:px-8 sm:py-14">
         <p className="text-sm font-semibold uppercase tracking-wide text-navy/70">AAP Attendance</p>
         <h1 className="mt-2 text-3xl font-bold text-navy">Privacy policy</h1>
-        <p className="mt-2 text-sm text-navy/70">Last updated: 27 September 2026</p>
+        <p className="mt-2 text-sm text-navy/70">Last updated: 28 September 2026</p>
 
         <div className="mt-8 space-y-8 text-[15px] leading-relaxed">
           <section>
@@ -29,7 +29,7 @@ export default function PrivacyPolicyPage() {
             </p>
             <p className="mt-3">
               The app is for adult field staff. It is used for attendance, face check at punch, field travel while
-              punched in, and assigned phone calls. It does not show ads, and we do not sell personal information.
+              punched in, and assigned phone calls. It shows ads from Google AdMob. We do not sell personal information.
             </p>
           </section>
 
@@ -82,6 +82,12 @@ export default function PrivacyPolicyPage() {
                 <strong>Permissions you grant.</strong> Camera, precise location, background location, and
                 notifications.
               </li>
+              <li>
+                <strong>Advertising.</strong> Google AdMob may collect an advertising ID and device information to show
+                ads: a video when you open the app, a full-screen video after punch in and after punch out, and a banner
+                on each screen. Your attendance location, face photograph, and phone number are not sent to AdMob to
+                choose those ads.
+              </li>
             </ul>
           </section>
 
@@ -94,9 +100,11 @@ export default function PrivacyPolicyPage() {
               <li>To send the login code by SMS.</li>
               <li>To block attendance punches made with a VPN or fake GPS.</li>
               <li>To show calls assigned by your organisation and save the result you enter.</li>
+              <li>To show ads through Google AdMob.</li>
             </ul>
             <p className="mt-3">
-              We do not use this information for advertising, and we do not sell it.
+              Attendance location, face photographs, and phone numbers are not used to choose ads, and we do not sell
+              personal information.
             </p>
           </section>
 
@@ -113,8 +121,12 @@ export default function PrivacyPolicyPage() {
               </li>
               <li>
                 <strong>Google</strong>, for Play Integrity (an app and device check), Play services used for location
-                and on-device face detection, and Google Maps when a map is shown. These providers process data to
-                provide those features. We do not allow them to use it for their own advertising.
+                and on-device face detection, and Google Maps when a map is shown. These providers process that data to
+                provide those features.
+              </li>
+              <li>
+                <strong>Google AdMob</strong>, which receives an advertising ID and device information to show ads. It
+                does not receive your face photograph, attendance location trail, or phone number for those ads.
               </li>
               <li>
                 <strong>Authorities</strong>, when the law requires us to disclose information.
