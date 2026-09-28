@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from "react";
 import { BrandMark } from "@/components/BrandMark";
-import { CallCampaignPanel } from "@/components/CallCampaignPanel";
 import { cleanScope } from "@/lib/hierarchy";
 import { downloadCsv, downloadPdf, type PdfSummaryCard } from "@/lib/reportExport";
 import { absentOrInProgressHint, absentOrInProgressLabel } from "@/lib/dailyAttendance";
@@ -576,8 +575,6 @@ export function HierarchyDashboard({ variant = "field" }: { variant?: "field" | 
         {scopeText}
         {variant === "callCenter" ? " · Call Center users only" : ""}
       </p>
-
-      {variant !== "callCenter" ? <CallCampaignPanel /> : null}
 
       <div className="mt-4 mb-5 flex flex-wrap gap-3">
         <label className="text-xs font-medium text-navy/55">
