@@ -2,10 +2,10 @@ import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { getCallerSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { CONNECTED_CALL_STATUSES, NOT_CONNECTED_CALL_STATUSES } from "@/lib/callList";
+import { CONNECTED_CALL_STATUSES, NOT_CONNECTED_CALL_STATUSES, REDIAL_CALL_STATUSES } from "@/lib/callList";
 import { loadCallForm } from "@/lib/callFormStore";
 
-const REDIAL = new Set(["call_back_later", "call_disconnected", "call_not_received", "switched_off"]);
+const REDIAL = new Set<string>(REDIAL_CALL_STATUSES);
 
 export async function GET(req: Request) {
   const s = await getCallerSession();

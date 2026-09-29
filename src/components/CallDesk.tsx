@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { CALL_OUTCOMES } from "@/lib/callList";
+import { CALL_OUTCOMES, CONNECTED_CALL_STATUSES, NOT_CONNECTED_CALL_STATUSES, REDIAL_CALL_STATUSES } from "@/lib/callList";
 import { fillCallTokens, questionVisible, TEXT_QUESTION_TYPES, type CallFormShape, type CallQuestion } from "@/lib/callForm";
 import { BrandMark } from "@/components/BrandMark";
 import { LangToggle, useLang } from "@/lib/i18n";
@@ -125,6 +125,21 @@ const CARDS: { key: keyof Stats; label: keyof (typeof COPY)["en"]; tone: string 
   { key: "notConnected", label: "notConnected", tone: "border-rose-300" },
 ];
 
+const CONNECTED = new Set<string>(CONNECTED_CALL_STATUSES);
+const NOT_CONNECTED = new Set<string>(NOT_CONNECTED_CALL_STATUSES);
+const REDIAL = new Set<string>(REDIAL_CALL_STATUSES);
+
+function matchesSummary(status: string, filter: string) {
+  if (!filter || filter === "total") return true;
+  if (filter === "fresh") return !status;
+  if (filter === "dialed") return Boolean(status);
+  if (filter === "redial") return REDIAL.has(status);
+  if (filter === "connected") return CONNECTED.has(status);
+  if (filter === "complete") return status === "call_complete";
+  if (filter === "notConnected") return NOT_CONNECTED.has(status);
+  return status === filter;
+}
+
 const DESK_CACHE = "ft-call-desk";
 
 export function CallDesk() {
@@ -181,9 +196,7 @@ export function CallDesk() {
   }, []);
 
   const visible = useMemo(() => {
-    if (!filter) return rows;
-    if (filter === "fresh") return rows.filter((r) => !r.status);
-    return rows.filter((r) => r.status === filter);
+    return rows.filter((r) => matchesSummary(r.status, filter));
   }, [rows, filter]);
 
   const safeIndex = visible.length ? Math.min(index, visible.length - 1) : 0;
@@ -270,8 +283,8 @@ export function CallDesk() {
               <button
                 key={c.key}
                 type="button"
-                onClick={() => setFilter(c.key === "fresh" ? "fresh" : c.key === "total" ? "" : "")}
-                className={`rounded-xl border-t-4 bg-white px-3 py-3 text-left shadow-sm ${c.tone}`}
+                onClick={() => setFilter(c.key === "total" ? "" : filter === c.key ? "" : c.key)}
+                className={`rounded-xl border-t-4 bg-white px-3 py-3 text-left shadow-sm ${c.tone} ${filter === c.key || (c.key === "total" && !filter) ? "ring-2 ring-[#0b6fbf]" : ""}`}
               >
                 <p className="text-2xl font-semibold">{stats[c.key]}</p>
                 <p className="text-[11px] uppercase tracking-wide text-slate-500">{t[c.label]}</p>

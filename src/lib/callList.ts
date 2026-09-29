@@ -28,19 +28,28 @@ export function callOutcomeColor(value: string | null | undefined) {
 export const CALL_SCRIPT =
   "Hello, I am {name} calling on behalf of the Aam Aadmi Party. I am calling you regarding the Jashan-e-Inquilab event.";
 
-/** Someone answered. Call Complete is included here and also shown on its own. */
+/** Someone answered. Call Complete is included here and also shown on its own card. */
 export const CONNECTED_CALL_STATUSES = [
   "call_complete",
   "call_disconnected",
   "call_back_later",
   "not_interested",
   "party_left",
+  "wrong_number",
 ] as const;
 
 export const NOT_CONNECTED_CALL_STATUSES = [
-  "wrong_number",
   "call_not_received",
   "out_of_service",
   "invalid_number",
+  "switched_off",
+] as const;
+
+/** Try these numbers again. */
+export const REDIAL_CALL_STATUSES = [
+  "call_disconnected",
+  "call_back_later",
+  "call_not_received",
+  "out_of_service",
   "switched_off",
 ] as const;
