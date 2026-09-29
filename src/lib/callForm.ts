@@ -19,6 +19,8 @@ export type CallQuestionOption = {
   /** Admin chooses whether selecting this option opens a details box. */
   allowText?: boolean;
   color?: string;
+  /** Questions that stay hidden until this answer is selected. */
+  showQuestionIds?: string[];
 };
 
 export type CallQuestion = {
@@ -180,13 +182,40 @@ export function fillCallTokens(
   return out;
 }
 
-export function questionVisible(q: CallQuestion, answers: Record<string, string>, all?: CallQuestion[]) {
-  if (!q.showIf?.questionId) return true;
-  if (answers[q.showIf.questionId] !== q.showIf.equals) return false;
-  if (!all) return true;
-  const parent = all.find((item) => item.id === q.showIf?.questionId);
+function answerChosen(raw: string, value: string) {
+  if (!raw || !value) return false;
+  if (raw === value) return true;
+  return raw.split("|").includes(value);
+}
+
+/** A question shows when the admin left it open, or when any chosen answer is set to reveal it. */
+export function questionVisible(
+  q: CallQuestion,
+  answers: Record<string, string>,
+  all?: CallQuestion[],
+  seen = new Set<string>()
+) {
+  if (seen.has(q.id)) return false;
+  const nextSeen = new Set(seen);
+  nextSeen.add(q.id);
+  const questions = all || [];
+  const revealedBy = questions.filter((parent) =>
+    parent.options.some((o) => (o.showQuestionIds || []).includes(q.id))
+  );
+  const legacy = Boolean(q.showIf?.questionId);
+  if (!revealedBy.length && !legacy) return true;
+
+  const revealed = revealedBy.some((parent) => {
+    if (!questionVisible(parent, answers, questions, nextSeen)) return false;
+    const picked = answers[parent.id] || "";
+    return parent.options.some((o) => (o.showQuestionIds || []).includes(q.id) && answerChosen(picked, o.value));
+  });
+  if (revealed) return true;
+  if (!legacy || !q.showIf) return false;
+  if (!answerChosen(answers[q.showIf.questionId] || "", q.showIf.equals)) return false;
+  const parent = questions.find((item) => item.id === q.showIf?.questionId);
   if (!parent) return false;
-  return questionVisible(parent, answers, all);
+  return questionVisible(parent, answers, questions, nextSeen);
 }
 
 export function slugStatus(label: string) {

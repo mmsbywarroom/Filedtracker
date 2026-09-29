@@ -205,6 +205,33 @@ export function CallFormDesigner() {
                     />
                     Show a details box when this choice is selected
                   </label>
+                  <div className="col-span-3 rounded-lg bg-slate-50 px-2 py-2">
+                    <p className="text-[11px] font-semibold text-slate-600">After this answer, show these questions</p>
+                    <div className="mt-1 space-y-1">
+                      {form.questions.filter((other) => other.id !== q.id).map((other) => {
+                        const num = form.questions.findIndex((item) => item.id === other.id) + 1;
+                        const checked = (o.showQuestionIds || []).includes(other.id);
+                        return (
+                          <label key={other.id} className="flex items-start gap-2 text-xs text-slate-700">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => {
+                                const ids = new Set(o.showQuestionIds || []);
+                                if (checked) ids.delete(other.id);
+                                else ids.add(other.id);
+                                patchOption(q.id, n, { showQuestionIds: Array.from(ids) });
+                              }}
+                            />
+                            <span>
+                              Q{num}. {other.label.slice(0, 80) || "Untitled"}
+                            </span>
+                          </label>
+                        );
+                      })}
+                      {form.questions.length < 2 ? <p className="text-[11px] text-slate-400">Add another question first.</p> : null}
+                    </div>
+                  </div>
                 </div>
               ))}
               <button
@@ -220,32 +247,9 @@ export function CallFormDesigner() {
               </button>
             </div>
           ) : null}
-          <label className="mt-3 block text-xs font-medium">
-            Show only when
-            <select
-              value={q.showIf ? `${q.showIf.questionId}=${q.showIf.equals}` : ""}
-              onChange={(e) => {
-                if (!e.target.value) {
-                  patchQuestion(q.id, { showIf: null });
-                  return;
-                }
-                const [questionId, equals] = e.target.value.split("=");
-                patchQuestion(q.id, { showIf: { questionId, equals } });
-              }}
-              className="mt-1 h-10 w-full rounded-xl border px-3 text-sm"
-            >
-              <option value="">Always</option>
-              {form.questions
-                .filter((other) => other.id !== q.id)
-                .flatMap((other) =>
-                  other.options.map((o) => (
-                    <option key={`${other.id}-${o.value}`} value={`${other.id}=${o.value}`}>
-                      Q {other.label.slice(0, 40)} = {o.label}
-                    </option>
-                  ))
-                )}
-            </select>
-          </label>
+          <p className="mt-3 text-[11px] text-slate-500">
+            Leave every answer unchecked and this question always shows. Tick an answer above to open it only after that reply. One question can open from more than one answer, for example Yes on question 1 or Yes on question 2.
+          </p>
         </section>
       ))}
 

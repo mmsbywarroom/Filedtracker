@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import { BrandMark } from "@/components/BrandMark";
 import { LangToggle } from "@/lib/i18n";
 
 export default function CallLoginPage() {
@@ -63,9 +64,10 @@ export default function CallLoginPage() {
         <div className="flex justify-end">
           <LangToggle tone="light" />
         </div>
-        <img src="/aap-logo.png" alt="AAP" className="mx-auto h-12 w-auto" />
+        <div className="flex justify-center">
+          <BrandMark size={48} tone="onLight" />
+        </div>
         <h1 className="mt-3 text-center text-xl font-semibold text-[#0b4f86]">AAP Calling Portal</h1>
-        <p className="text-center text-sm text-slate-500">Booth member verification</p>
         <label className="mt-5 block text-sm font-medium">
           Mobile number
           <input

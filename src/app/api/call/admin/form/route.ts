@@ -38,6 +38,14 @@ function cleanForm(body: unknown): CallFormShape | null {
         label: String(o.label).slice(0, 200),
         allowText: Boolean(o.allowText),
         ...(hexColor(o.color) ? { color: hexColor(o.color) } : {}),
+        ...((o.showQuestionIds || []).length
+          ? {
+              showQuestionIds: (o.showQuestionIds || [])
+                .map((id) => String(id || "").replace(/[^a-zA-Z0-9_]/g, "").slice(0, 40))
+                .filter(Boolean)
+                .slice(0, 40),
+            }
+          : {}),
       }));
     questions.push({
       id,

@@ -3,12 +3,13 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { CALL_OUTCOMES } from "@/lib/callList";
 import { fillCallTokens, questionVisible, TEXT_QUESTION_TYPES, type CallFormShape, type CallQuestion } from "@/lib/callForm";
+import { BrandMark } from "@/components/BrandMark";
 import { LangToggle, useLang } from "@/lib/i18n";
 
 const COPY = {
   en: {
     title: "AAP Calling Dashboard",
-    role: "Booth member",
+    role: "",
     user: "User",
     logout: "Logout",
     filter: "Filter by status",
@@ -49,7 +50,7 @@ const COPY = {
   },
   pa: {
     title: "ਏਏਪੀ ਕਾਲਿੰਗ ਡੈਸ਼ਬੋਰਡ",
-    role: "ਬੂਥ ਮੈਂਬਰ",
+    role: "",
     user: "ਯੂਜ਼ਰ",
     logout: "ਲਾਗ ਆਊਟ",
     filter: "ਸਥਿਤੀ ਨਾਲ ਫਿਲਟਰ",
@@ -248,11 +249,8 @@ export function CallDesk() {
     <div className="min-h-screen bg-[#eef3f8] text-slate-900">
       <header className="flex items-center justify-between bg-[#0b6fbf] px-4 py-3 text-white">
         <div className="flex items-center gap-3">
-          <img src="/aap-logo.png" alt="" className="h-8 w-auto rounded bg-white px-1" />
-          <div>
-            <p className="text-sm font-semibold">{t.title}</p>
-            <p className="text-xs text-white/80">{t.role}</p>
-          </div>
+          <BrandMark size={32} tone="onDark" />
+          <p className="text-sm font-semibold">{t.title}</p>
         </div>
         <div className="flex items-center gap-2 text-right text-xs">
           <LangToggle />
