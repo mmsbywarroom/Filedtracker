@@ -47,6 +47,7 @@ export default function AdminUsersPage() {
   const [assembly, setAssembly] = useState("");
   const [sector, setSector] = useState("");
   const [designation, setDesignation] = useState("");
+  const [designationLocked, setDesignationLocked] = useState(false);
   const [zone, setZone] = useState("");
   const [district, setDistrict] = useState("");
   const [face, setFace] = useState("");
@@ -89,6 +90,13 @@ export default function AdminUsersPage() {
         }
       })
       .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const locked = params.get("designation");
+    if (locked) setDesignation(locked);
+    setDesignationLocked(params.get("lock") === "1" && Boolean(locked));
   }, []);
 
   async function remove(id: string) {
@@ -317,7 +325,7 @@ export default function AdminUsersPage() {
           placeholder="Search name or number"
           className={`${selectClass} lg:col-span-2 xl:col-span-1`}
         />
-        <select value={designation} onChange={(e) => setDesignation(e.target.value)} className={selectClass}>
+        <select value={designation} onChange={(e) => setDesignation(e.target.value)} disabled={designationLocked} className={selectClass}>
           <option value="">All designations</option>
           {visibleDens.map((v) => (
             <option key={v} value={v}>

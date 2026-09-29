@@ -31,6 +31,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
   const [isSuper, setIsSuper] = useState(false);
   const [canSeeCallCenter, setCanSeeCallCenter] = useState(false);
   const [approvalPending, setApprovalPending] = useState(0);
+  const [callCenterLock, setCallCenterLock] = useState(false);
 
   useEffect(() => {
     fetch("/api/admin/me")
@@ -47,6 +48,11 @@ export default function AdminShell({ children }: { children: ReactNode }) {
         }
       })
       .catch(() => {});
+  }, [pathname]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setCallCenterLock(params.get("lock") === "1" && params.get("designation") === "Call Center");
   }, [pathname]);
 
   useEffect(() => {
@@ -81,7 +87,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
           },
         ]
       : []),
-    { href: "/admin/users", label: t("users"), match: (p: string) => p.startsWith("/admin/users"), group: "People" },
+    { href: "/admin/users", label: t("users"), match: (p: string) => p.startsWith("/admin/users") && !callCenterLock, group: "People" },
     {
       href: "/admin/call-list",
       label: t("callList"),
@@ -94,6 +100,18 @@ export default function AdminShell({ children }: { children: ReactNode }) {
       match: (p: string) => p.startsWith("/admin/call-dashboard"),
       group: "People",
     },
+    {
+      href: "/admin/users?designation=Call%20Center&lock=1",
+      label: "Call center users",
+      match: (p: string) => p.startsWith("/admin/users") && callCenterLock,
+      group: "People",
+    },
+    {
+      href: "/admin/attendance?designation=Call%20Center&lock=1",
+      label: "Call center attendance",
+      match: (p: string) => p.startsWith("/admin/attendance") && !p.startsWith("/admin/attendance-approvals") && callCenterLock,
+      group: "Attendance",
+    },
     ...(isSuper
       ? [{ href: "/admin/create", label: t("createUser"), match: (p: string) => p.startsWith("/admin/create"), group: "People" }]
       : []),
@@ -103,7 +121,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
     {
       href: "/admin/attendance",
       label: t("attendanceModule"),
-      match: (p: string) => p.startsWith("/admin/attendance") && !p.startsWith("/admin/attendance-approvals"),
+      match: (p: string) => p.startsWith("/admin/attendance") && !p.startsWith("/admin/attendance-approvals") && !callCenterLock,
       group: "Attendance",
     },
     {

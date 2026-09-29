@@ -152,6 +152,7 @@ export default function AttendanceModulePage() {
   const [district, setDistrict] = useState("");
   const [assembly, setAssembly] = useState("");
   const [designation, setDesignation] = useState("");
+  const [designationLocked, setDesignationLocked] = useState(false);
   const [sector, setSector] = useState("");
   const [q, setQ] = useState("");
   const [allRows, setAllRows] = useState<Row[]>([]);
@@ -202,6 +203,13 @@ export default function AttendanceModulePage() {
       })
       .catch(() => {});
   }, [date]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const locked = params.get("designation");
+    if (locked) setDesignation(locked);
+    setDesignationLocked(params.get("lock") === "1" && Boolean(locked));
+  }, []);
 
   const loadMapUsers = useCallback(async () => {
     const params = new URLSearchParams({ date });
@@ -666,7 +674,7 @@ export default function AttendanceModulePage() {
         </label>
         <label className="text-xs font-medium text-navy/55">
           Designation
-          <select value={designation} onChange={(e) => setDesignation(e.target.value)} className={`${selectClass} mt-1`}>
+          <select value={designation} onChange={(e) => setDesignation(e.target.value)} disabled={designationLocked} className={`${selectClass} mt-1`}>
             <option value="">All designations</option>
             {visibleDens.map((v) => (
               <option key={v} value={v}>

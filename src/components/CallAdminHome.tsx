@@ -90,22 +90,8 @@ export function CallAdminHome() {
     load();
   }
 
-  async function logout() {
-    await fetch("/api/call/admin/session", { method: "DELETE" });
-    window.location.href = "/call/admin/login";
-  }
-
   return (
-    <div className="min-h-screen bg-[#f4f7fb]">
-      <header className="flex items-center justify-between bg-[#0A1628] px-4 py-3 text-white">
-        <p className="font-semibold">Calling portal admin</p>
-        <nav className="flex gap-3 text-sm">
-          <a href="/call/admin" className="underline">Contacts</a>
-          <a href="/call/admin/form">Form designer</a>
-          <button type="button" onClick={logout}>Logout</button>
-        </nav>
-      </header>
-      <main className="mx-auto max-w-6xl px-4 py-6">
+    <main className="mx-auto max-w-6xl px-4 py-6">
         <h1 className="text-2xl font-semibold">Call list</h1>
         <p className="mt-1 max-w-3xl text-sm text-slate-600">
           Assigned users is the caller mobile. That person signs in with OTP on call.aappunjab.in and sees only those rows.
@@ -131,7 +117,7 @@ export function CallAdminHome() {
           </div>
           <div className="mt-3 flex gap-2">
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, phone, halka" className="h-10 flex-1 rounded-xl border px-3 text-sm" />
-            <button type="button" onClick={load} className="rounded-xl bg-slate-900 px-3 text-sm font-semibold text-white">Search</button>
+            <button type="button" onClick={() => load()} className="rounded-xl bg-slate-900 px-3 text-sm font-semibold text-white">Search</button>
           </div>
         </section>
 
@@ -167,7 +153,6 @@ export function CallAdminHome() {
           </table>
           {!contacts.length ? <p className="p-6 text-sm text-slate-500">No numbers uploaded yet.</p> : null}
         </div>
-      </main>
-    </div>
+    </main>
   );
 }

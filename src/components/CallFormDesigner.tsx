@@ -63,15 +63,7 @@ export function CallFormDesigner() {
   if (!form) return <p className="p-6 text-sm">Loading form…</p>;
 
   return (
-    <div className="min-h-screen bg-[#f4f7fb]">
-      <header className="flex items-center justify-between bg-[#0A1628] px-4 py-3 text-white">
-        <p className="font-semibold">Calling portal admin</p>
-        <nav className="flex gap-3 text-sm">
-          <a href="/call/admin">Contacts</a>
-          <a href="/call/admin/form" className="underline">Form designer</a>
-        </nav>
-      </header>
-      <main className="mx-auto max-w-3xl space-y-4 px-4 py-6">
+    <main className="mx-auto max-w-3xl space-y-4 px-4 py-6">
         <h1 className="text-2xl font-semibold">Calling form</h1>
         <p className="text-sm text-slate-600">
           Build the script and questions the way you would a form. Use {CALL_FIELD_TOKENS.join(" ")} inside text to insert the contact&apos;s details.
@@ -197,7 +189,6 @@ export function CallFormDesigner() {
         <button type="button" disabled={busy} onClick={save} className="h-11 rounded-xl bg-[#0b6fbf] px-5 text-sm font-semibold text-white disabled:opacity-50">
           Save form
         </button>
-      </main>
-    </div>
+    </main>
   );
 }
