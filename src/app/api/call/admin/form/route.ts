@@ -1,9 +1,26 @@
 import { NextResponse } from "next/server";
 import { getCallAdminSession } from "@/lib/auth";
 import { loadCallForm, saveCallForm } from "@/lib/callFormStore";
-import { slugStatus, type CallFormShape, type CallQuestion, type CallQuestionType } from "@/lib/callForm";
+import { slugStatus, TEXT_QUESTION_TYPES, type CallFormShape, type CallQuestion, type CallQuestionType } from "@/lib/callForm";
 
-const TYPES = new Set<CallQuestionType>(["yes_no", "single", "short_text", "dropdown"]);
+const TYPES = new Set<CallQuestionType>([
+  "yes_no",
+  "single",
+  "multi",
+  "dropdown",
+  "short_text",
+  "long_text",
+  "number",
+  "phone",
+  "date",
+  "email",
+  "rating",
+]);
+
+function hexColor(value: unknown) {
+  const s = String(value || "");
+  return /^#[0-9a-fA-F]{6}$/.test(s) ? s : undefined;
+}
 
 function cleanForm(body: unknown): CallFormShape | null {
   if (!body || typeof body !== "object") return null;
@@ -15,17 +32,19 @@ function cleanForm(body: unknown): CallFormShape | null {
     if (!id) continue;
     const options = (q.options || [])
       .filter((o) => o && o.label)
-      .slice(0, 20)
+      .slice(0, 30)
       .map((o, i) => ({
         value: String(o.value || `opt_${i}`).replace(/[^a-zA-Z0-9_]/g, "").slice(0, 40) || `opt_${i}`,
         label: String(o.label).slice(0, 200),
         allowText: Boolean(o.allowText),
+        ...(hexColor(o.color) ? { color: hexColor(o.color) } : {}),
       }));
     questions.push({
       id,
       label: q.label.slice(0, 500),
       type: q.type,
-      options: q.type === "short_text" ? [] : options,
+      options: TEXT_QUESTION_TYPES.has(q.type) ? [] : options,
+      ...(hexColor(q.color) ? { color: hexColor(q.color) } : {}),
       showIf:
         q.showIf?.questionId && q.showIf.equals
           ? { questionId: String(q.showIf.questionId).slice(0, 40), equals: String(q.showIf.equals).slice(0, 40) }

@@ -49,6 +49,9 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   if (data.designation && !DESIGNATIONS.includes(data.designation as (typeof DESIGNATIONS)[number])) {
     delete data.designation;
   }
+  if (s.admin.designationLock && data.designation && data.designation !== s.admin.designationLock) {
+    return NextResponse.json({ error: "Only Call Center users can be edited here." }, { status: 400 });
+  }
   const des =
     (data.designation as string | undefined) || existing.designation;
   if (parsed.data.assemblyName != null || parsed.data.assemblies != null || parsed.data.designation != null) {

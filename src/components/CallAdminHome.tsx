@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
+const LIST_CACHE = "ft-call-admin-list";
+
 type Contact = {
   id: string;
   zone: string;
@@ -39,9 +41,26 @@ export function CallAdminHome() {
     const data = await res.json();
     setContacts(data.contacts || []);
     setCallers(data.callers || []);
+    if (!search) {
+      try {
+        sessionStorage.setItem(LIST_CACHE, JSON.stringify({ contacts: data.contacts, callers: data.callers }));
+      } catch {
+        /* ignore quota */
+      }
+    }
   }
 
   useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(LIST_CACHE);
+      if (raw) {
+        const data = JSON.parse(raw);
+        if (Array.isArray(data.contacts)) setContacts(data.contacts);
+        if (Array.isArray(data.callers)) setCallers(data.callers);
+      }
+    } catch {
+      /* ignore bad cache */
+    }
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -125,21 +144,27 @@ export function CallAdminHome() {
           <table className="min-w-full text-left text-xs">
             <thead>
               <tr>
-                {["Zone", "District", "Halka", "Village/Ward", "Block", "Name", "Phone", "Age", "Gender", "Education", "Position", "Father Name", "Assigned users", "Status"].map((h) => (
+                {["#", "Zone", "District", "Halka", "Village/Ward", "Block", "Name", "Phone", "Age", "Gender", "Education", "Position", "Father Name", "Assigned users", "Status"].map((h) => (
                   <th key={h} className="sticky top-0 bg-slate-50 px-3 py-2">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {contacts.map((c) => (
+              {contacts.map((c, i) => (
                 <tr key={c.id} className="border-t">
+                  <td className="px-3 py-2 font-medium text-slate-500">{i + 1}</td>
                   <td className="px-3 py-2">{c.zone}</td>
                   <td className="px-3 py-2">{c.district}</td>
                   <td className="px-3 py-2">{c.halka}</td>
                   <td className="px-3 py-2">{c.villageWard}</td>
                   <td className="px-3 py-2">{c.block}</td>
                   <td className="px-3 py-2 font-medium">{c.name}</td>
-                  <td className="px-3 py-2">{c.phone}</td>
+                  <td className="px-3 py-2">
+                    <span className="inline-flex items-center gap-1">
+                      {c.phone}
+                      <CopyPhone phone={c.phone} />
+                    </span>
+                  </td>
                   <td className="px-3 py-2">{c.age}</td>
                   <td className="px-3 py-2">{c.gender}</td>
                   <td className="px-3 py-2">{c.education}</td>
@@ -154,5 +179,22 @@ export function CallAdminHome() {
           {!contacts.length ? <p className="p-6 text-sm text-slate-500">No numbers uploaded yet.</p> : null}
         </div>
     </main>
+  );
+}
+
+function CopyPhone({ phone }: { phone: string }) {
+  const [done, setDone] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        void navigator.clipboard?.writeText(phone);
+        setDone(true);
+        window.setTimeout(() => setDone(false), 1200);
+      }}
+      className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700"
+    >
+      {done ? "Copied" : "Copy"}
+    </button>
   );
 }

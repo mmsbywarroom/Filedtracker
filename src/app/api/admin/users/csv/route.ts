@@ -40,6 +40,10 @@ export async function POST(req: Request) {
       errors.push({ row: i + 2, error: `Invalid designation "${designation}"` });
       continue;
     }
+    if (s.admin.designationLock && designation !== s.admin.designationLock) {
+      errors.push({ row: i + 2, error: `Only ${s.admin.designationLock} users can be uploaded here.` });
+      continue;
+    }
     const cluster = pickUserCsv(row, USER_CSV_ALIASES.cluster);
     const assembliesRaw =
       pickUserCsv(row, USER_CSV_ALIASES.assemblies) ||
@@ -74,6 +78,10 @@ export async function POST(req: Request) {
     const data = { name, phone, assemblyName: asm, assemblies, sectorAllotted, zone, district, designation, cluster };
     try {
       const existing = await prisma.user.findUnique({ where: { phone } });
+      if (existing && s.admin.designationLock && existing.designation !== s.admin.designationLock) {
+        errors.push({ row: i + 2, error: `This number is not a ${s.admin.designationLock} user (${name} · ${phone})` });
+        continue;
+      }
       if (existing) {
         await prisma.user.update({ where: { id: existing.id }, data });
         updated.push(phone);

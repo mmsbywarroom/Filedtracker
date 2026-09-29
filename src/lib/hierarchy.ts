@@ -65,6 +65,8 @@ export type AdminScope = {
   assemblyName: string;
   assemblies: string[];
   cluster: string;
+  /** When set, lists and edits are limited to this designation (call portal). */
+  designationLock?: string;
 };
 
 /** Matches zero rows; uses AND so it never clashes with a top-level `id` filter. */
@@ -124,7 +126,8 @@ export function defaultVisibleDesignations(level: string): string[] {
 }
 
 /** Users/Dashboard scope always follows accessLevel hierarchy (ignores stale checkbox lists). */
-export function visibleDesignationsFor(admin: Pick<AdminScope, "isSuper" | "accessLevel" | "designations">): string[] {
+export function visibleDesignationsFor(admin: Pick<AdminScope, "isSuper" | "accessLevel" | "designations" | "designationLock">): string[] {
+  if (admin.designationLock) return [admin.designationLock];
   if (admin.isSuper) return [...DESIGNATIONS];
   const level = normalizeAccessLevel(admin.accessLevel);
   if (level === "State") return [...DESIGNATIONS];
@@ -199,6 +202,7 @@ function assemblyNameFilter(assemblies: string[]) {
  * ALC = Sector Incharge in assembly
  */
 export function userScopeWhere(admin: AdminScope) {
+  if (admin.designationLock) return { designation: admin.designationLock };
   if (admin.isSuper) return {};
   const level = normalizeAccessLevel(admin.accessLevel);
   if (level === "State") return {};
@@ -300,6 +304,7 @@ export function canSeeUser(
   admin: AdminScope,
   user: { designation?: string | null; zone: string; district: string; assemblyName: string; cluster?: string | null }
 ) {
+  if (admin.designationLock && (user.designation || "") !== admin.designationLock) return false;
   if (admin.isSuper) return true;
   if (isSuperOnlyDesignation(user.designation) && !canSeeCallCenterUsers(admin)) return false;
   if (admin.accessLevel === "State") return true;

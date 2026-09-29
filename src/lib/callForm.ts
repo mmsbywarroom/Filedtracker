@@ -1,11 +1,24 @@
 import { CALL_OUTCOMES } from "@/lib/callList";
 
-export type CallQuestionType = "yes_no" | "single" | "short_text" | "dropdown";
+export type CallQuestionType =
+  | "yes_no"
+  | "single"
+  | "multi"
+  | "dropdown"
+  | "short_text"
+  | "long_text"
+  | "number"
+  | "phone"
+  | "date"
+  | "email"
+  | "rating";
 
 export type CallQuestionOption = {
   value: string;
   label: string;
+  /** Admin chooses whether selecting this option opens a details box. */
   allowText?: boolean;
+  color?: string;
 };
 
 export type CallQuestion = {
@@ -13,8 +26,19 @@ export type CallQuestion = {
   label: string;
   type: CallQuestionType;
   options: CallQuestionOption[];
+  color?: string;
   showIf?: { questionId: string; equals: string } | null;
 };
+
+export const TEXT_QUESTION_TYPES = new Set<CallQuestionType>([
+  "short_text",
+  "long_text",
+  "number",
+  "phone",
+  "date",
+  "email",
+  "rating",
+]);
 
 export type CallStatusOption = { value: string; label: string };
 
@@ -140,16 +164,20 @@ export function fillCallTokens(
     fatherName?: string;
   }
 ) {
-  return text
-    .replaceAll("{{name}}", row.name || "")
-    .replaceAll("{{phone}}", row.phone || "")
-    .replaceAll("{{halka}}", row.halka || "")
-    .replaceAll("{{village}}", row.villageWard || "")
-    .replaceAll("{{block}}", row.block || "")
-    .replaceAll("{{position}}", row.position || "")
-    .replaceAll("{{age}}", row.age || "")
-    .replaceAll("{{gender}}", row.gender || "")
-    .replaceAll("{{father}}", row.fatherName || "");
+  const name = row.name || "";
+  let out = text
+    .replace(/\{\{\s*name\s*\}\}/gi, name)
+    .replace(/\{\s*name\s*\}/gi, name)
+    .replace(/\{\{\s*phone\s*\}\}/gi, row.phone || "")
+    .replace(/\{\{\s*halka\s*\}\}/gi, row.halka || "")
+    .replace(/\{\{\s*village\s*\}\}/gi, row.villageWard || "")
+    .replace(/\{\{\s*block\s*\}\}/gi, row.block || "")
+    .replace(/\{\{\s*position\s*\}\}/gi, row.position || "")
+    .replace(/\{\{\s*age\s*\}\}/gi, row.age || "")
+    .replace(/\{\{\s*gender\s*\}\}/gi, row.gender || "")
+    .replace(/\{\{\s*father\s*\}\}/gi, row.fatherName || "");
+  if (name) out = out.replace(/_{3,}/g, name);
+  return out;
 }
 
 export function questionVisible(q: CallQuestion, answers: Record<string, string>, all?: CallQuestion[]) {

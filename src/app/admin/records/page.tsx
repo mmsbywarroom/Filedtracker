@@ -238,7 +238,7 @@ export default function DailyRecordsPage() {
   return (
     <main className="px-4 py-6 md:px-8">
       <p className="text-xs uppercase tracking-[0.2em] text-teal">Attendance</p>
-      <h1 className="text-2xl font-semibold">Daily records</h1>
+      <h1 className="text-2xl font-semibold">{portal.call ? "Call Center daily records" : "Daily records"}</h1>
       {loading ? (
         <p className="mt-1 text-sm text-navy/60">Loading…</p>
       ) : (

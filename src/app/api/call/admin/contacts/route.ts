@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { getCallAdminSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { decodeCsvBytes, importCallCsv } from "@/lib/callCsv";
@@ -30,8 +31,17 @@ export async function GET(req: Request) {
       : {},
     orderBy: { updatedAt: "desc" },
     take: 2000,
-    include: { portalResponses: { orderBy: { createdAt: "desc" }, take: 1, select: { status: true } } },
   });
+  const ids = contacts.map((c) => c.id);
+  const latest = ids.length
+    ? await prisma.$queryRaw<Array<{ contactId: string; status: string }>>`
+        SELECT DISTINCT ON ("contactId") "contactId", "status"
+        FROM "CallPortalResponse"
+        WHERE "contactId" IN (${Prisma.join(ids)})
+        ORDER BY "contactId", "createdAt" DESC
+      `
+    : [];
+  const statusById = new Map(latest.map((r) => [r.contactId, r.status]));
 
   const callers = await prisma.callContact.groupBy({
     by: ["assigneePhone"],
@@ -55,7 +65,7 @@ export async function GET(req: Request) {
       position: c.position,
       fatherName: c.fatherName,
       assigneePhone: c.assigneePhone,
-      status: c.portalResponses[0]?.status || "",
+      status: statusById.get(c.id) || "",
     })),
     callers: callers
       .map((c) => ({ phone: c.assigneePhone, assigned: c._count._all }))

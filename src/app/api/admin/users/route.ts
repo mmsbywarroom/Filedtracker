@@ -122,6 +122,9 @@ export async function POST(req: Request) {
   const designation = DESIGNATIONS.includes(parsed.data.designation as (typeof DESIGNATIONS)[number])
     ? parsed.data.designation!
     : "Sector Incharge";
+  if (s.admin.designationLock && designation !== s.admin.designationLock) {
+    return NextResponse.json({ error: "Only Call Center users can be created here." }, { status: 400 });
+  }
   const { assemblyName, assemblies } = normalizeUserAssemblies(
     designation,
     parsed.data.assemblyName,

@@ -207,11 +207,16 @@ export default function AttendanceModulePage() {
   }, [date]);
 
   useEffect(() => {
+    if (portal.call) {
+      setDesignation("Call Center");
+      setDesignationLocked(true);
+      return;
+    }
     const params = new URLSearchParams(window.location.search);
     const locked = params.get("designation");
     if (locked) setDesignation(locked);
     setDesignationLocked(params.get("lock") === "1" && Boolean(locked));
-  }, []);
+  }, [portal.call]);
 
   const loadMapUsers = useCallback(async () => {
     const params = new URLSearchParams({ date });
@@ -498,7 +503,7 @@ export default function AttendanceModulePage() {
   return (
     <main className="px-4 py-6 md:px-8">
       <p className="text-xs uppercase tracking-[0.2em] text-teal">Attendance</p>
-      <h1 className="text-2xl font-semibold">Date-wise attendance</h1>
+      <h1 className="text-2xl font-semibold">{portal.call ? "Call Center attendance" : "Date-wise attendance"}</h1>
       <p className="mt-1 text-sm text-navy/55">
         Auto: Present / Half-day show as soon as rules are met. Until 4:30 PM everything else shows In progress;
         after 4:30 PM remaining cases become Absent. Sessions combine until 8:00 PM. Punch-in from 7:00 AM.

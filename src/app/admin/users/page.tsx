@@ -95,11 +95,16 @@ export default function AdminUsersPage() {
   }, []);
 
   useEffect(() => {
+    if (portal.call) {
+      setDesignation("Call Center");
+      setDesignationLocked(true);
+      return;
+    }
     const params = new URLSearchParams(window.location.search);
     const locked = params.get("designation");
     if (locked) setDesignation(locked);
     setDesignationLocked(params.get("lock") === "1" && Boolean(locked));
-  }, []);
+  }, [portal.call]);
 
   async function remove(id: string) {
     if (
@@ -273,7 +278,7 @@ export default function AdminUsersPage() {
       <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-xs uppercase tracking-[0.2em] text-teal">Users</p>
-          <h1 className="text-2xl font-semibold text-ink">Field users</h1>
+          <h1 className="text-2xl font-semibold text-ink">{portal.call ? "Call Center users" : "Field users"}</h1>
           <p className="mt-1 text-sm text-navy/55">
             {filtered.length} of {users.length} users · Left / Remove = left organization (cannot log in). Attendance
             history is kept with name and phone.

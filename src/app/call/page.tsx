@@ -1,6 +1,7 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
+import { LangToggle } from "@/lib/i18n";
 
 export default function CallLoginPage() {
   const [phone, setPhone] = useState("");
@@ -8,6 +9,13 @@ export default function CallLoginPage() {
   const [sent, setSent] = useState(false);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
+  const [wait, setWait] = useState(0);
+
+  useEffect(() => {
+    if (wait <= 0) return;
+    const timer = window.setInterval(() => setWait((n) => Math.max(0, n - 1)), 1000);
+    return () => window.clearInterval(timer);
+  }, [wait]);
 
   async function requestOtp(e: FormEvent) {
     e.preventDefault();
@@ -21,11 +29,14 @@ export default function CallLoginPage() {
     const data = await res.json().catch(() => ({}));
     setBusy(false);
     if (!res.ok) {
+      const retry = Number(data.retryAfter || 0);
+      if (retry > 0) setWait(retry);
       setMsg(data.error || "Could not send OTP.");
       return;
     }
     setSent(true);
-    setMsg("OTP sent.");
+    setWait(60);
+    setMsg("OTP sent. You can request another after 60 seconds.");
   }
 
   async function verify(e: FormEvent) {
@@ -49,6 +60,9 @@ export default function CallLoginPage() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#0b6fbf] px-4">
       <form onSubmit={sent ? verify : requestOtp} className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-xl">
+        <div className="flex justify-end">
+          <LangToggle tone="light" />
+        </div>
         <img src="/aap-logo.png" alt="AAP" className="mx-auto h-12 w-auto" />
         <h1 className="mt-3 text-center text-xl font-semibold text-[#0b4f86]">AAP Calling Portal</h1>
         <p className="text-center text-sm text-slate-500">Booth member verification</p>
@@ -75,12 +89,14 @@ export default function CallLoginPage() {
           </label>
         ) : null}
         {msg ? <p className="mt-3 text-sm text-slate-600">{msg}</p> : null}
-        <button type="submit" disabled={busy} className="mt-4 h-11 w-full rounded-xl bg-[#0b6fbf] font-semibold text-white disabled:opacity-50">
-          {sent ? "Login" : "Send OTP"}
+        <button type="submit" disabled={busy || (!sent && wait > 0)} className="mt-4 h-11 w-full rounded-xl bg-[#0b6fbf] font-semibold text-white disabled:opacity-50">
+          {sent ? "Login" : wait > 0 ? `Wait ${wait}s` : "Send OTP"}
         </button>
-        <a href="/call/admin/login" className="mt-4 block text-center text-xs text-slate-400">
-          Admin login
-        </a>
+        {sent ? (
+          <button type="button" disabled={wait > 0 || busy} onClick={() => setSent(false)} className="mt-3 w-full text-center text-xs text-slate-500 disabled:opacity-60">
+            {wait > 0 ? `Resend OTP in ${wait}s` : "Resend OTP"}
+          </button>
+        ) : null}
       </form>
     </main>
   );

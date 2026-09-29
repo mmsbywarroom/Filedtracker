@@ -190,7 +190,7 @@ export async function requireAdmin() {
   return { ...s, admin: scope };
 }
 
-/** Call-portal admin sees the same users, attendance, and daily records as a super admin. */
+/** Call-portal admin has the same tools, but only Call Center users. */
 function callPortalAdminScope(): AdminScope {
   return {
     id: "call-portal-admin",
@@ -198,7 +198,8 @@ function callPortalAdminScope(): AdminScope {
     name: "Call admin",
     accessLevel: "State",
     isSuper: true,
-    designations: [],
+    designations: ["Call Center"],
+    designationLock: "Call Center",
     zone: "",
     district: "",
     assemblyName: "",

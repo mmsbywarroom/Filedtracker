@@ -29,6 +29,11 @@ function CreateUserForm() {
   const [csvMsg, setCsvMsg] = useState("");
 
   useEffect(() => {
+    if (!portal.call) return;
+    setForm((f) => ({ ...f, designation: "Call Center", assemblies: [] }));
+  }, [portal.call]);
+
+  useEffect(() => {
     fetch("/api/admin/assembly-names")
       .then((r) => r.json())
       .then((d) => setOfficialAssemblies(d.assemblies || []))
@@ -85,10 +90,12 @@ function CreateUserForm() {
       return;
     }
     const url = editId ? `/api/admin/users/${editId}` : "/api/admin/users";
+    const designation = portal.call ? "Call Center" : form.designation;
     const payload = {
       ...form,
-      assemblyName: form.designation === "ALC" ? form.assemblies[0] || form.assemblyName : form.assemblyName,
-      assemblies: form.designation === "ALC" ? form.assemblies : [],
+      designation,
+      assemblyName: designation === "ALC" ? form.assemblies[0] || form.assemblyName : form.assemblyName,
+      assemblies: designation === "ALC" ? form.assemblies : [],
     };
     const res = await fetch(url, {
       method: editId ? "PATCH" : "POST",
@@ -141,7 +148,8 @@ function CreateUserForm() {
               {label}
               {key === "designation" ? (
                 <select
-                  value={form.designation}
+                  value={portal.call ? "Call Center" : form.designation}
+                  disabled={portal.call}
                   onChange={(e) => {
                     const designation = e.target.value;
                     setForm({
@@ -152,7 +160,7 @@ function CreateUserForm() {
                   }}
                   className="mt-1 w-full rounded-xl border border-navy/10 bg-sand/40 px-3 py-2 text-sm"
                 >
-                  {DESIGNATIONS.map((d) => (
+                  {(portal.call ? ["Call Center"] : DESIGNATIONS).map((d) => (
                     <option key={d} value={d}>
                       {d}
                     </option>
