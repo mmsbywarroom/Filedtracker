@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/auth";
+import { requirePortalAdmin } from "@/lib/auth";
 import { canManageAdmins, canResetUserFace, canSeeCallCenterUsers, isSuperAdmin, visibleDesignationsFor } from "@/lib/hierarchy";
 
 export async function GET() {
-  const s = await requireAdmin();
+  const s = await requirePortalAdmin();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   return NextResponse.json({
     admin: {

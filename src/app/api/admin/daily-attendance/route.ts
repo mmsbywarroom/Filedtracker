@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireAdmin } from "@/lib/auth";
+import { requirePortalAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canSeeUser, normalizeAccessLevel, userScopeWhere } from "@/lib/hierarchy";
 import {
@@ -21,7 +21,7 @@ import { userPinnedFlagFromSessions, filterValidIntervalSnapshots } from "@/lib/
 import { isExactSamePunchInOut } from "@/lib/stationarySessions";
 
 export async function GET(req: Request) {
-  const s = await requireAdmin();
+  const s = await requirePortalAdmin();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { searchParams } = new URL(req.url);
@@ -340,7 +340,7 @@ const patchSchema = z.object({
 });
 
 export async function PATCH(req: Request) {
-  const s = await requireAdmin();
+  const s = await requirePortalAdmin();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const parsed = patchSchema.safeParse(await req.json().catch(() => null));

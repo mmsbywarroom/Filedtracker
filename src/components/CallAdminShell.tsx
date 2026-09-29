@@ -8,8 +8,9 @@ const NAV = [
   { href: "/call/admin", label: "Call list", group: "Calling" },
   { href: "/call/admin/submissions", label: "Call submissions", group: "Calling" },
   { href: "/call/admin/form", label: "Form designer", group: "Calling" },
-  { href: "/call/admin/users", label: "Call center users", group: "People" },
-  { href: "/call/admin/attendance", label: "Attendance", group: "People" },
+  { href: "/call/admin/users", label: "Users", group: "People" },
+  { href: "/call/admin/attendance", label: "Attendance", group: "Attendance" },
+  { href: "/call/admin/records", label: "Daily records", group: "Attendance" },
 ];
 
 export function CallAdminShell({ children }: { children: ReactNode }) {
@@ -26,7 +27,7 @@ export function CallAdminShell({ children }: { children: ReactNode }) {
     return pathname.startsWith(href);
   }
 
-  const groups = ["Calling", "People"];
+  const groups = ["Calling", "People", "Attendance"];
 
   return (
     <div className="min-h-screen bg-[#f4f7fb] md:flex">

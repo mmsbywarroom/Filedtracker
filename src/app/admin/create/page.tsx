@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense } from "react";
+import { useAdminPortal } from "@/lib/adminPortalPath";
 import { DESIGNATIONS } from "@/lib/hierarchy";
 
 const empty = {
@@ -18,6 +19,7 @@ const empty = {
 };
 
 function CreateUserForm() {
+  const portal = useAdminPortal();
   const router = useRouter();
   const search = useSearchParams();
   const editId = search.get("edit");
@@ -41,7 +43,7 @@ function CreateUserForm() {
     (async () => {
       const res = await fetch("/api/admin/users");
       if (res.status === 401) {
-        window.location.href = "/admin/login";
+        window.location.href = portal.loginHref;
         return;
       }
       const data = await res.json();
@@ -98,7 +100,7 @@ function CreateUserForm() {
       setError(data.error || "Save failed");
       return;
     }
-    router.push("/admin/users");
+    router.push(portal.href("/admin/users"));
   }
 
   async function uploadCsv(file: File) {

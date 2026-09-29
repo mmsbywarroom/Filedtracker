@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/auth";
+import { requirePortalAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canSeeUser, userScopeWhere } from "@/lib/hierarchy";
 import { istDateString, istDayBounds } from "@/lib/dailyAttendance";
@@ -14,7 +14,7 @@ function pickLatestFix(candidates: (LocFix | null | undefined)[]): LocFix | null
 }
 
 export async function GET(req: Request) {
-  const s = await requireAdmin();
+  const s = await requirePortalAdmin();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { searchParams } = new URL(req.url);

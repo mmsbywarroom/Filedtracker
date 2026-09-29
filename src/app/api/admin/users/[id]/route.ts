@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireAdmin } from "@/lib/auth";
+import { requirePortalAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { normalizePhone } from "@/lib/security";
 import { DESIGNATIONS, canSeeUser, isSuperAdmin } from "@/lib/hierarchy";
@@ -21,7 +21,7 @@ const userSchema = z.object({
 });
 
 export async function PATCH(req: Request, { params }: { params: { id: string } }) {
-  const s = await requireAdmin();
+  const s = await requirePortalAdmin();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const existing = await prisma.user.findUnique({ where: { id: params.id } });
   if (!existing || !canSeeUser(s.admin, existing)) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -83,7 +83,7 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
 }
 
 export async function DELETE(_req: Request, { params }: { params: { id: string } }) {
-  const s = await requireAdmin();
+  const s = await requirePortalAdmin();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!isSuperAdmin(s.admin)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const existing = await prisma.user.findUnique({ where: { id: params.id } });

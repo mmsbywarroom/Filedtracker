@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import Papa from "papaparse";
-import { requireAdmin } from "@/lib/auth";
+import { requirePortalAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { normalizePhone } from "@/lib/security";
 import { DESIGNATIONS, isSuperAdmin, parseAssembliesInput } from "@/lib/hierarchy";
@@ -8,7 +8,7 @@ import { normalizeUserAssemblies } from "@/lib/userAssemblies";
 import { pickUserCsv, USER_CSV_ALIASES } from "@/lib/userCsvFields";
 
 export async function POST(req: Request) {
-  const s = await requireAdmin();
+  const s = await requirePortalAdmin();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!isSuperAdmin(s.admin)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const form = await req.formData();

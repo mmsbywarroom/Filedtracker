@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/auth";
+import { requirePortalAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canSeeUser, userScopeWhere } from "@/lib/hierarchy";
 import { sessionTravelMeters } from "@/lib/utils";
@@ -9,7 +9,7 @@ import { sessionTravelMeters } from "@/lib/utils";
  * Faces load on demand via /api/admin/attendance/[id]/faces
  */
 export async function GET(req: Request) {
-  const s = await requireAdmin();
+  const s = await requirePortalAdmin();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { searchParams } = new URL(req.url);
   const date = searchParams.get("date") || new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });

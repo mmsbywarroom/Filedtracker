@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { FacePhoto } from "@/components/FacePhoto";
 import { PaginationBar } from "@/components/PaginationBar";
 import { SearchSelect } from "@/components/SearchSelect";
+import { useAdminPortal } from "@/lib/adminPortalPath";
 import { hierarchyDesignations } from "@/lib/hierarchy";
 
 type UserRow = {
@@ -42,6 +43,7 @@ function unique(rows: UserRow[], key: keyof UserRow) {
 }
 
 export default function AdminUsersPage() {
+  const portal = useAdminPortal();
   const [users, setUsers] = useState<UserRow[]>([]);
   const [q, setQ] = useState("");
   const [assembly, setAssembly] = useState("");
@@ -70,7 +72,7 @@ export default function AdminUsersPage() {
   async function load() {
     const res = await fetch("/api/admin/users");
     if (res.status === 401) {
-      window.location.href = "/admin/login";
+      window.location.href = portal.loginHref;
       return;
     }
     const data = await res.json();
@@ -296,7 +298,7 @@ export default function AdminUsersPage() {
                 e.target.value = "";
               }}
             />
-            <Link href="/admin/create" className="admin-btn-primary">
+            <Link href={portal.href("/admin/create")} className="admin-btn-primary">
               Create user
             </Link>
           </div>
@@ -481,7 +483,7 @@ export default function AdminUsersPage() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="admin-actions">
-                      <Link href={`/admin/users/${u.id}`} className="admin-btn-teal-soft admin-btn-sm">
+                      <Link href={portal.href(`/admin/users/${u.id}`)} className="admin-btn-teal-soft admin-btn-sm">
                         Footprint
                       </Link>
                       {canResetFace && u.faceRegistered && (
@@ -499,7 +501,7 @@ export default function AdminUsersPage() {
                       )}
                       {isSuper && (
                         <>
-                          <Link href={`/admin/create?edit=${u.id}`} className="admin-btn-ghost admin-btn-sm">
+                          <Link href={portal.href(`/admin/create?edit=${u.id}`)} className="admin-btn-ghost admin-btn-sm">
                             Edit
                           </Link>
                           <button type="button" onClick={() => remove(u.id)} className="admin-btn-danger admin-btn-sm">

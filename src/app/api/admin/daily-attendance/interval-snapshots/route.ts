@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/auth";
+import { requirePortalAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canSeeUser } from "@/lib/hierarchy";
 import {
@@ -13,7 +13,7 @@ import {
 import { istDayBounds } from "@/lib/dailyAttendance";
 
 export async function GET(req: Request) {
-  const s = await requireAdmin();
+  const s = await requirePortalAdmin();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { searchParams } = new URL(req.url);

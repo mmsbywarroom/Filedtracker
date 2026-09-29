@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/auth";
+import { requirePortalAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canSeeUser } from "@/lib/hierarchy";
 
@@ -7,7 +7,7 @@ type Kind = "registered" | "in" | "out";
 
 /** Load one face image on demand (keeps daily records list fast). */
 export async function GET(req: Request, { params }: { params: { id: string } }) {
-  const s = await requireAdmin();
+  const s = await requirePortalAdmin();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const kind = (new URL(req.url).searchParams.get("kind") || "in") as Kind;

@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/auth";
+import { requirePortalAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { downsample } from "@/lib/utils";
 import { canSeeUser } from "@/lib/hierarchy";
 
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
-  const s = await requireAdmin();
+  const s = await requirePortalAdmin();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const user = await prisma.user.findUnique({
     where: { id: params.id },

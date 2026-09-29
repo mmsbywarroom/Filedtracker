@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { PaginationBar } from "@/components/PaginationBar";
 import { SearchSelect } from "@/components/SearchSelect";
 import AdminUsersMap, { type LiveMapUser } from "@/components/AdminUsersMapDynamic";
+import { useAdminPortal } from "@/lib/adminPortalPath";
 import { hierarchyDesignations } from "@/lib/hierarchy";
 import { downloadAssemblyAttendancePdfZip } from "@/lib/assemblyAttendancePdf";
 import { downloadCsv } from "@/lib/reportExport";
@@ -143,6 +144,7 @@ function unique(rows: Row[], key: keyof Row) {
 const selectClass = "h-11 w-full rounded-xl border border-navy/15 bg-white px-3 text-sm shadow-sm";
 
 export default function AttendanceModulePage() {
+  const portal = useAdminPortal();
   const [date, setDate] = useState(todayIst);
   const [statusFilter, setStatusFilter] = useState("");
   const [flagFilter, setFlagFilter] = useState("");
@@ -183,7 +185,7 @@ export default function AttendanceModulePage() {
     const params = new URLSearchParams({ date });
     const res = await fetch(`/api/admin/daily-attendance?${params}`);
     if (res.status === 401) {
-      window.location.href = "/admin/login";
+      window.location.href = portal.loginHref;
       return;
     }
     const data = await res.json();
@@ -476,7 +478,7 @@ export default function AttendanceModulePage() {
       const params = new URLSearchParams({ userId, date });
       const res = await fetch(`/api/admin/daily-attendance/interval-snapshots?${params}`);
       if (res.status === 401) {
-        window.location.href = "/admin/login";
+        window.location.href = portal.loginHref;
         return;
       }
       const data = await res.json();

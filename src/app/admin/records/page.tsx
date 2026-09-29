@@ -8,6 +8,7 @@ import { PaginationBar } from "@/components/PaginationBar";
 import { downloadCsv, downloadPdf, reasonLabel, uniqueSorted } from "@/lib/reportExport";
 import { isExactSamePunchInOut } from "@/lib/stationarySessions";
 import { formatKm } from "@/lib/utils";
+import { useAdminPortal } from "@/lib/adminPortalPath";
 import { clientSourceLabel } from "@/lib/clientSource";
 
 type Row = {
@@ -63,6 +64,7 @@ function rowReason(r: Row) {
 }
 
 export default function DailyRecordsPage() {
+  const portal = useAdminPortal();
   const [date, setDate] = useState(todayIst);
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
@@ -84,7 +86,7 @@ export default function DailyRecordsPage() {
     try {
       const res = await fetch(`/api/admin/attendance?date=${d}`);
       if (res.status === 401) {
-        window.location.href = "/admin/login";
+        window.location.href = portal.loginHref;
         return;
       }
       if (!res.ok) {
@@ -435,7 +437,7 @@ export default function DailyRecordsPage() {
                   <td className="px-3 py-3">{r.status}</td>
                   <td className="px-3 py-3 text-xs">{reasonLabel(r.punchOutReason, r.punchOutAt)}</td>
                   <td className="px-3 py-3">
-                    <Link href={`/admin/users/${r.userId}`} className="admin-btn-teal-soft admin-btn-sm">
+                    <Link href={portal.href(`/admin/users/${r.userId}`)} className="admin-btn-teal-soft admin-btn-sm">
                       Footprint
                     </Link>
                   </td>

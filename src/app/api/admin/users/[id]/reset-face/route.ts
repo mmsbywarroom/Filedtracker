@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireAdmin } from "@/lib/auth";
+import { requirePortalAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canResetUserFace, canSeeUser } from "@/lib/hierarchy";
 
@@ -9,7 +9,7 @@ const schema = z.object({
 });
 
 export async function POST(req: Request, { params }: { params: { id: string } }) {
-  const s = await requireAdmin();
+  const s = await requirePortalAdmin();
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!canResetUserFace(s.admin)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });

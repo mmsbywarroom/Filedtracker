@@ -190,6 +190,32 @@ export async function requireAdmin() {
   return { ...s, admin: scope };
 }
 
+/** Call-portal admin sees the same users, attendance, and daily records as a super admin. */
+function callPortalAdminScope(): AdminScope {
+  return {
+    id: "call-portal-admin",
+    email: "calladmin",
+    name: "Call admin",
+    accessLevel: "State",
+    isSuper: true,
+    designations: [],
+    zone: "",
+    district: "",
+    assemblyName: "",
+    assemblies: [],
+    cluster: "",
+  };
+}
+
+/** Field admin session, or the calling-portal admin (same users / attendance / records tools). */
+export async function requirePortalAdmin() {
+  const admin = await requireAdmin();
+  if (admin) return admin;
+  const call = await getCallAdminSession();
+  if (!call) return null;
+  return { ...call, admin: callPortalAdminScope() };
+}
+
 export async function setCallerSession(phone: string) {
   const token = await signSession({ sub: phone, role: "caller", phone, name: phone });
   await writeCookie(CALLER_COOKIE, token);

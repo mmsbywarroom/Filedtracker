@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { requireSuperAdmin } from "@/lib/auth";
+import { requirePortalAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canSeeUser, userScopeWhere } from "@/lib/hierarchy";
 import {
@@ -30,7 +30,8 @@ function csvEscape(v: string | number | null | undefined) {
 }
 
 export async function GET(req: Request) {
-  const s = await requireSuperAdmin();
+  const s = await requirePortalAdmin();
+  if (s && !s.admin.isSuper) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   if (!s) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { searchParams } = new URL(req.url);

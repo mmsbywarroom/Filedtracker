@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import RouteMap from "@/components/RouteMapDynamic";
+import { useAdminPortal } from "@/lib/adminPortalPath";
 
 type Att = {
   id: string;
@@ -17,6 +18,7 @@ type Att = {
 };
 
 export default function FootprintPage({ params }: { params: { id: string } }) {
+  const portal = useAdminPortal();
   const [user, setUser] = useState<{ name: string; phone: string; sectorAllotted: string } | null>(null);
   const [rows, setRows] = useState<Att[]>([]);
   const [active, setActive] = useState<Att | null>(null);
@@ -25,7 +27,7 @@ export default function FootprintPage({ params }: { params: { id: string } }) {
     (async () => {
       const res = await fetch(`/api/admin/users/${params.id}/footprint`);
       if (res.status === 401) {
-        window.location.href = "/admin/login";
+        window.location.href = portal.loginHref;
         return;
       }
       const data = await res.json();
@@ -38,7 +40,7 @@ export default function FootprintPage({ params }: { params: { id: string } }) {
   return (
     <main className="bg-sand px-4 py-5 md:px-8">
       <div>
-        <Link href="/admin/records" className="text-sm text-navy/50">
+        <Link href={portal.href("/admin/records")} className="text-sm text-navy/50">
           ← Daily records
         </Link>
         <div className="mt-3 mb-4 rounded-3xl bg-white px-4 py-3 shadow-card">
