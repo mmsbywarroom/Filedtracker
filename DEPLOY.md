@@ -4,7 +4,7 @@ Target:
 
 - GitHub: `https://github.com/mmsbywarroom/Filedtracker.git`
 - EC2 Mumbai (`ap-south-1`, `t3.medium`, Elastic IP `13.234.95.134`) — host stored in GitHub secret `EC2_HOST`
-- Domain: `https://filed.videh.co.in` (field attendance) · `https://rally.videh.co.in` (rally check-in)
+- Domain: `https://filed.videh.co.in` (field attendance) · `https://rally.videh.co.in` (rally check-in) · `https://call.aappunjab.in` (calling portal)
 - Database: PostgreSQL **on the same EC2** (Docker). Do not use RDS in `us-east-1` — too slow from Mumbai.
 
 If you already run another app on this instance, stop/conflict-check port 80, 443, and 3000 first.
@@ -71,7 +71,7 @@ Set strong values for:
 ```bash
 sudo apt install -y certbot python3-certbot-nginx
 # Field + rally on the same EC2 / nginx upstream
-sudo certbot --nginx -d filed.videh.co.in -d rally.videh.co.in
+sudo certbot --nginx -d filed.videh.co.in -d rally.videh.co.in -d call.aappunjab.in
 sudo nginx -t && sudo systemctl reload nginx
 ```
 

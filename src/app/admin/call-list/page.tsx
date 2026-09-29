@@ -7,12 +7,17 @@ type Contact = {
   id: string;
   name: string;
   phone: string;
-  vehicleNumber: string;
   zone: string;
   district: string;
   halka: string;
   villageWard: string;
-  assignedUsers: number;
+  block: string;
+  age: string;
+  gender: string;
+  education: string;
+  position: string;
+  fatherName: string;
+  assigneePhone: string;
 };
 
 type FieldUser = {
@@ -131,7 +136,7 @@ export default function CallListAdminPage() {
 
   function downloadTemplate() {
     const blob = new Blob(
-      ["Person Name,Mobile,Vehicle Number,Zone,District,Halka,Village/Ward,Assign User Mobile\n"],
+      ["Zone,District,Halka,Village/Ward,Block,Name,Phone,Age,Gender,Education,Position,Father Name,Assigned users\n"],
       { type: "text/csv;charset=utf-8" }
     );
     const url = URL.createObjectURL(blob);
@@ -147,7 +152,7 @@ export default function CallListAdminPage() {
       <p className="text-xs uppercase tracking-[0.2em] text-teal">People</p>
       <h1 className="text-2xl font-semibold text-ink">Call list</h1>
       <p className="mt-1 max-w-3xl text-sm text-navy/55">
-        Upload numbers with the field user&apos;s mobile in Assign User Mobile. Matching users are assigned automatically. You can still assign from the list below.
+        Upload the call sheet. Assigned users is the caller&apos;s 10-digit mobile. That person signs in with OTP on call.aappunjab.in and sees only these rows.
       </p>
       <CallCampaignPanel reloadToken={reloadToken} />
 
@@ -171,7 +176,7 @@ export default function CallListAdminPage() {
         />
       </div>
       <p className="mt-2 text-xs text-navy/45">
-        Columns: Person Name, Mobile, Vehicle Number, Zone, District, Halka, Village/Ward, Assign User Mobile. In Excel use Save As → CSV UTF-8 so names are not saved as question marks.
+        Columns: Zone, District, Halka, Village/Ward, Block, Name, Phone, Age, Gender, Education, Position, Father Name, Assigned users. In Excel use Save As → CSV UTF-8 so names are not saved as question marks.
       </p>
       {msg ? <p className="mt-3 text-sm text-navy/70">{msg}</p> : null}
 
@@ -223,7 +228,7 @@ export default function CallListAdminPage() {
             onKeyDown={(e) => {
               if (e.key === "Enter") load();
             }}
-            placeholder="Name, mobile, vehicle"
+            placeholder="Name, phone, halka, assigned mobile"
             className="mt-1 block h-11 w-full max-w-md rounded-xl border border-navy/15 px-3 text-sm"
           />
         </label>
@@ -237,7 +242,7 @@ export default function CallListAdminPage() {
           <table className="min-w-full text-left text-sm">
             <thead>
               <tr>
-                {["Show", "Person name", "Mobile", "Vehicle number", "Zone", "District", "Halka", "Village/Ward", "Assigned users"].map((h) => (
+                {["Show", "Zone", "District", "Halka", "Village/Ward", "Block", "Name", "Phone", "Age", "Gender", "Education", "Position", "Father Name", "Assigned users"].map((h) => (
                   <th key={h} className="sticky top-0 z-10 bg-[#eef3fb] px-4 py-3">
                     {h}
                   </th>
@@ -256,14 +261,19 @@ export default function CallListAdminPage() {
                       aria-label={`Assign ${c.name}`}
                     />
                   </td>
-                  <td className="px-4 py-2 font-medium">{c.name}</td>
-                  <td className="px-4 py-2">{c.phone}</td>
-                  <td className="px-4 py-2">{c.vehicleNumber || "—"}</td>
                   <td className="px-4 py-2">{c.zone || "—"}</td>
                   <td className="px-4 py-2">{c.district || "—"}</td>
                   <td className="px-4 py-2">{c.halka || "—"}</td>
                   <td className="px-4 py-2">{c.villageWard || "—"}</td>
-                  <td className="px-4 py-2">{c.assignedUsers}</td>
+                  <td className="px-4 py-2">{c.block || "—"}</td>
+                  <td className="px-4 py-2 font-medium">{c.name}</td>
+                  <td className="px-4 py-2">{c.phone}</td>
+                  <td className="px-4 py-2">{c.age || "—"}</td>
+                  <td className="px-4 py-2">{c.gender || "—"}</td>
+                  <td className="px-4 py-2">{c.education || "—"}</td>
+                  <td className="px-4 py-2">{c.position || "—"}</td>
+                  <td className="px-4 py-2">{c.fatherName || "—"}</td>
+                  <td className="px-4 py-2">{c.assigneePhone || "—"}</td>
                 </tr>
               ))}
             </tbody>

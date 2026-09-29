@@ -46,6 +46,18 @@ export async function PUT(req: Request) {
           }),
         ]
       : []),
+    prisma.callContact.updateMany({
+      where: { assigneePhone: user.phone, ...(ids.length ? { id: { notIn: ids } } : {}) },
+      data: { assigneePhone: "" },
+    }),
+    ...(ids.length
+      ? [
+          prisma.callContact.updateMany({
+            where: { id: { in: ids } },
+            data: { assigneePhone: user.phone },
+          }),
+        ]
+      : []),
   ]);
 
   return NextResponse.json({ ok: true, assigned: ids.length });

@@ -294,10 +294,21 @@ model CallContact {
   /// Vidhansabha / assembly
   halka         String   @default("")
   villageWard   String   @default("")
+  block         String   @default("")
+  age           String   @default("")
+  gender        String   @default("")
+  education     String   @default("")
+  position      String   @default("")
+  fatherName    String   @default("")
+  /// Caller mobile on call.aappunjab.in. Empty means unassigned.
+  assigneePhone String   @default("")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   assignments   CallAssignment[]
   outcomes      CallOutcome[]
+  portalResponses CallPortalResponse[]
+
+  @@index([assigneePhone])
 }
 
 model CallAssignment {
@@ -330,6 +341,31 @@ model CallOutcome {
 
   @@unique([userId, contactId])
   @@index([userId])
+}
+
+/// One calling script for the portal. Admins edit questions like a form builder.
+model CallForm {
+  id             String   @id @default("active")
+  title          String   @default("Booth Member Verification")
+  openingScript  String   @default("")
+  closingScript  String   @default("")
+  questions      Json
+  statuses       Json
+  updatedAt      DateTime @updatedAt
+}
+
+model CallPortalResponse {
+  id          String      @id @default(cuid())
+  contactId   String
+  contact     CallContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  callerPhone String
+  answers     Json
+  status      String      @default("")
+  remarks     String      @default("")
+  createdAt   DateTime    @default(now())
+
+  @@index([contactId, createdAt])
+  @@index([callerPhone])
 }
 
 model Rally {

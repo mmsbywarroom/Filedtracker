@@ -6,6 +6,8 @@ import { normalizeAccessLevel } from "@/lib/hierarchy";
 
 const USER_COOKIE = "ft_user_session";
 const ADMIN_COOKIE = "ft_admin_session";
+const CALLER_COOKIE = "ft_caller_session";
+const CALL_ADMIN_COOKIE = "ft_call_admin_session";
 /** @deprecated legacy single cookie — cleared on new login */
 const LEGACY_COOKIE = "ft_session";
 
@@ -17,7 +19,7 @@ function secret() {
 
 export type SessionPayload = {
   sub: string;
-  role: "admin" | "user";
+  role: "admin" | "user" | "caller" | "calladmin";
   kind?: "field" | "rally";
   phone?: string;
   name?: string;
@@ -186,6 +188,36 @@ export async function requireAdmin() {
     cluster: admin.cluster,
   };
   return { ...s, admin: scope };
+}
+
+export async function setCallerSession(phone: string) {
+  const token = await signSession({ sub: phone, role: "caller", phone, name: phone });
+  await writeCookie(CALLER_COOKIE, token);
+}
+
+export async function clearCallerSession() {
+  await eraseCookie(CALLER_COOKIE);
+}
+
+export async function getCallerSession(): Promise<SessionPayload | null> {
+  const s = await readSessionCookie(CALLER_COOKIE);
+  if (!s || s.role !== "caller" || !s.phone) return null;
+  return s;
+}
+
+export async function setCallAdminSession() {
+  const token = await signSession({ sub: "call-portal-admin", role: "calladmin", name: "Call admin" });
+  await writeCookie(CALL_ADMIN_COOKIE, token);
+}
+
+export async function clearCallAdminSession() {
+  await eraseCookie(CALL_ADMIN_COOKIE);
+}
+
+export async function getCallAdminSession(): Promise<SessionPayload | null> {
+  const s = await readSessionCookie(CALL_ADMIN_COOKIE);
+  if (!s || s.role !== "calladmin") return null;
+  return s;
 }
 
 /** Super admin only — Rally, Logs, Salary register, Holidays, etc. */

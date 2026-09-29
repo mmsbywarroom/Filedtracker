@@ -2,10 +2,13 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { jwtVerify } from "jose";
 import { isRallyPublicHost } from "@/lib/rallyHost";
+import { isCallPublicHost } from "@/lib/callHost";
 
 const USER_COOKIE = "ft_user_session";
 const ADMIN_COOKIE = "ft_admin_session";
 const LEGACY_COOKIE = "ft_session";
+const CALLER_COOKIE = "ft_caller_session";
+const CALL_ADMIN_COOKIE = "ft_call_admin_session";
 
 type UserTok = { role: "user"; kind: "field" | "rally" } | null;
 
@@ -23,7 +26,7 @@ async function userTokFromCookie(req: NextRequest, name: string): Promise<UserTo
   }
 }
 
-async function roleFromCookie(req: NextRequest, name: string, expected: "admin") {
+async function roleFromCookie(req: NextRequest, name: string, expected: "admin" | "caller" | "calladmin") {
   const token = req.cookies.get(name)?.value;
   const secret = process.env.JWT_SECRET;
   if (!token || !secret || secret.length < 16) return null;
@@ -61,6 +64,29 @@ export async function middleware(req: NextRequest) {
   const staffWeb =
     req.nextUrl.searchParams.get("staff") === "1" && !mobileBrowser;
   const fieldWebOk = nativeWebView || staffWeb;
+
+  const callHost = isCallPublicHost(host);
+
+  if (callHost && (pathname.startsWith("/admin") || pathname.startsWith("/dashboard") || pathname.startsWith("/rally"))) {
+    return NextResponse.redirect(new URL("/call", req.url));
+  }
+  if (callHost && pathname === "/") {
+    const caller = await roleFromCookie(req, CALLER_COOKIE, "caller");
+    return NextResponse.redirect(new URL(caller ? "/call/desk" : "/call", req.url));
+  }
+
+  if (pathname.startsWith("/call/desk")) {
+    const caller = await roleFromCookie(req, CALLER_COOKIE, "caller");
+    if (!caller) return NextResponse.redirect(new URL("/call", req.url));
+  }
+  if (pathname.startsWith("/call/admin") && pathname !== "/call/admin/login") {
+    const callAdmin = await roleFromCookie(req, CALL_ADMIN_COOKIE, "calladmin");
+    if (!callAdmin) return NextResponse.redirect(new URL("/call/admin/login", req.url));
+  }
+  if (pathname === "/call/admin/login") {
+    const callAdmin = await roleFromCookie(req, CALL_ADMIN_COOKIE, "calladmin");
+    if (callAdmin) return NextResponse.redirect(new URL("/call/admin", req.url));
+  }
 
   // --- Rally public host: login + /rally only (no field dashboard / admin) ---
   if (rallyHost) {
@@ -128,5 +154,5 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/", "/dashboard/:path*", "/rally/:path*", "/admin/:path*"],
+  matcher: ["/", "/dashboard/:path*", "/rally/:path*", "/admin/:path*", "/call/:path*"],
 };
