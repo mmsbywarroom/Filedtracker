@@ -4,6 +4,7 @@ import android.Manifest;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.location.Location;
 import android.util.Log;
 import android.webkit.CookieManager;
 import android.webkit.JavascriptInterface;
@@ -14,6 +15,10 @@ import androidx.core.content.ContextCompat;
 import in.videh.filedtracker.nativeapp.compose.ComposeMainActivity;
 
 import org.json.JSONObject;
+
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import in.videh.filedtracker.bglocation.FieldLocationService;
 import in.videh.filedtracker.bglocation.TrackingPrefs;
@@ -111,6 +116,49 @@ public class NativeAppBridge {
     @JavascriptInterface
     public void reportSecurityEvent(String type, String action, String detail) {
         SecurityReporter.report(activity, type, action, detail, null, null);
+    }
+
+    /** Blocks briefly on the bridge thread and returns {"ok":true,"lat":..,"lng":..} or {"ok":false}. */
+    @JavascriptInterface
+    public String getCurrentLocationJson() {
+        if (!LocationHelper.hasFineLocation(activity)) {
+            activity.runOnUiThread(() -> {
+                if (activity instanceof WebShellActivity) {
+                    ((WebShellActivity) activity).requestAllPermissions();
+                } else {
+                    LocationHelper.requestLocationPermissions(activity);
+                }
+            });
+            return "{\"ok\":false,\"error\":\"permission\"}";
+        }
+        CountDownLatch latch = new CountDownLatch(1);
+        AtomicReference<String> out = new AtomicReference<>("{\"ok\":false,\"error\":\"timeout\"}");
+        LocationHelper.getCurrentLocation(activity, new LocationHelper.Callback() {
+            @Override
+            public void onResult(Location loc) {
+                out.set("{\"ok\":true,\"lat\":" + loc.getLatitude() + ",\"lng\":" + loc.getLongitude() + "}");
+                latch.countDown();
+            }
+
+            @Override
+            public void onError(String message) {
+                try {
+                    JSONObject o = new JSONObject();
+                    o.put("ok", false);
+                    o.put("error", message == null ? "GPS failed" : message);
+                    out.set(o.toString());
+                } catch (Exception ignored) {
+                    out.set("{\"ok\":false,\"error\":\"GPS failed\"}");
+                }
+                latch.countDown();
+            }
+        });
+        try {
+            latch.await(12, TimeUnit.SECONDS);
+        } catch (InterruptedException ignored) {
+            Thread.currentThread().interrupt();
+        }
+        return out.get();
     }
 
     @JavascriptInterface

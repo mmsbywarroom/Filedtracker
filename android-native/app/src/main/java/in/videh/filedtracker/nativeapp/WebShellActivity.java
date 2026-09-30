@@ -109,7 +109,7 @@ public class WebShellActivity extends AppCompatActivity {
                     GeolocationPermissions.Callback callback
             ) {
                 if (LocationHelper.hasFineLocation(WebShellActivity.this)) {
-                    callback.invoke(origin, true, false);
+                    callback.invoke(origin, true, true);
                     maybeRequestBackgroundLocation();
                     return;
                 }

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { BrandMark } from "@/components/BrandMark";
 import { locateDevice } from "@/lib/deviceGeo";
 import { countHeadsFromDataUrl, fileToJpegDataUrl, loadPersonCountModel } from "@/lib/headCount";
+import { pureNativeBridge } from "@/lib/pureNativeApp";
 
 type Lang = "pa" | "en";
 
@@ -74,6 +75,22 @@ const COPY = {
   },
 };
 
+async function readRallyPosition(): Promise<{ lat: number; lng: number }> {
+  const bridge = pureNativeBridge() as { getCurrentLocationJson?: () => string } | null;
+  if (bridge?.getCurrentLocationJson) {
+    try {
+      const data = JSON.parse(bridge.getCurrentLocationJson()) as { ok?: boolean; lat?: number; lng?: number };
+      if (data.ok && Number.isFinite(data.lat) && Number.isFinite(data.lng)) {
+        return { lat: Number(data.lat), lng: Number(data.lng) };
+      }
+    } catch {
+      /* use the browser location below */
+    }
+  }
+  const pos = await locateDevice();
+  return { lat: pos.coords.latitude, lng: pos.coords.longitude };
+}
+
 function toJpeg(source: HTMLVideoElement | HTMLImageElement) {
   const canvas = document.createElement("canvas");
   const w = "videoWidth" in source ? source.videoWidth : source.naturalWidth;
@@ -92,6 +109,8 @@ export default function RallyCapturePage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const fixRef = useRef<{ lat: number; lng: number; at: number } | null>(null);
+  const camStarted = useRef(false);
   const [lang, setLang] = useState<Lang>("pa");
   const t = COPY[lang];
   const [name, setName] = useState("");
@@ -151,8 +170,35 @@ export default function RallyCapturePage() {
 
   useEffect(() => {
     void loadMe();
-    void loadPersonCountModel().catch(() => {});
+    const bridge = pureNativeBridge();
+    try {
+      bridge?.requestLocationPermissions?.();
+      bridge?.requestCameraPermission?.();
+    } catch {
+      /* older app builds */
+    }
+    let alive = true;
+    async function warmGps() {
+      for (let attempt = 0; attempt < 3 && alive && !fixRef.current; attempt += 1) {
+        try {
+          const pos = await readRallyPosition();
+          if (!alive) return;
+          fixRef.current = { lat: pos.lat, lng: pos.lng, at: Date.now() };
+        } catch {
+          await new Promise((resolve) => window.setTimeout(resolve, 700));
+        }
+      }
+    }
+    const gpsTimer = window.setTimeout(() => {
+      void warmGps();
+    }, 1200);
+    const modelTimer = window.setTimeout(() => {
+      void loadPersonCountModel().catch(() => {});
+    }, 2500);
     return () => {
+      alive = false;
+      window.clearTimeout(gpsTimer);
+      window.clearTimeout(modelTimer);
       streamRef.current?.getTracks().forEach((tr) => tr.stop());
     };
   }, [loadMe]);
@@ -193,8 +239,12 @@ export default function RallyCapturePage() {
     streamRef.current?.getTracks().forEach((tr) => tr.stop());
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: mode } },
         audio: false,
+        video: {
+          facingMode: { ideal: mode },
+          width: { ideal: 1280, max: 1280 },
+          height: { ideal: 720, max: 720 },
+        },
       });
       streamRef.current = stream;
       setFacing(mode);
@@ -218,6 +268,12 @@ export default function RallyCapturePage() {
     }
   }
 
+  useEffect(() => {
+    if (camStarted.current) return;
+    camStarted.current = true;
+    void startCam();
+  }, []);
+
   async function flipCam() {
     const next = facing === "environment" ? "user" : "environment";
     await startCam(next);
@@ -238,13 +294,16 @@ export default function RallyCapturePage() {
 
   async function snap() {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || video.readyState < 2 || !video.videoWidth) {
+      setErr("Camera is still starting. Wait a moment, then take the photo.");
+      return;
+    }
     const dataUrl = toJpeg(video);
     if (!dataUrl) return;
     setPreview(dataUrl);
     streamRef.current?.getTracks().forEach((tr) => tr.stop());
     setCamOn(false);
-    await countFromDataUrl(dataUrl);
+    void countFromDataUrl(dataUrl);
   }
 
   async function onFile(file: File) {
@@ -261,13 +320,12 @@ export default function RallyCapturePage() {
     setErr("");
     setMsg(t.locating);
     try {
-      let people = heads;
-      if (people == null || people === 0) {
-        setMsg(t.counting);
-        people = await countHeadsFromDataUrl(preview).catch(() => 0);
-        setHeads(people);
-      }
-      const pos = await locateDevice();
+      const [pos, people] = await Promise.all([
+        readRallyPosition(),
+        heads == null ? countHeadsFromDataUrl(preview).catch(() => 0) : Promise.resolve(heads),
+      ]);
+      setHeads(people);
+      fixRef.current = { lat: pos.lat, lng: pos.lng, at: Date.now() };
       setMsg(t.sending);
       const res = await fetch("/api/rally/checkin", {
         method: "POST",
@@ -275,8 +333,8 @@ export default function RallyCapturePage() {
         body: JSON.stringify({
           photo: preview,
           headCount: people ?? 0,
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
+          lat: pos.lat,
+          lng: pos.lng,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -288,8 +346,9 @@ export default function RallyCapturePage() {
       setPreview("");
       setHeads(null);
       await loadMe();
-    } catch {
-      setErr(t.needGps);
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "";
+      setErr(/location|gps|timed out/i.test(text) ? t.needGps : text || t.sendErr);
     } finally {
       setBusy(false);
     }
@@ -410,6 +469,7 @@ export default function RallyCapturePage() {
             <video
               ref={videoRef}
               playsInline
+              autoPlay
               muted
               className={`aspect-[3/4] w-full object-cover sm:aspect-[4/5] ${camOn ? "block" : "hidden"} ${
                 facing === "user" ? "scale-x-[-1]" : ""
