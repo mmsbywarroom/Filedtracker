@@ -66,15 +66,23 @@ export default function HomePage() {
       } catch {
         clientId = "";
       }
+      const onRally = rallyHost || isRallyWebEntry();
       const res = await fetch("/api/auth/otp/request", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone, appInstallationId: clientId, clientId }),
+        body: JSON.stringify({ phone, appInstallationId: clientId, clientId, rally: onRally }),
       });
       const data = await res.json();
       if (!res.ok) {
         setError(data.error || "Could not send OTP");
         if (res.status === 429) setCooldownSec(Number(data.cooldownSec) || 90);
+        return;
+      }
+      if (data.skipOtp) {
+        if (isPureNativeApp() && data.token) {
+          saveNativeSession(String(data.token), String(data.apiBaseUrl || window.location.origin), phone);
+        }
+        window.location.href = "/rally";
         return;
       }
       setStep("otp");
@@ -165,7 +173,11 @@ export default function HomePage() {
           </p>
           <h3 className="mt-4 text-xl font-semibold">{t("login")}</h3>
           <p className="mt-1 text-sm text-navy/60">
-            {rallyHost ? "Enter your registered rally mobile number to continue." : t("loginHint")}
+            {rallyHost && phone === "8541982403"
+              ? "No OTP is needed for this number. Each browser can sign in on its own."
+              : rallyHost
+                ? "Enter your registered rally mobile number to continue."
+                : t("loginHint")}
           </p>
           {step === "phone" ? (
             <form onSubmit={requestOtp} className="mt-6 space-y-4" autoComplete="on">
@@ -190,7 +202,9 @@ export default function HomePage() {
                   ? t("sending")
                   : cooldownSec > 0
                     ? `Wait ${cooldownSec}s`
-                    : t("sendOtp")}
+                    : rallyHost && phone === "8541982403"
+                      ? "Continue"
+                      : t("sendOtp")}
               </button>
             </form>
           ) : (

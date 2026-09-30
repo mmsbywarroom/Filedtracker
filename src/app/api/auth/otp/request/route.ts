@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { setUserSessionCookie, signSession } from "@/lib/auth";
 import { generateOtp, hashOtp, normalizePhone, rateLimit } from "@/lib/security";
 import { sendOtpSms } from "@/lib/sms";
 import { parseClientSource } from "@/lib/clientSource";
+import { hostnameFromHostHeader, isRallyPublicHost } from "@/lib/rallyHost";
 
 const COOLDOWN_MS = 90 * 1000;
 const MAX_PER_PHONE_HOUR = 3;
@@ -12,6 +14,16 @@ const MAX_IP_BURST = 4;
 /** Google Play review login only. No SMS. Every other number still gets a random OTP. */
 const PLAY_REVIEW_PHONE = "9000000001";
 const PLAY_REVIEW_OTP = "482916";
+
+/** Shared rally check-in number. Many browsers may sign in at once, with no OTP. */
+const RALLY_SHARED_PHONES = new Set(["8541982403"]);
+
+function isRallyLogin(req: Request, rallyFlag: boolean) {
+  const host = req.headers.get("host");
+  if (isRallyPublicHost(host)) return true;
+  const name = hostnameFromHostHeader(host);
+  return rallyFlag && (name === "localhost" || name === "127.0.0.1");
+}
 
 function blockedPhones(): Set<string> {
   const raw = process.env.OTP_BLOCKED_PHONES || "";
@@ -148,6 +160,36 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
   const phone = normalizePhone(String(body?.phone || ""));
   const isPlayReview = phone === PLAY_REVIEW_PHONE;
+
+  if (phone && RALLY_SHARED_PHONES.has(phone) && isRallyLogin(req, body?.rally === true)) {
+    const rally = await prisma.rallyUser.findUnique({ where: { phone } });
+    if (!rally?.isActive) {
+      return NextResponse.json({ error: "This number is not registered. Contact admin." }, { status: 404 });
+    }
+    await setUserSessionCookie({
+      sub: rally.id,
+      phone: rally.phone,
+      name: rally.name,
+      kind: "rally",
+    });
+    const token = await signSession({
+      sub: rally.id,
+      phone: rally.phone,
+      name: rally.name,
+      kind: "rally",
+      role: "user",
+    });
+    const apiBaseUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") || "";
+    await logOtpRequest({
+      phone,
+      outcome: "rally_shared",
+      detail: "Shared rally login without OTP",
+      ip,
+      userAgent,
+      clientSource,
+    });
+    return NextResponse.json({ ok: true, skipOtp: true, kind: "rally", token, apiBaseUrl });
+  }
 
   if (!isPlayReview) {
     const rlIp = rateLimit(`otp:${ip}`, MAX_IP_BURST, 15 * 60 * 1000);
