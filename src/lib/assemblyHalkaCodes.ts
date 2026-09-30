@@ -154,9 +154,35 @@ export const HALKA_EXPORT_CODES: { halka: string; code: string }[] = [
   { halka: "Muktsar", code: "MW_SMS_Muktsar" },
 ];
 
+const ZONE_BY_PREFIX: Record<string, string> = {
+  DB: "Doaba",
+  MJ: "Majha",
+  MC: "Malwa Central",
+  ME: "Malwa East",
+  MW: "Malwa West",
+};
+
 const codeByNorm = new Map<string, string>();
+const canonicalByNorm = new Map<string, { halka: string; zone: string }>();
 for (const { halka, code } of HALKA_EXPORT_CODES) {
-  codeByNorm.set(normalizeAssemblyName(halka), code);
+  const norm = normalizeAssemblyName(halka);
+  codeByNorm.set(norm, code);
+  canonicalByNorm.set(norm, { halka, zone: ZONE_BY_PREFIX[code.slice(0, 2)] || "" });
+}
+
+/** Official 117 halkas, one row each, in zone then name order. */
+export const CANONICAL_HALKAS: { halka: string; zone: string }[] = HALKA_EXPORT_CODES.map(({ halka, code }) => ({
+  halka,
+  zone: ZONE_BY_PREFIX[code.slice(0, 2)] || "",
+})).sort((a, b) => a.zone.localeCompare(b.zone) || a.halka.localeCompare(b.halka));
+
+/** Fold a call-list spelling onto one of the 117 assemblies. */
+export function canonicalCallHalka(raw: string): { halka: string; zone: string } | null {
+  let norm = normalizeAssemblyName(raw);
+  if (!norm) return null;
+  const alias = ASSEMBLY_ALIASES[norm];
+  if (alias) norm = normalizeAssemblyName(alias);
+  return canonicalByNorm.get(norm) || null;
 }
 
 /** Map admin assembly name to export CSV base name (code). */
