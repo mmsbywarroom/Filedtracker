@@ -9,8 +9,11 @@ import android.os.Build;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
+import com.google.android.gms.common.api.ResolvableApiException;
 import com.google.android.gms.location.FusedLocationProviderClient;
+import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationServices;
+import com.google.android.gms.location.LocationSettingsRequest;
 import com.google.android.gms.location.Priority;
 import com.google.android.gms.tasks.CancellationTokenSource;
 
@@ -79,6 +82,30 @@ public final class LocationHelper {
         boolean bg = hasBackgroundLocation(activity);
         boolean needsSettings = fg && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && !bg;
         return "{\"foreground\":" + fg + ",\"background\":" + bg + ",\"needsSettings\":" + needsSettings + "}";
+    }
+
+    /**
+     * App permission does not turn the phone Location switch on.
+     * This shows the system "Turn on location" dialog. The user still has to tap OK.
+     */
+    public static void promptEnableLocation(Activity activity) {
+        if (!hasFineLocation(activity)) return;
+        LocationRequest request = new LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 10_000L).build();
+        LocationSettingsRequest settings = new LocationSettingsRequest.Builder()
+                .addLocationRequest(request)
+                .setAlwaysShow(true)
+                .build();
+        LocationServices.getSettingsClient(activity)
+                .checkLocationSettings(settings)
+                .addOnFailureListener(activity, e -> {
+                    if (e instanceof ResolvableApiException) {
+                        try {
+                            ((ResolvableApiException) e).startResolutionForResult(activity, REQ_LOCATION);
+                        } catch (Exception ignored) {
+                            /* user can turn Location on from quick settings */
+                        }
+                    }
+                });
     }
 
     public static void openAppSettings(Activity activity) {

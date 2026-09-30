@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireRallyUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { haversineMeters, RALLY_REACHED_METERS } from "@/lib/rallyGeo";
+import { haversineMeters, normalizeIndiaLatLng, RALLY_REACHED_METERS } from "@/lib/rallyGeo";
 import { isRallyOnDate } from "@/lib/rallies";
 
 export async function POST(req: Request) {
@@ -34,7 +34,8 @@ export async function POST(req: Request) {
   const step = haversineMeters(prev, { lat, lng });
   const extra = step >= 12 ? step : 0;
   const movedMeters = (open.movedMeters || 0) + extra;
-  const toVenue = haversineMeters({ lat, lng }, { lat: rally.lat, lng: rally.lng });
+  const venue = normalizeIndiaLatLng(rally.lat, rally.lng);
+  const toVenue = haversineMeters({ lat, lng }, venue);
   const reached = toVenue <= RALLY_REACHED_METERS;
 
   await prisma.rallyCheckin.update({

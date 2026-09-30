@@ -85,7 +85,23 @@ final class WebShellViewController: UIViewController, WKNavigationDelegate, WKUI
     }
 
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        if let url = navigationAction.request.url, opensOutsideApp(url) {
+            UIApplication.shared.open(url)
+            decisionHandler(.cancel)
+            return
+        }
         decisionHandler(.allow)
+    }
+
+    private func opensOutsideApp(_ url: URL) -> Bool {
+        let scheme = (url.scheme ?? "").lowercased()
+        if scheme == "tel" || scheme == "mailto" || scheme == "maps" || scheme == "comgooglemaps" {
+            return true
+        }
+        let host = (url.host ?? "").lowercased()
+        if host == "maps.apple.com" { return true }
+        if host.contains("google.") && (url.path.contains("/maps") || host.hasPrefix("maps.")) { return true }
+        return false
     }
 
     func webView(_ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin, initiatedByFrame frame: WKFrameInfo, type: WKMediaCaptureType, decisionHandler: @escaping (WKPermissionDecision) -> Void) {

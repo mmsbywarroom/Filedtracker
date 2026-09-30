@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { requireRallyUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { sanitizeRallyPhoto } from "@/lib/rallyPhoto";
-import { rallyTravelEta, RALLY_REACHED_METERS } from "@/lib/rallyGeo";
+import { normalizeIndiaLatLng, rallyTravelEta, RALLY_REACHED_METERS } from "@/lib/rallyGeo";
 import { isRallyOnDate, rallyDateYmd } from "@/lib/rallies";
 
 export async function POST(req: Request) {
@@ -34,11 +34,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Photo is required." }, { status: 400 });
   }
 
+  const venue = normalizeIndiaLatLng(rally.lat, rally.lng);
   const travel = rallyTravelEta({
     fromLat: lat,
     fromLng: lng,
-    toLat: rally.lat,
-    toLng: rally.lng,
+    toLat: venue.lat,
+    toLng: venue.lng,
     vehicleType: user.vehicleType,
   });
   const reached = travel.distanceMeters <= RALLY_REACHED_METERS;

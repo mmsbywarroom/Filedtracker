@@ -44,7 +44,7 @@ workflows:
           set -e
           cd "$CM_BUILD_DIR/ios-native"
           # Info.plist uses $(CURRENT_PROJECT_VERSION). Last rejected upload was CFBundleVersion 4.
-          BUILD_NO=8
+          BUILD_NO=9
           if [ -n "${APP_STORE_APPLE_ID:-}" ]; then
             LATEST=$(app-store-connect get-latest-testflight-build-number "$APP_STORE_APPLE_ID" 2>/dev/null || true)
             if [[ "${LATEST:-}" =~ ^[0-9]+$ ]] && [ "$LATEST" -ge "$BUILD_NO" ]; then
@@ -53,7 +53,7 @@ workflows:
           fi
           echo "CFBundleVersion -> $BUILD_NO"
           agvtool new-version -all "$BUILD_NO"
-          agvtool new-marketing-version 1.4.5
+          agvtool new-marketing-version 1.4.6
       - name: Build IPA for App Store / TestFlight
         script: |
           xcode-project build-ipa \

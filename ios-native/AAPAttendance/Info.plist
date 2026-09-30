@@ -48,7 +48,7 @@
 	<key>NSLocationAlwaysUsageDescription</key>
 	<string>AAP Attendance records your location every 30 minutes while you are punched in, including when the app is in the background.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>AAP Attendance uses the camera for face punch in and punch out.</string>
+	<string>AAP Attendance uses the camera for face punch and rally check-in photos.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Camera punch may request microphone access on this device.</string>
 	<key>NSAppTransportSecurity</key>

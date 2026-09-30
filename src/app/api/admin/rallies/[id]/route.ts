@@ -4,6 +4,7 @@ import { requireSuperAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { istDayBounds } from "@/lib/dailyAttendance";
 import { rallyDateYmd } from "@/lib/rallies";
+import { normalizeIndiaLatLng } from "@/lib/rallyGeo";
 
 const schema = z.object({
   name: z.string().min(2).max(120).optional(),
@@ -21,11 +22,15 @@ export async function PATCH(req: Request, { params }: { params: { id: string } }
   if (body.data.isActive === true) {
     await prisma.rally.updateMany({ data: { isActive: false } });
   }
-  const { scheduledDate, ...rest } = body.data;
+  const { scheduledDate, lat, lng, ...rest } = body.data;
+  const point = lat != null && lng != null ? normalizeIndiaLatLng(lat, lng) : null;
   const rally = await prisma.rally.update({
     where: { id: params.id },
     data: {
       ...rest,
+      ...(point ? { lat: point.lat, lng: point.lng } : {}),
+      ...(lat != null && point == null ? { lat } : {}),
+      ...(lng != null && point == null ? { lng } : {}),
       ...(scheduledDate ? { scheduledDate: istDayBounds(scheduledDate).dateOnly } : {}),
     },
   });

@@ -14,6 +14,17 @@ export function haversineMeters(a: { lat: number; lng: number }, b: { lat: numbe
 
 export const RALLY_REACHED_METERS = 400;
 
+/**
+ * Venue boxes are Latitude then Longitude. A pasted pair like 76.48, 30.79
+ * is longitude first (Punjab is about 30°N, 76°E) and makes the trip look like 200+ hours.
+ */
+export function normalizeIndiaLatLng(lat: number, lng: number): { lat: number; lng: number } {
+  const latLooksLikeIndianLng = lat >= 68 && lat <= 98;
+  const lngLooksLikeIndianLat = lng >= 6 && lng <= 37;
+  if (latLooksLikeIndianLng && lngLooksLikeIndianLat) return { lat: lng, lng: lat };
+  return { lat, lng };
+}
+
 /** Straight-line vs typical Indian roads (bends / village routes). */
 const ROAD_FACTOR = 1.28;
 

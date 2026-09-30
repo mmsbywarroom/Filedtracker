@@ -4,6 +4,7 @@ import { requireSuperAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { istDateString, istDayBounds } from "@/lib/dailyAttendance";
 import { rallyDateYmd } from "@/lib/rallies";
+import { normalizeIndiaLatLng } from "@/lib/rallyGeo";
 
 const schema = z.object({
   name: z.string().min(2).max(120),
@@ -54,12 +55,13 @@ export async function POST(req: Request) {
   const { dateOnly } = istDayBounds(ymd);
   const isToday = ymd === istDateString();
   const makeActive = body.data.isActive !== false && isToday;
+  const point = normalizeIndiaLatLng(body.data.lat, body.data.lng);
   // Same day can have multiple rallies at different venues — do not deactivate others.
   const rally = await prisma.rally.create({
     data: {
       name: body.data.name,
-      lat: body.data.lat,
-      lng: body.data.lng,
+      lat: point.lat,
+      lng: point.lng,
       scheduledDate: dateOnly,
       isActive: makeActive,
     },

@@ -1,15 +1,19 @@
 package in.videh.filedtracker.nativeapp;
 
 import android.annotation.SuppressLint;
+import android.content.ActivityNotFoundException;
+import android.content.Intent;
 import android.graphics.Color;
 import android.Manifest;
 import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.webkit.CookieManager;
 import android.webkit.GeolocationPermissions;
 import android.webkit.PermissionRequest;
 import android.webkit.WebChromeClient;
+import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
@@ -42,6 +46,7 @@ public class WebShellActivity extends AppCompatActivity {
     private GeolocationPermissions.Callback pendingGeoCallback;
     private String pendingGeoOrigin;
     private PermissionRequest pendingWebPermissionRequest;
+    private boolean rallyShell;
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -90,6 +95,16 @@ public class WebShellActivity extends AppCompatActivity {
 
         webView.addJavascriptInterface(new NativeAppBridge(this), "NativeAppBridge");
         webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                return openOutsideWebView(request.getUrl());
+            }
+
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, String url) {
+                return openOutsideWebView(Uri.parse(url));
+            }
+
             @Override
             public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
                 view.evaluateJavascript("window.__PURE_NATIVE_APP__=true;", null);
@@ -153,6 +168,8 @@ public class WebShellActivity extends AppCompatActivity {
 
         String path = getIntent().getStringExtra(EXTRA_PATH);
         if (path == null || path.isEmpty()) path = "/dashboard";
+        rallyShell = "/rally".equals(path);
+        if (rallyShell) LocationHelper.promptEnableLocation(this);
         webView.loadUrl(apiBase + path);
     }
 
@@ -276,6 +293,7 @@ public class WebShellActivity extends AppCompatActivity {
                 pendingWebPermissionRequest = null;
             }
             maybeRequestBackgroundLocation();
+            if (rallyShell) LocationHelper.promptEnableLocation(this);
             pushInsetsToWeb();
         }
         if (requestCode == LocationHelper.REQ_BACKGROUND) {
@@ -292,6 +310,42 @@ public class WebShellActivity extends AppCompatActivity {
         // Domain cookie — never pin session to Elastic IP host.
         cm.setCookie(AppConfig.API_BASE, "ft_user_session=" + token + "; Path=/; Secure; SameSite=Lax");
         cm.flush();
+    }
+
+    /** Google Maps answers with intent:// which a WebView cannot load. Open the Maps app instead. */
+    private boolean openOutsideWebView(Uri uri) {
+        if (uri == null) return false;
+        String scheme = uri.getScheme() == null ? "" : uri.getScheme().toLowerCase();
+        String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase();
+        String path = uri.getPath() == null ? "" : uri.getPath();
+        boolean maps = host.contains("google.") && (path.contains("/maps") || host.startsWith("maps."));
+        boolean external = scheme.equals("intent") || scheme.equals("geo") || scheme.equals("google.navigation") || maps;
+        if (!external) return false;
+        try {
+            Intent intent;
+            if (scheme.equals("intent")) {
+                intent = Intent.parseUri(uri.toString(), Intent.URI_INTENT_SCHEME);
+                intent.addCategory(Intent.CATEGORY_BROWSABLE);
+                intent.setComponent(null);
+                intent.setSelector(null);
+            } else {
+                intent = new Intent(Intent.ACTION_VIEW, uri);
+            }
+            startActivity(intent);
+        } catch (ActivityNotFoundException | java.net.URISyntaxException e) {
+            if (scheme.equals("intent")) {
+                try {
+                    String fallback = Intent.parseUri(uri.toString(), Intent.URI_INTENT_SCHEME)
+                            .getStringExtra("browser_fallback_url");
+                    if (fallback != null && fallback.startsWith("https://")) {
+                        startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(fallback)));
+                    }
+                } catch (Exception ignored) {
+                    /* leave the rally page in place */
+                }
+            }
+        }
+        return true;
     }
 
     private boolean isAppRoot(String url) {
