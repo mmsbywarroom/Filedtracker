@@ -8,6 +8,7 @@ export default function CallLoginPage() {
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
   const [sent, setSent] = useState(false);
+  const [shownOtp, setShownOtp] = useState("");
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [wait, setWait] = useState(0);
@@ -32,12 +33,15 @@ export default function CallLoginPage() {
     if (!res.ok) {
       const retry = Number(data.retryAfter || 0);
       if (retry > 0) setWait(retry);
-      setMsg(data.error || "Could not send OTP.");
+      setMsg(data.error || "Could not create OTP.");
       return;
     }
+    const code = String(data.otp || "");
+    setShownOtp(code);
+    setOtp(code);
     setSent(true);
     setWait(60);
-    setMsg("OTP sent. You can request another after 60 seconds.");
+    setMsg("Use this OTP to log in. No SMS is sent.");
   }
 
   async function verify(e: FormEvent) {
@@ -79,24 +83,28 @@ export default function CallLoginPage() {
           />
         </label>
         {sent ? (
-          <label className="mt-3 block text-sm font-medium">
-            OTP
-            <input
-              value={otp}
-              onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
-              inputMode="numeric"
-              placeholder="Enter OTP"
-              className="mt-1 h-11 w-full rounded-xl border border-slate-200 px-3"
-            />
-          </label>
+          <div className="mt-3">
+            <p className="text-sm font-medium">Your OTP</p>
+            <p className="mt-1 rounded-xl bg-slate-100 py-3 text-center text-3xl font-semibold tracking-[0.3em] text-[#0b4f86]">{shownOtp}</p>
+            <label className="mt-3 block text-sm font-medium">
+              OTP
+              <input
+                value={otp}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                inputMode="numeric"
+                placeholder="Enter OTP"
+                className="mt-1 h-11 w-full rounded-xl border border-slate-200 px-3"
+              />
+            </label>
+          </div>
         ) : null}
         {msg ? <p className="mt-3 text-sm text-slate-600">{msg}</p> : null}
         <button type="submit" disabled={busy || (!sent && wait > 0)} className="mt-4 h-11 w-full rounded-xl bg-[#0b6fbf] font-semibold text-white disabled:opacity-50">
-          {sent ? "Login" : wait > 0 ? `Wait ${wait}s` : "Send OTP"}
+          {sent ? "Login" : wait > 0 ? `Wait ${wait}s` : "Show OTP"}
         </button>
         {sent ? (
           <button type="button" disabled={wait > 0 || busy} onClick={() => setSent(false)} className="mt-3 w-full text-center text-xs text-slate-500 disabled:opacity-60">
-            {wait > 0 ? `Resend OTP in ${wait}s` : "Resend OTP"}
+            {wait > 0 ? `New OTP in ${wait}s` : "Show a new OTP"}
           </button>
         ) : null}
       </form>

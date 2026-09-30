@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { generateOtp, hashOtp, normalizePhone, rateLimit } from "@/lib/security";
-import { sendOtpSms } from "@/lib/sms";
 
 const COOLDOWN_MS = 60 * 1000;
 
@@ -32,20 +31,12 @@ export async function POST(req: Request) {
   const last = await prisma.otpChallenge.findFirst({ where: { phone }, orderBy: { createdAt: "desc" } });
   if (last && Date.now() - last.createdAt.getTime() < COOLDOWN_MS) {
     const waitSec = Math.ceil((COOLDOWN_MS - (Date.now() - last.createdAt.getTime())) / 1000);
-    return NextResponse.json({ error: `OTP already sent. Wait ${waitSec}s.`, retryAfter: waitSec }, { status: 429 });
+    return NextResponse.json({ error: `OTP already created. Wait ${waitSec}s.`, retryAfter: waitSec }, { status: 429 });
   }
 
   const otp = generateOtp();
   await prisma.otpChallenge.create({
     data: { phone, codeHash: hashOtp(phone, otp), expiresAt: new Date(Date.now() + 5 * 60 * 1000) },
   });
-  try {
-    await sendOtpSms(phone, otp);
-  } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "Could not send OTP." },
-      { status: 502 }
-    );
-  }
-  return NextResponse.json({ ok: true, message: "OTP sent." });
+  return NextResponse.json({ ok: true, otp, message: "OTP is shown on this screen. No SMS is sent." });
 }
