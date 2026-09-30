@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import { getCallAdminSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { decodeCsvBytes, importCallCsv } from "@/lib/callCsv";
+import { normalizePhone } from "@/lib/security";
 
 async function guard() {
   const s = await getCallAdminSession();
@@ -43,6 +44,12 @@ export async function GET(req: Request) {
     : [];
   const statusById = new Map(latest.map((r) => [r.contactId, r.status]));
 
+  const agents = await prisma.user.findMany({
+    where: { designation: "Call Center", isActive: true },
+    select: { name: true, phone: true },
+    orderBy: { name: "asc" },
+  });
+
   const callers = await prisma.callContact.groupBy({
     by: ["assigneePhone"],
     where: { assigneePhone: { not: "" } },
@@ -70,7 +77,29 @@ export async function GET(req: Request) {
     callers: callers
       .map((c) => ({ phone: c.assigneePhone, assigned: c._count._all }))
       .sort((a, b) => b.assigned - a.assigned),
+    agents: agents.map((u) => ({ name: u.name, phone: u.phone })),
   });
+}
+
+export async function PATCH(req: Request) {
+  const denied = await guard();
+  if (denied) return denied;
+  const body = await req.json().catch(() => null);
+  const id = String(body?.id || "");
+  const raw = String(body?.assigneePhone || "").trim();
+  if (!id) return NextResponse.json({ error: "Choose a contact." }, { status: 400 });
+  let assigneePhone = "";
+  if (raw) {
+    const phone = normalizePhone(raw) || raw.replace(/\D/g, "");
+    if (phone.length < 10 || phone.length > 12) {
+      return NextResponse.json({ error: "Enter a valid caller mobile." }, { status: 400 });
+    }
+    assigneePhone = phone.length === 12 && phone.startsWith("91") ? phone.slice(2) : phone;
+  }
+  const contact = await prisma.callContact.findUnique({ where: { id }, select: { id: true } });
+  if (!contact) return NextResponse.json({ error: "Contact not found." }, { status: 404 });
+  await prisma.callContact.update({ where: { id }, data: { assigneePhone } });
+  return NextResponse.json({ ok: true, assigneePhone });
 }
 
 export async function POST(req: Request) {

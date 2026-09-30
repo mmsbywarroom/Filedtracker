@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-type Column = { id: string; label: string; current: boolean };
+type Column = { id: string; label: string };
 type Row = {
   id: string;
   createdAt: string;
@@ -46,7 +46,7 @@ export default function CallSubmissionsPage() {
     <main className="px-4 py-6">
       <h1 className="text-2xl font-semibold">Call submissions</h1>
       <p className="mt-1 max-w-3xl text-sm text-slate-600">
-        One row per member. Saving again updates that same row. When the form changes, older questions stay as extra columns beside the new ones. A blank cell means that member was not asked that question.
+        One row per member. Saving again replaces that row. Only the answers from the latest save are shown.
       </p>
       <div className="mt-4 overflow-auto rounded-2xl bg-white shadow-sm">
         <table className="min-w-max text-left text-xs">
@@ -62,7 +62,6 @@ export default function CallSubmissionsPage() {
                   style={{ fontFamily: "var(--font-pa), sans-serif" }}
                 >
                   {q.label}
-                  {q.current ? null : <span className="mt-1 block text-[10px] font-medium uppercase tracking-wide text-slate-400">Earlier form</span>}
                 </th>
               ))}
               {["Call status", "Remarks"].map((h) => (

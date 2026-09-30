@@ -23,10 +23,13 @@ type Contact = {
 };
 
 type Caller = { phone: string; assigned: number };
+type Agent = { name: string; phone: string };
 
 export function CallAdminHome() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [callers, setCallers] = useState<Caller[]>([]);
+  const [agents, setAgents] = useState<Agent[]>([]);
+  const [assigning, setAssigning] = useState("");
   const [q, setQ] = useState("");
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
@@ -41,9 +44,10 @@ export function CallAdminHome() {
     const data = await res.json();
     setContacts(data.contacts || []);
     setCallers(data.callers || []);
+    setAgents(data.agents || []);
     if (!search) {
       try {
-        sessionStorage.setItem(LIST_CACHE, JSON.stringify({ contacts: data.contacts, callers: data.callers }));
+        sessionStorage.setItem(LIST_CACHE, JSON.stringify({ contacts: data.contacts, callers: data.callers, agents: data.agents }));
       } catch {
         /* ignore quota */
       }
@@ -57,6 +61,7 @@ export function CallAdminHome() {
         const data = JSON.parse(raw);
         if (Array.isArray(data.contacts)) setContacts(data.contacts);
         if (Array.isArray(data.callers)) setCallers(data.callers);
+        if (Array.isArray(data.agents)) setAgents(data.agents);
       }
     } catch {
       /* ignore bad cache */
@@ -96,6 +101,24 @@ export function CallAdminHome() {
     URL.revokeObjectURL(url);
   }
 
+  async function assign(id: string, assigneePhone: string) {
+    setAssigning(id);
+    setMsg("");
+    const res = await fetch("/api/call/admin/contacts", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, assigneePhone }),
+    });
+    const data = await res.json().catch(() => ({}));
+    setAssigning("");
+    if (!res.ok) {
+      setMsg(data.error || "Could not assign this number.");
+      return;
+    }
+    setMsg(assigneePhone ? "Caller assigned." : "Caller removed.");
+    load();
+  }
+
   async function deleteAll() {
     if (!window.confirm("Delete all call numbers and saved answers? This cannot be undone.")) return;
     setBusy(true);
@@ -113,7 +136,7 @@ export function CallAdminHome() {
     <main className="mx-auto max-w-6xl px-4 py-6">
         <h1 className="text-2xl font-semibold">Call list</h1>
         <p className="mt-1 max-w-3xl text-sm text-slate-600">
-          Assigned users is the caller mobile. That person signs in with OTP on call.aappunjab.in and sees only those rows.
+          Assigned users is the caller mobile. Pick a caller on a row to assign it by hand. That person signs in with OTP on call.aappunjab.in and sees only those rows.
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
           <button type="button" onClick={template} className="rounded-xl border bg-white px-3 py-2 text-sm font-semibold">Download CSV template</button>
@@ -170,7 +193,24 @@ export function CallAdminHome() {
                   <td className="px-3 py-2">{c.education}</td>
                   <td className="px-3 py-2">{c.position}</td>
                   <td className="px-3 py-2">{c.fatherName}</td>
-                  <td className="px-3 py-2">{c.assigneePhone || "—"}</td>
+                  <td className="px-3 py-2">
+                    <select
+                      value={callerPhone(c.assigneePhone)}
+                      disabled={assigning === c.id}
+                      onChange={(e) => void assign(c.id, e.target.value)}
+                      className="h-8 max-w-[220px] rounded-lg border border-slate-200 bg-white px-2"
+                    >
+                      <option value="">Unassigned</option>
+                      {c.assigneePhone && !agents.some((a) => callerPhone(a.phone) === callerPhone(c.assigneePhone)) ? (
+                        <option value={callerPhone(c.assigneePhone)}>{c.assigneePhone}</option>
+                      ) : null}
+                      {agents.map((a) => (
+                        <option key={a.phone} value={callerPhone(a.phone)}>
+                          {a.name} · {callerPhone(a.phone)}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
                   <td className="px-3 py-2">{c.status || "Fresh"}</td>
                 </tr>
               ))}
@@ -180,6 +220,12 @@ export function CallAdminHome() {
         </div>
     </main>
   );
+}
+
+function callerPhone(phone: string) {
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length === 12 && digits.startsWith("91")) return digits.slice(2);
+  return digits || phone;
 }
 
 function CopyPhone({ phone }: { phone: string }) {
