@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import {
   CALL_FIELD_TOKENS,
+  CALL_LIST_FIELDS,
+  suggestedCallListField,
   TEXT_QUESTION_TYPES,
   slugStatus,
   type CallFormShape,
@@ -98,7 +100,7 @@ export function CallFormDesigner() {
     <main className="mx-auto max-w-3xl space-y-4 px-4 py-6">
       <h1 className="text-2xl font-semibold">Calling form</h1>
       <p className="text-sm text-slate-600">
-        Choose the question type, the colour, and whether a details box opens after a choice. Insert a token to drop in the open contact&apos;s name.
+        Choose the question type, the colour, and whether a details box opens after a choice. For each question, choose which call-list detail fills the blank.
       </p>
       <label className="block text-sm font-medium">
         Form title
@@ -143,6 +145,22 @@ export function CallFormDesigner() {
             />
           </label>
           <TokenBar onInsert={(token) => patchQuestion(q.id, { label: `${q.label}${token}` })} />
+          <label className="mt-2 block text-xs font-medium">
+            Show this from the call list
+            <select
+              value={q.detailField ?? suggestedCallListField(q.label)}
+              onChange={(e) => patchQuestion(q.id, { detailField: e.target.value as CallQuestion["detailField"] })}
+              className="mt-1 h-10 w-full rounded-xl border px-3 text-sm"
+            >
+              <option value="">Do not insert a call-list detail</option>
+              {CALL_LIST_FIELDS.map((field) => (
+                <option key={field.value} value={field.value}>
+                  {field.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="mt-1 text-xs text-slate-500">A blank in the question, such as __, is replaced with the member&apos;s chosen detail. Village questions use Village / Ward.</p>
           <label className="mt-2 block text-xs font-medium">
             Type
             <select

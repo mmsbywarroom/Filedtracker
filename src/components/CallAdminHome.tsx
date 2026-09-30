@@ -24,11 +24,15 @@ type Contact = {
 
 type Caller = { phone: string; assigned: number };
 type Agent = { name: string; phone: string };
+type Halka = { name: string; count: number };
 
 export function CallAdminHome() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [callers, setCallers] = useState<Caller[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
+  const [halkas, setHalkas] = useState<Halka[]>([]);
+  const [bulkHalka, setBulkHalka] = useState("__pick__");
+  const [bulkCaller, setBulkCaller] = useState("");
   const [assigning, setAssigning] = useState("");
   const [q, setQ] = useState("");
   const [msg, setMsg] = useState("");
@@ -45,9 +49,13 @@ export function CallAdminHome() {
     setContacts(data.contacts || []);
     setCallers(data.callers || []);
     setAgents(data.agents || []);
+    setHalkas(data.halkas || []);
     if (!search) {
       try {
-        sessionStorage.setItem(LIST_CACHE, JSON.stringify({ contacts: data.contacts, callers: data.callers, agents: data.agents }));
+        sessionStorage.setItem(
+          LIST_CACHE,
+          JSON.stringify({ contacts: data.contacts, callers: data.callers, agents: data.agents, halkas: data.halkas })
+        );
       } catch {
         /* ignore quota */
       }
@@ -62,6 +70,7 @@ export function CallAdminHome() {
         if (Array.isArray(data.contacts)) setContacts(data.contacts);
         if (Array.isArray(data.callers)) setCallers(data.callers);
         if (Array.isArray(data.agents)) setAgents(data.agents);
+        if (Array.isArray(data.halkas)) setHalkas(data.halkas);
       }
     } catch {
       /* ignore bad cache */
@@ -119,6 +128,33 @@ export function CallAdminHome() {
     load();
   }
 
+  async function reassignHalka() {
+    const picked = halkas.find((h) => halkaKey(h.name) === bulkHalka);
+    if (!picked) {
+      setMsg("Choose a halka.");
+      return;
+    }
+    const caller = agents.find((a) => callerPhone(a.phone) === bulkCaller);
+    const callerLabel = bulkCaller ? caller?.name || bulkCaller : "Unassigned";
+    const halkaLabel = picked.name || "No halka";
+    if (!window.confirm(`Reassign ${picked.count.toLocaleString("en-IN")} members in ${halkaLabel} to ${callerLabel}?`)) return;
+    setBusy(true);
+    setMsg("");
+    const res = await fetch("/api/call/admin/contacts", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ halka: picked.name, assigneePhone: bulkCaller }),
+    });
+    const data = await res.json().catch(() => ({}));
+    setBusy(false);
+    if (!res.ok) {
+      setMsg(data.error || "Could not reassign this halka.");
+      return;
+    }
+    setMsg(`Reassigned ${Number(data.updated || 0).toLocaleString("en-IN")} members in ${halkaLabel}.`);
+    load();
+  }
+
   async function deleteAll() {
     if (!window.confirm("Delete all call numbers and saved answers? This cannot be undone.")) return;
     setBusy(true);
@@ -146,6 +182,32 @@ export function CallAdminHome() {
         </div>
         <p className="mt-2 text-xs text-slate-500">Columns: Zone, District, Halka, Village/Ward, Block, Name, Phone, Age, Gender, Education, Position, Father Name, Assigned users. In Excel use Save As, then CSV UTF-8.</p>
         {msg ? <p className="mt-3 text-sm">{msg}</p> : null}
+
+        <section className="mt-5 rounded-2xl bg-white p-4 shadow-sm">
+          <h2 className="text-sm font-semibold">Reassign a halka</h2>
+          <p className="mt-1 text-sm text-slate-600">Move every member in one halka to one caller. This covers the full halka, not only the rows on this page.</p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <select value={bulkHalka} onChange={(e) => setBulkHalka(e.target.value)} className="h-10 min-w-[220px] flex-1 rounded-xl border px-3 text-sm">
+              <option value="__pick__">Choose halka</option>
+              {halkas.map((h) => (
+                <option key={halkaKey(h.name)} value={halkaKey(h.name)}>
+                  {(h.name || "No halka")} · {h.count.toLocaleString("en-IN")} members
+                </option>
+              ))}
+            </select>
+            <select value={bulkCaller} onChange={(e) => setBulkCaller(e.target.value)} className="h-10 min-w-[220px] flex-1 rounded-xl border px-3 text-sm">
+              <option value="">Unassigned</option>
+              {agents.map((a) => (
+                <option key={a.phone} value={callerPhone(a.phone)}>
+                  {a.name} · {callerPhone(a.phone)}
+                </option>
+              ))}
+            </select>
+            <button type="button" disabled={busy || bulkHalka === "__pick__"} onClick={() => void reassignHalka()} className="h-10 rounded-xl bg-[#0A1628] px-4 text-sm font-semibold text-white disabled:opacity-50">
+              Reassign halka
+            </button>
+          </div>
+        </section>
 
         <section className="mt-5 rounded-2xl bg-white p-4 shadow-sm">
           <h2 className="text-sm font-semibold">Callers</h2>
@@ -220,6 +282,10 @@ export function CallAdminHome() {
         </div>
     </main>
   );
+}
+
+function halkaKey(name: string) {
+  return name || "__blank_halka";
 }
 
 function callerPhone(phone: string) {

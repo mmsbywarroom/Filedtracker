@@ -95,11 +95,16 @@ type Row = {
   id: string;
   halka: string;
   villageWard: string;
+  block?: string;
+  zone?: string;
+  district?: string;
   name: string;
   phone: string;
   age: string;
   gender: string;
+  education?: string;
   position: string;
+  fatherName?: string;
   status: string;
   remarks: string;
   answers: Record<string, string>;
@@ -588,7 +593,7 @@ function QuestionBlock({
   detailsLabel: string;
   selectLabel: string;
 }) {
-  const label = fillCallTokens(question.label, row);
+  const label = fillCallTokens(question.label, row, question.detailField);
   const selected = answers[question.id] || "";
   const textKey = `${question.id}__text`;
   const option = question.options.find((o) => o.value === selected);

@@ -46,10 +46,17 @@ export default function CallSummaryPage() {
 
   return (
     <main className="px-4 py-6">
-      <h1 className="text-2xl font-semibold">Summary</h1>
-      <p className="mt-1 max-w-3xl text-sm text-slate-600">
-        Calling totals for each office. A member is counted with the caller they are assigned to.
-      </p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold">Summary</h1>
+          <p className="mt-1 max-w-3xl text-sm text-slate-600">
+            Calling totals for each office. A member is counted with the caller they are assigned to.
+          </p>
+        </div>
+        <a href="/api/call/admin/reports?kind=summary" className="rounded-xl bg-[#0A1628] px-3 py-2 text-sm font-semibold text-white">
+          Download report
+        </a>
+      </div>
       <div className="mt-4 grid gap-4 xl:grid-cols-2">
         {sites.map((site) => (
           <section key={site.name} className="overflow-hidden rounded-2xl bg-white shadow-sm">
@@ -69,7 +76,7 @@ export default function CallSummaryPage() {
               <table className="min-w-full text-left text-xs">
                 <thead>
                   <tr className="bg-slate-50">
-                    {["Caller", "Phone", "Assigned", "Dialed", "Fresh", "Connected", "Complete", "Not connected", "Re-dial"].map((h) => (
+                    {["Caller", "Assigned", "Dialed", "Fresh", "Connected", "Complete", "Not connected", "Re-dial"].map((h) => (
                       <th key={h} className="whitespace-nowrap px-3 py-2 font-semibold">{h}</th>
                     ))}
                   </tr>
@@ -78,7 +85,6 @@ export default function CallSummaryPage() {
                   {site.users.map((user) => (
                     <tr key={user.phone} className="border-t">
                       <td className="px-3 py-2 font-medium">{user.name}</td>
-                      <td className="whitespace-nowrap px-3 py-2">{user.phone}</td>
                       <td className="px-3 py-2">{user.assigned}</td>
                       <td className="px-3 py-2">{user.dialed}</td>
                       <td className="px-3 py-2">{user.fresh}</td>

@@ -23,12 +23,31 @@ export type CallQuestionOption = {
   showQuestionIds?: string[];
 };
 
+export const CALL_LIST_FIELDS = [
+  { value: "name", label: "Member name" },
+  { value: "phone", label: "Phone" },
+  { value: "halka", label: "Halka" },
+  { value: "village", label: "Village / Ward" },
+  { value: "block", label: "Block" },
+  { value: "zone", label: "Zone" },
+  { value: "district", label: "District" },
+  { value: "position", label: "Position" },
+  { value: "age", label: "Age" },
+  { value: "gender", label: "Gender" },
+  { value: "education", label: "Education" },
+  { value: "father", label: "Father name" },
+] as const;
+
+export type CallListField = (typeof CALL_LIST_FIELDS)[number]["value"];
+
 export type CallQuestion = {
   id: string;
   label: string;
   type: CallQuestionType;
   options: CallQuestionOption[];
   color?: string;
+  /** Which call-list detail replaces a blank in this question. Empty string means the admin turned it off. */
+  detailField?: CallListField | "";
   showIf?: { questionId: string; equals: string } | null;
 };
 
@@ -169,20 +188,43 @@ export function defaultCallForm(): CallFormShape {
   };
 }
 
-export function fillCallTokens(
-  text: string,
-  row: {
-    name?: string;
-    phone?: string;
-    halka?: string;
-    villageWard?: string;
-    block?: string;
-    position?: string;
-    age?: string;
-    gender?: string;
-    fatherName?: string;
-  }
-) {
+export type CallListRow = {
+  name?: string;
+  phone?: string;
+  halka?: string;
+  villageWard?: string;
+  block?: string;
+  zone?: string;
+  district?: string;
+  position?: string;
+  age?: string;
+  gender?: string;
+  education?: string;
+  fatherName?: string;
+};
+
+export function callListFieldValue(field: CallListField, row: CallListRow) {
+  if (field === "name") return row.name || "";
+  if (field === "phone") return row.phone || "";
+  if (field === "halka") return row.halka || "";
+  if (field === "village") return row.villageWard || "";
+  if (field === "block") return row.block || "";
+  if (field === "zone") return row.zone || "";
+  if (field === "district") return row.district || "";
+  if (field === "position") return row.position || "";
+  if (field === "age") return row.age || "";
+  if (field === "gender") return row.gender || "";
+  if (field === "education") return row.education || "";
+  return row.fatherName || "";
+}
+
+/** A village question with a blank gets the member's village until the admin picks something else. */
+export function suggestedCallListField(label: string): CallListField | "" {
+  if (/ਪਿੰਡ|ਵਾਰਡ|\bvillage\b|\bward\b/i.test(label)) return "village";
+  return "";
+}
+
+export function fillCallTokens(text: string, row: CallListRow, field?: CallListField | "" | null) {
   const name = row.name || "";
   let out = text
     .replace(/\{\{\s*name\s*\}\}/gi, name)
@@ -191,10 +233,22 @@ export function fillCallTokens(
     .replace(/\{\{\s*halka\s*\}\}/gi, row.halka || "")
     .replace(/\{\{\s*village\s*\}\}/gi, row.villageWard || "")
     .replace(/\{\{\s*block\s*\}\}/gi, row.block || "")
+    .replace(/\{\{\s*zone\s*\}\}/gi, row.zone || "")
+    .replace(/\{\{\s*district\s*\}\}/gi, row.district || "")
     .replace(/\{\{\s*position\s*\}\}/gi, row.position || "")
     .replace(/\{\{\s*age\s*\}\}/gi, row.age || "")
     .replace(/\{\{\s*gender\s*\}\}/gi, row.gender || "")
+    .replace(/\{\{\s*education\s*\}\}/gi, row.education || "")
     .replace(/\{\{\s*father\s*\}\}/gi, row.fatherName || "");
+  const chosen = field == null ? suggestedCallListField(text) : field;
+  if (chosen) {
+    const value = callListFieldValue(chosen, row);
+    if (value) {
+      const filled = out.replace(/_+/g, value);
+      if (field && filled === out) return `${out} ${value}`.trim();
+      return filled;
+    }
+  }
   if (name) out = out.replace(/_{3,}/g, name);
   return out;
 }

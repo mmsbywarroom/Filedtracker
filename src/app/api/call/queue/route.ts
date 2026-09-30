@@ -20,6 +20,8 @@ export async function GET(req: Request) {
     orderBy: [{ halka: "asc" }, { villageWard: "asc" }, { name: "asc" }],
     select: {
       id: true,
+      zone: true,
+      district: true,
       halka: true,
       villageWard: true,
       block: true,
@@ -27,6 +29,7 @@ export async function GET(req: Request) {
       phone: true,
       age: true,
       gender: true,
+      education: true,
       position: true,
       fatherName: true,
     },
@@ -53,6 +56,8 @@ export async function GET(req: Request) {
     }
     return {
       id: c.id,
+      zone: c.zone,
+      district: c.district,
       halka: c.halka,
       villageWard: c.villageWard,
       block: c.block,
@@ -60,6 +65,7 @@ export async function GET(req: Request) {
       phone: c.phone,
       age: c.age,
       gender: c.gender,
+      education: c.education,
       position: c.position,
       fatherName: c.fatherName,
       status: last?.status || "",

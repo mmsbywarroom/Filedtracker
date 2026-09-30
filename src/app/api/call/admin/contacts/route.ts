@@ -11,6 +11,14 @@ async function guard() {
   return null;
 }
 
+function callerMobile(raw: string) {
+  const trimmed = String(raw || "").trim();
+  if (!trimmed) return "";
+  const phone = normalizePhone(trimmed) || trimmed.replace(/\D/g, "");
+  if (phone.length < 10 || phone.length > 12) return null;
+  return phone.length === 12 && phone.startsWith("91") ? phone.slice(2) : phone;
+}
+
 export async function GET(req: Request) {
   const denied = await guard();
   if (denied) return denied;
@@ -50,6 +58,11 @@ export async function GET(req: Request) {
     orderBy: { name: "asc" },
   });
 
+  const halkaRows = await prisma.callContact.groupBy({
+    by: ["halka"],
+    _count: { _all: true },
+  });
+
   const callers = await prisma.callContact.groupBy({
     by: ["assigneePhone"],
     where: { assigneePhone: { not: "" } },
@@ -78,6 +91,9 @@ export async function GET(req: Request) {
       .map((c) => ({ phone: c.assigneePhone, assigned: c._count._all }))
       .sort((a, b) => b.assigned - a.assigned),
     agents: agents.map((u) => ({ name: u.name, phone: u.phone })),
+    halkas: halkaRows
+      .map((row) => ({ name: row.halka, count: row._count._all }))
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)),
   });
 }
 
@@ -86,16 +102,17 @@ export async function PATCH(req: Request) {
   if (denied) return denied;
   const body = await req.json().catch(() => null);
   const id = String(body?.id || "");
-  const raw = String(body?.assigneePhone || "").trim();
-  if (!id) return NextResponse.json({ error: "Choose a contact." }, { status: 400 });
-  let assigneePhone = "";
-  if (raw) {
-    const phone = normalizePhone(raw) || raw.replace(/\D/g, "");
-    if (phone.length < 10 || phone.length > 12) {
-      return NextResponse.json({ error: "Enter a valid caller mobile." }, { status: 400 });
-    }
-    assigneePhone = phone.length === 12 && phone.startsWith("91") ? phone.slice(2) : phone;
+  const halka = typeof body?.halka === "string" ? body.halka : null;
+  const assigneePhone = callerMobile(String(body?.assigneePhone || ""));
+  if (assigneePhone === null) return NextResponse.json({ error: "Enter a valid caller mobile." }, { status: 400 });
+  if (halka !== null && !id) {
+    const updated = await prisma.callContact.updateMany({
+      where: { halka },
+      data: { assigneePhone },
+    });
+    return NextResponse.json({ ok: true, assigneePhone, updated: updated.count });
   }
+  if (!id) return NextResponse.json({ error: "Choose a contact." }, { status: 400 });
   const contact = await prisma.callContact.findUnique({ where: { id }, select: { id: true } });
   if (!contact) return NextResponse.json({ error: "Contact not found." }, { status: 404 });
   await prisma.callContact.update({ where: { id }, data: { assigneePhone } });

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCallAdminSession } from "@/lib/auth";
 import { loadCallForm, saveCallForm } from "@/lib/callFormStore";
-import { slugStatus, TEXT_QUESTION_TYPES, type CallFormShape, type CallQuestion, type CallQuestionType } from "@/lib/callForm";
+import { CALL_LIST_FIELDS, slugStatus, TEXT_QUESTION_TYPES, type CallFormShape, type CallListField, type CallQuestion, type CallQuestionType } from "@/lib/callForm";
 
 const TYPES = new Set<CallQuestionType>([
   "yes_no",
@@ -47,11 +47,14 @@ function cleanForm(body: unknown): CallFormShape | null {
             }
           : {}),
       }));
+    const detail = String(q.detailField ?? "");
+    const detailField = CALL_LIST_FIELDS.some((field) => field.value === detail) ? (detail as CallListField) : q.detailField === "" ? "" : undefined;
     questions.push({
       id,
       label: q.label.slice(0, 500),
       type: q.type,
       options: TEXT_QUESTION_TYPES.has(q.type) ? [] : options,
+      ...(detailField !== undefined ? { detailField } : {}),
       ...(hexColor(q.color) ? { color: hexColor(q.color) } : {}),
       showIf:
         q.showIf?.questionId && q.showIf.equals

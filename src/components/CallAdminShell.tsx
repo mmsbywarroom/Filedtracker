@@ -8,6 +8,7 @@ const NAV = [
   { href: "/call/admin", label: "Call list", group: "Calling" },
   { href: "/call/admin/summary", label: "Summary", group: "Calling" },
   { href: "/call/admin/submissions", label: "Call submissions", group: "Calling" },
+  { href: "/call/admin/reports", label: "Reports", group: "Calling" },
   { href: "/call/admin/form", label: "Form designer", group: "Calling" },
   { href: "/call/admin/users", label: "Users", group: "People" },
   { href: "/call/admin/attendance", label: "Attendance", group: "Attendance" },
