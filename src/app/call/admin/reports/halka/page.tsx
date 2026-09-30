@@ -160,7 +160,7 @@ export default function HalkaReportPage() {
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Halka report</h1>
-          <p className="mt-1 max-w-3xl text-sm text-slate-600">Counts for every halka: calls, connected, call complete, and the Yes or No answers.</p>
+          <p className="mt-1 max-w-3xl text-sm text-slate-600">Question 2 Yes counts as Yes. If Question 2 is No, Question 2.1 Yes still counts as Yes and Question 2.1 No counts as No. Village match counts only those Yes rows.</p>
         </div>
         <button type="button" disabled={busy || !rows.length} onClick={() => void downloadPdf()} className="rounded-xl bg-[#0A1628] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
           {busy ? "Preparing PDF…" : "Download PDF"}

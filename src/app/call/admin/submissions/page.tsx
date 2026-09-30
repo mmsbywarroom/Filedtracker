@@ -43,9 +43,9 @@ export default function CallSubmissionsPage() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [pageSize, setPageSize] = useState(50);
-  const [draft, setDraft] = useState<Record<string, string>>({});
-  const [filters, setFilters] = useState<Record<string, string>>({});
+  const [filters, setFilters] = useState<Record<string, string[]>>({});
   const [lists, setLists] = useState<Record<string, Option[]>>({});
+  const [openKey, setOpenKey] = useState("");
   const [editing, setEditing] = useState<Row | null>(null);
   const [msg, setMsg] = useState("");
 
@@ -57,12 +57,23 @@ export default function CallSubmissionsPage() {
     });
   }, []);
 
-  function chooseFilter(key: string, value: string) {
-    setDraft((prev) => ({ ...prev, [key]: value }));
+  useEffect(() => {
+    if (!openKey) return;
+    function close(event: MouseEvent) {
+      const target = event.target as HTMLElement | null;
+      if (!target?.closest("[data-filter-menu]")) setOpenKey("");
+    }
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [openKey]);
+
+  function toggleFilter(key: string, value: string) {
     setPage(1);
     setFilters((prev) => {
+      const current = prev[key] || [];
+      const nextValues = current.includes(value) ? current.filter((item) => item !== value) : [...current, value];
       const next = { ...prev };
-      if (value.trim()) next[key] = value.trim();
+      if (nextValues.length) next[key] = nextValues;
       else delete next[key];
       return next;
     });
@@ -70,7 +81,9 @@ export default function CallSubmissionsPage() {
 
   useEffect(() => {
     const params = new URLSearchParams({ page: String(page) });
-    for (const [key, value] of Object.entries(filters)) params.set(key, value);
+    for (const [key, values] of Object.entries(filters)) {
+      for (const value of values) params.append(key, value);
+    }
     fetch(`/api/call/admin/submissions?${params}`).then(async (res) => {
       if (res.status === 401) {
         window.location.href = "/call/admin/login";
@@ -105,27 +118,41 @@ export default function CallSubmissionsPage() {
   ];
 
   function optionsFor(key: string) {
-    if (lists[key]?.length) return lists[key];
-    if (key === "status") return statuses;
-    const question = questions.find((item) => item.id === key);
-    if (question && question.options.length && !TEXT_QUESTION_TYPES.has(question.type)) return question.options;
-    return [];
+    const stored = lists[key]?.length
+      ? lists[key]
+      : key === "status"
+        ? statuses
+        : (() => {
+            const question = questions.find((item) => item.id === key);
+            if (question && question.options.length && !TEXT_QUESTION_TYPES.has(question.type)) return question.options;
+            return [];
+          })();
+    return [{ value: "__blank__", label: "Blank" }, ...stored.filter((option) => option.value !== "__blank__")];
   }
 
   function filterCell(key: string, wide = false) {
+    const selected = filters[key] || [];
+    const summary = !selected.length ? "All" : selected.length === 1 ? optionsFor(key).find((option) => option.value === selected[0])?.label || "1 selected" : `${selected.length} selected`;
     return (
-      <select
-        value={draft[key] || ""}
-        onChange={(e) => chooseFilter(key, e.target.value)}
-        className={`mt-1 h-7 rounded border border-slate-200 bg-white px-1 font-normal ${wide ? "w-full min-w-[140px]" : "w-full min-w-[110px]"}`}
-      >
-        <option value="">All</option>
-        {optionsFor(key).map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
+      <div className="relative mt-1" data-filter-menu>
+        <button
+          type="button"
+          onClick={() => setOpenKey((current) => (current === key ? "" : key))}
+          className={`h-7 truncate rounded border border-slate-200 bg-white px-1 text-left font-normal ${wide ? "w-full min-w-[140px]" : "w-full min-w-[110px]"}`}
+        >
+          {summary}
+        </button>
+        {openKey === key ? (
+          <div className="absolute left-0 z-30 mt-1 max-h-56 w-56 overflow-auto rounded-lg border border-slate-200 bg-white p-2 text-left shadow-lg">
+            {optionsFor(key).map((option) => (
+              <label key={option.value} className="flex items-start gap-2 py-1 text-[11px] font-normal">
+                <input type="checkbox" className="mt-0.5" checked={selected.includes(option.value)} onChange={() => toggleFilter(key, option.value)} />
+                <span className="whitespace-normal">{option.label}</span>
+              </label>
+            ))}
+          </div>
+        ) : null}
+      </div>
     );
   }
 
@@ -135,7 +162,7 @@ export default function CallSubmissionsPage() {
         <div>
           <h1 className="text-2xl font-semibold">Call submissions</h1>
           <p className="mt-1 max-w-3xl text-sm text-slate-600">
-            One row per member. Filter any column. Deleting a submission sends that member back to the caller as a fresh call.
+            One row per member. Each column can filter Blank and more than one value. Deleting a submission sends that member back to the caller as a fresh call.
           </p>
         </div>
         <a href="/api/call/admin/reports?kind=submissions" className="rounded-xl bg-[#0A1628] px-3 py-2 text-sm font-semibold text-white">

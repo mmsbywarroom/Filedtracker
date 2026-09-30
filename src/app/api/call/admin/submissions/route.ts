@@ -25,8 +25,43 @@ function whenLabel(iso: string) {
   return `${Number(day)}/${Number(month)}/${year}`;
 }
 
-function likePattern(value: string) {
-  return `%${value.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`;
+const BLANK = "__blank__";
+
+function anyOf(parts: Prisma.Sql[]) {
+  if (parts.length === 1) return parts[0];
+  return Prisma.sql`(${Prisma.join(parts, " OR ")})`;
+}
+
+function textIn(column: Prisma.Sql, values: string[]) {
+  const parts: Prisma.Sql[] = [];
+  if (values.includes(BLANK)) parts.push(Prisma.sql`btrim(COALESCE(${column}, '')) = ''`);
+  const concrete = values.filter((value) => value !== BLANK);
+  if (concrete.length) parts.push(Prisma.sql`btrim(COALESCE(${column}, '')) IN (${Prisma.join(concrete)})`);
+  return parts.length ? anyOf(parts) : null;
+}
+
+function whenIn(values: string[]) {
+  const parts: Prisma.Sql[] = [];
+  if (values.includes(BLANK)) parts.push(Prisma.sql`r."createdAt" IS NULL`);
+  const dates = values.filter((value) => /^\d{4}-\d{2}-\d{2}$/.test(value));
+  if (dates.length) {
+    parts.push(
+      Prisma.sql`(r."createdAt" AT TIME ZONE 'Asia/Kolkata')::date IN (${Prisma.join(dates.map((day) => Prisma.sql`${day}::date`))})`
+    );
+  }
+  return parts.length ? anyOf(parts) : null;
+}
+
+function answerIn(id: string, values: string[]) {
+  const parts: Prisma.Sql[] = [];
+  if (values.includes(BLANK)) parts.push(Prisma.sql`btrim(COALESCE(r.answers ->> ${id}, '')) = ''`);
+  for (const value of values) {
+    if (value === BLANK) continue;
+    const wrapped = `%|${value.replace(/[\\%_]/g, (ch) => `\\${ch}`)}|%`;
+    parts.push(Prisma.sql`btrim(COALESCE(r.answers ->> ${id}, '')) = ${value}`);
+    parts.push(Prisma.sql`('|' || COALESCE(r.answers ->> ${id}, '') || '|') ILIKE ${wrapped} ESCAPE '\\'`);
+  }
+  return parts.length ? anyOf(parts) : null;
 }
 
 export async function GET(req: Request) {
@@ -127,45 +162,31 @@ export async function GET(req: Request) {
     return NextResponse.json({ options });
   }
 
-  const wheres: Prisma.Sql[] = [Prisma.sql`TRUE`];
+  const selected = new Map<string, string[]>();
   for (const [key, raw] of url.searchParams.entries()) {
     const value = raw.trim();
-    if (!value || key === "page" || !allowed.has(key)) continue;
-    const pattern = likePattern(value);
-    if (key === "when" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
-      wheres.push(Prisma.sql`(r."createdAt" AT TIME ZONE 'Asia/Kolkata')::date = ${value}::date`);
-    } else if (key === "caller") {
-      wheres.push(Prisma.sql`btrim(r."callerPhone") = ${value}`);
-    } else if (key === "halka") {
-      wheres.push(Prisma.sql`btrim(c.halka) = ${value}`);
-    } else if (key === "villageWard") {
-      wheres.push(Prisma.sql`btrim(c."villageWard") = ${value}`);
-    } else if (key === "name") {
-      wheres.push(Prisma.sql`btrim(c.name) = ${value}`);
-    } else if (key === "phone") {
-      wheres.push(Prisma.sql`btrim(c.phone) = ${value}`);
-    } else if (key === "age") {
-      wheres.push(Prisma.sql`btrim(c.age) = ${value}`);
-    } else if (key === "gender") {
-      wheres.push(Prisma.sql`btrim(c.gender) = ${value}`);
-    } else if (key === "position") {
-      wheres.push(Prisma.sql`btrim(c.position) = ${value}`);
-    } else if (key === "remarks") {
-      wheres.push(Prisma.sql`btrim(r.remarks) = ${value}`);
-    } else if (key === "status") {
-      wheres.push(Prisma.sql`r.status = ${value}`);
-    } else {
-      const question = questionById.get(key);
-      const optionValues = (question?.options || [])
-        .filter((o) => o.label.toLowerCase().includes(value.toLowerCase()) || o.value.toLowerCase().includes(value.toLowerCase()))
-        .map((o) => o.value);
-      wheres.push(
-        optionValues.length
-          ? Prisma.sql`(COALESCE(r.answers ->> ${key}, '') ILIKE ${pattern} ESCAPE '\\' OR COALESCE(r.answers ->> ${key}, '') IN (${Prisma.join(optionValues)}))`
-          : Prisma.sql`COALESCE(r.answers ->> ${key}, '') ILIKE ${pattern} ESCAPE '\\'`
-      );
-    }
+    if (!value || key === "page" || key === "lists" || !allowed.has(key)) continue;
+    const list = selected.get(key) || [];
+    if (!list.includes(value)) list.push(value);
+    selected.set(key, list);
   }
+  const wheres: Prisma.Sql[] = [Prisma.sql`TRUE`];
+  selected.forEach((values, key) => {
+    let clause: Prisma.Sql | null = null;
+    if (key === "when") clause = whenIn(values);
+    else if (key === "caller") clause = textIn(Prisma.sql`r."callerPhone"`, values);
+    else if (key === "halka") clause = textIn(Prisma.sql`c.halka`, values);
+    else if (key === "villageWard") clause = textIn(Prisma.sql`c."villageWard"`, values);
+    else if (key === "name") clause = textIn(Prisma.sql`c.name`, values);
+    else if (key === "phone") clause = textIn(Prisma.sql`c.phone`, values);
+    else if (key === "age") clause = textIn(Prisma.sql`c.age`, values);
+    else if (key === "gender") clause = textIn(Prisma.sql`c.gender`, values);
+    else if (key === "position") clause = textIn(Prisma.sql`c.position`, values);
+    else if (key === "remarks") clause = textIn(Prisma.sql`r.remarks`, values);
+    else if (key === "status") clause = textIn(Prisma.sql`r.status`, values);
+    else clause = answerIn(key, values);
+    if (clause) wheres.push(clause);
+  });
   const where = Prisma.join(wheres, " AND ");
   const skip = (page - 1) * PAGE_SIZE;
 
