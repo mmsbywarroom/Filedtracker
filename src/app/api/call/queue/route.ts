@@ -45,7 +45,12 @@ export async function GET(req: Request) {
 
   const rows = contacts.map((c) => {
     const last = byContact.get(c.id);
-    const answers = last?.answers && typeof last.answers === "object" ? (last.answers as Record<string, string>) : {};
+    const raw = last?.answers && typeof last.answers === "object" ? (last.answers as Record<string, unknown>) : {};
+    const answers: Record<string, string> = {};
+    for (const [key, value] of Object.entries(raw)) {
+      if (key.startsWith("__") || typeof value !== "string") continue;
+      answers[key] = value;
+    }
     return {
       id: c.id,
       halka: c.halka,

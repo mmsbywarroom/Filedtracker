@@ -154,6 +154,7 @@ export function CallDesk() {
   const [index, setIndex] = useState(0);
   const [jump, setJump] = useState("");
   const [formOpen, setFormOpen] = useState(false);
+  const [formKey, setFormKey] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [status, setStatus] = useState("");
   const [remarks, setRemarks] = useState("");
@@ -404,8 +405,16 @@ export function CallDesk() {
           busy={busy}
           msg={msg}
           ui={t}
+          formKey={formKey}
           onClose={() => setFormOpen(false)}
           onSave={() => save(true)}
+          onClear={() => {
+            setAnswers({});
+            setStatus("");
+            setRemarks("");
+            setMsg("");
+            setFormKey((n) => n + 1);
+          }}
         />
       ) : null}
     </div>
@@ -469,8 +478,10 @@ function CallingForm({
   busy,
   msg,
   ui,
+  formKey,
   onClose,
   onSave,
+  onClear,
 }: {
   row: Row;
   form: CallFormShape;
@@ -482,9 +493,11 @@ function CallingForm({
   setRemarks: (v: string) => void;
   busy: boolean;
   msg: string;
-  ui: (typeof COPY)["en"];
+  ui: (typeof COPY)[keyof typeof COPY];
+  formKey: number;
   onClose: () => void;
   onSave: () => void;
+  onClear: () => void;
 }) {
   const script = { fontFamily: "var(--font-pa), sans-serif" };
   return (
@@ -505,6 +518,7 @@ function CallingForm({
               <p className="whitespace-pre-wrap">{fillCallTokens(form.openingScript, row)}</p>
             </div>
           ) : null}
+          <div key={formKey}>
           {form.questions.filter((q) => questionVisible(q, answers, form.questions)).map((q, i) => (
             <QuestionBlock
               key={q.id}
@@ -517,6 +531,7 @@ function CallingForm({
               selectLabel={ui.select}
             />
           ))}
+          </div>
           <label className="block text-sm font-semibold">
             {ui.status} *
             <select value={status} onChange={(e) => setStatus(e.target.value)} className="mt-1 h-11 w-full rounded-xl border border-slate-200 px-3 font-normal">
@@ -541,7 +556,7 @@ function CallingForm({
           </div>
         ) : null}
         <div className="flex gap-2 border-t px-4 py-3">
-          <button type="button" onClick={() => setAnswers({})} className="rounded-xl bg-amber-500 px-3 py-2 text-sm font-semibold text-white">
+          <button type="button" onClick={onClear} className="rounded-xl bg-amber-500 px-3 py-2 text-sm font-semibold text-white">
             {ui.clear}
           </button>
           <button type="button" onClick={onClose} className="rounded-xl bg-slate-100 px-3 py-2 text-sm font-semibold">

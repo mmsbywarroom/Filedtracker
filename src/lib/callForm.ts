@@ -64,6 +64,23 @@ export const CALL_FIELD_TOKENS = [
   "{{father}}",
 ] as const;
 
+function compactScript(value: string) {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+/** Question text that is really the opening or closing script, not an answer column. */
+export function isCallScriptLabel(label: string, form: { openingScript?: string; closingScript?: string }) {
+  const text = compactScript(label);
+  if (text.length < 40) return false;
+  for (const script of [form.openingScript, form.closingScript]) {
+    const source = compactScript(script || "");
+    if (!source) continue;
+    if (text === source) return true;
+    if (text.length >= 80 && (source.includes(text) || text.includes(source))) return true;
+  }
+  return false;
+}
+
 export function defaultCallForm(): CallFormShape {
   return {
     title: "Booth Member Verification",
