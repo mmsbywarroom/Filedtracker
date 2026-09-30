@@ -92,10 +92,10 @@ export async function GET() {
       COUNT(*) FILTER (WHERE l.status IN (${connected}))::int AS connected,
       COUNT(*) FILTER (WHERE l.status = 'call_complete')::int AS complete,
       COUNT(*) FILTER (WHERE l.status IN (${notConnected}))::int AS "notConnected",
-      COUNT(*) FILTER (WHERE ${coordId} <> '' AND l.status IN (${connected}) AND l.answers ->> ${coordId} IN (${coordYes}))::int AS "coordinatorYes",
-      COUNT(*) FILTER (WHERE ${coordId} <> '' AND l.status IN (${connected}) AND l.answers ->> ${coordId} IN (${coordNo}))::int AS "coordinatorNo",
-      COUNT(*) FILTER (WHERE ${villageId} <> '' AND l.status IN (${connected}) AND l.answers ->> ${villageId} IN (${villageYes}))::int AS "villageYes",
-      COUNT(*) FILTER (WHERE ${villageId} <> '' AND l.status IN (${connected}) AND l.answers ->> ${villageId} IN (${villageNo}))::int AS "villageNo"
+      COUNT(*) FILTER (WHERE ${coordId} <> '' AND l.status = 'call_complete' AND l.answers ->> ${coordId} IN (${coordYes}))::int AS "coordinatorYes",
+      COUNT(*) FILTER (WHERE ${coordId} <> '' AND l.status = 'call_complete' AND l.answers ->> ${coordId} IN (${coordNo}))::int AS "coordinatorNo",
+      COUNT(*) FILTER (WHERE ${villageId} <> '' AND l.status = 'call_complete' AND l.answers ->> ${villageId} IN (${villageYes}))::int AS "villageYes",
+      COUNT(*) FILTER (WHERE ${villageId} <> '' AND l.status = 'call_complete' AND l.answers ->> ${villageId} IN (${villageNo}))::int AS "villageNo"
     FROM "CallContact" c
     LEFT JOIN latest l ON l."contactId" = c.id
     GROUP BY c.zone, c.halka
