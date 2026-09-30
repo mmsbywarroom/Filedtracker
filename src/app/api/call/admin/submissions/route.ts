@@ -19,6 +19,12 @@ function answerText(question: CallQuestion | undefined, answers: Record<string, 
   return extra ? `${label}: ${extra}` : label;
 }
 
+function whenLabel(iso: string) {
+  const [year, month, day] = iso.split("-");
+  if (!year || !month || !day) return iso;
+  return `${Number(day)}/${Number(month)}/${year}`;
+}
+
 function likePattern(value: string) {
   return `%${value.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`;
 }
@@ -41,38 +47,113 @@ export async function GET(req: Request) {
     }));
   const allowed = new Set<string>([...FIXED_FILTERS, ...questions.map((q) => q.id)]);
 
+  if (url.searchParams.get("lists") === "1") {
+    const distinct = await prisma.$queryRaw<Array<{ kind: string; value: string }>>`
+      WITH latest AS (
+        SELECT DISTINCT ON ("contactId") "contactId", "callerPhone", remarks, "createdAt"
+        FROM "CallPortalResponse"
+        ORDER BY "contactId", "createdAt" DESC
+      ),
+      joined AS (
+        SELECT
+          to_char(r."createdAt" AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM-DD') AS day,
+          btrim(r."callerPhone") AS caller,
+          btrim(c.halka) AS halka,
+          btrim(c."villageWard") AS "villageWard",
+          btrim(c.name) AS name,
+          btrim(c.phone) AS phone,
+          btrim(c.age) AS age,
+          btrim(c.gender) AS gender,
+          btrim(c.position) AS position,
+          btrim(r.remarks) AS remarks
+        FROM latest r
+        JOIN "CallContact" c ON c.id = r."contactId"
+      )
+      SELECT 'when' AS kind, day AS value FROM joined
+      UNION SELECT 'caller', caller FROM joined
+      UNION SELECT 'halka', halka FROM joined
+      UNION SELECT 'villageWard', "villageWard" FROM joined
+      UNION SELECT 'name', name FROM joined
+      UNION SELECT 'phone', phone FROM joined
+      UNION SELECT 'age', age FROM joined
+      UNION SELECT 'gender', gender FROM joined
+      UNION SELECT 'position', position FROM joined
+      UNION SELECT 'remarks', remarks FROM joined
+    `;
+    const textIds = questions.filter((q) => TEXT_QUESTION_TYPES.has(q.type)).map((q) => q.id);
+    const answerRows = textIds.length
+      ? await prisma.$queryRaw<Array<{ id: string; value: string }>>`
+          WITH latest AS (
+            SELECT DISTINCT ON ("contactId") answers
+            FROM "CallPortalResponse"
+            ORDER BY "contactId", "createdAt" DESC
+          )
+          SELECT q.id, btrim(r.answers ->> q.id) AS value
+          FROM latest r
+          CROSS JOIN (VALUES ${Prisma.join(textIds.map((id) => Prisma.sql`(${id})`))}) AS q(id)
+          WHERE btrim(COALESCE(r.answers ->> q.id, '')) <> ''
+          GROUP BY q.id, btrim(r.answers ->> q.id)
+        `
+      : [];
+    const grouped = new Map<string, Set<string>>();
+    for (const row of distinct) {
+      const value = String(row.value || "").trim();
+      if (!value) continue;
+      const bucket = grouped.get(row.kind) || new Set<string>();
+      bucket.add(value);
+      grouped.set(row.kind, bucket);
+    }
+    for (const row of answerRows) {
+      const value = String(row.value || "").trim();
+      if (!value) continue;
+      const bucket = grouped.get(row.id) || new Set<string>();
+      bucket.add(value);
+      grouped.set(row.id, bucket);
+    }
+    const options: Record<string, Array<{ value: string; label: string }>> = {};
+    grouped.forEach((values, key) => {
+      const items: Array<{ value: string; label: string }> = [];
+      values.forEach((value) => {
+        items.push({ value, label: key === "when" ? whenLabel(value) : value });
+      });
+      items.sort((a, b) => (key === "when" ? b.value.localeCompare(a.value) : a.label.localeCompare(b.label)));
+      options[key] = items;
+    });
+    options.status = form.statuses.map((st) => ({ value: st.value, label: st.label }));
+    for (const question of questions) {
+      if (TEXT_QUESTION_TYPES.has(question.type) || !question.options.length) continue;
+      options[question.id] = question.options.map((option) => ({ value: option.value, label: option.label }));
+    }
+    return NextResponse.json({ options });
+  }
+
   const wheres: Prisma.Sql[] = [Prisma.sql`TRUE`];
   for (const [key, raw] of url.searchParams.entries()) {
     const value = raw.trim();
     if (!value || key === "page" || !allowed.has(key)) continue;
     const pattern = likePattern(value);
-    if (key === "when") {
-      wheres.push(Prisma.sql`to_char(r."createdAt" AT TIME ZONE 'Asia/Kolkata', 'FMDD/FMMM/YYYY, HH12:MI:SS am') ILIKE ${pattern} ESCAPE '\\'`);
+    if (key === "when" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      wheres.push(Prisma.sql`(r."createdAt" AT TIME ZONE 'Asia/Kolkata')::date = ${value}::date`);
     } else if (key === "caller") {
-      wheres.push(Prisma.sql`r."callerPhone" ILIKE ${pattern} ESCAPE '\\'`);
+      wheres.push(Prisma.sql`btrim(r."callerPhone") = ${value}`);
     } else if (key === "halka") {
-      wheres.push(Prisma.sql`c.halka ILIKE ${pattern} ESCAPE '\\'`);
+      wheres.push(Prisma.sql`btrim(c.halka) = ${value}`);
     } else if (key === "villageWard") {
-      wheres.push(Prisma.sql`c."villageWard" ILIKE ${pattern} ESCAPE '\\'`);
+      wheres.push(Prisma.sql`btrim(c."villageWard") = ${value}`);
     } else if (key === "name") {
-      wheres.push(Prisma.sql`c.name ILIKE ${pattern} ESCAPE '\\'`);
+      wheres.push(Prisma.sql`btrim(c.name) = ${value}`);
     } else if (key === "phone") {
-      wheres.push(Prisma.sql`c.phone ILIKE ${pattern} ESCAPE '\\'`);
+      wheres.push(Prisma.sql`btrim(c.phone) = ${value}`);
     } else if (key === "age") {
-      wheres.push(Prisma.sql`c.age ILIKE ${pattern} ESCAPE '\\'`);
+      wheres.push(Prisma.sql`btrim(c.age) = ${value}`);
     } else if (key === "gender") {
-      wheres.push(Prisma.sql`c.gender ILIKE ${pattern} ESCAPE '\\'`);
+      wheres.push(Prisma.sql`btrim(c.gender) = ${value}`);
     } else if (key === "position") {
-      wheres.push(Prisma.sql`c.position ILIKE ${pattern} ESCAPE '\\'`);
+      wheres.push(Prisma.sql`btrim(c.position) = ${value}`);
     } else if (key === "remarks") {
-      wheres.push(Prisma.sql`r.remarks ILIKE ${pattern} ESCAPE '\\'`);
+      wheres.push(Prisma.sql`btrim(r.remarks) = ${value}`);
     } else if (key === "status") {
-      const matched = form.statuses.filter((st) => st.label.toLowerCase().includes(value.toLowerCase()) || st.value.toLowerCase().includes(value.toLowerCase()));
-      wheres.push(
-        matched.length
-          ? Prisma.sql`(r.status ILIKE ${pattern} ESCAPE '\\' OR r.status IN (${Prisma.join(matched.map((st) => st.value))}))`
-          : Prisma.sql`r.status ILIKE ${pattern} ESCAPE '\\'`
-      );
+      wheres.push(Prisma.sql`r.status = ${value}`);
     } else {
       const question = questionById.get(key);
       const optionValues = (question?.options || [])

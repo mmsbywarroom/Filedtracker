@@ -45,20 +45,28 @@ export default function CallSubmissionsPage() {
   const [pageSize, setPageSize] = useState(50);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [filters, setFilters] = useState<Record<string, string>>({});
+  const [lists, setLists] = useState<Record<string, Option[]>>({});
   const [editing, setEditing] = useState<Row | null>(null);
   const [msg, setMsg] = useState("");
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setFilters((prev) => {
-        const next = Object.fromEntries(Object.entries(draft).filter(([, value]) => value.trim()));
-        if (JSON.stringify(prev) === JSON.stringify(next)) return prev;
-        setPage(1);
-        return next;
-      });
-    }, 300);
-    return () => window.clearTimeout(timer);
-  }, [draft]);
+    fetch("/api/call/admin/submissions?lists=1").then(async (res) => {
+      if (res.status === 401) return;
+      const data = await res.json();
+      setLists(data.options || {});
+    });
+  }, []);
+
+  function chooseFilter(key: string, value: string) {
+    setDraft((prev) => ({ ...prev, [key]: value }));
+    setPage(1);
+    setFilters((prev) => {
+      const next = { ...prev };
+      if (value.trim()) next[key] = value.trim();
+      else delete next[key];
+      return next;
+    });
+  }
 
   useEffect(() => {
     const params = new URLSearchParams({ page: String(page) });
@@ -96,14 +104,28 @@ export default function CallSubmissionsPage() {
     { key: "remarks", label: "Remarks" },
   ];
 
+  function optionsFor(key: string) {
+    if (lists[key]?.length) return lists[key];
+    if (key === "status") return statuses;
+    const question = questions.find((item) => item.id === key);
+    if (question && question.options.length && !TEXT_QUESTION_TYPES.has(question.type)) return question.options;
+    return [];
+  }
+
   function filterCell(key: string, wide = false) {
     return (
-      <input
+      <select
         value={draft[key] || ""}
-        onChange={(e) => setDraft((prev) => ({ ...prev, [key]: e.target.value }))}
-        placeholder="Filter"
-        className={`mt-1 h-7 rounded border border-slate-200 px-1.5 font-normal ${wide ? "w-full min-w-[140px]" : "w-full min-w-[88px]"}`}
-      />
+        onChange={(e) => chooseFilter(key, e.target.value)}
+        className={`mt-1 h-7 rounded border border-slate-200 bg-white px-1 font-normal ${wide ? "w-full min-w-[140px]" : "w-full min-w-[110px]"}`}
+      >
+        <option value="">All</option>
+        {optionsFor(key).map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
     );
   }
 
