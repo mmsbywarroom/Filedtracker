@@ -25,6 +25,13 @@ type LogRow = {
   };
 };
 
+const STATUS_KEYS = ["present", "half_day", "leave", "absent", "in_progress"] as const;
+
+function statusKey(s: string | null) {
+  if (s === "pending") return "in_progress";
+  return s || "";
+}
+
 function statusLabel(s: string | null) {
   if (!s) return "—";
   if (s === "present") return "Present";
@@ -103,6 +110,37 @@ export default function AttendanceDirectLogPage() {
     };
   }, [filtered, q, summary]);
 
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const key of STATUS_KEYS) counts[key] = 0;
+    for (const row of filtered) {
+      const key = statusKey(row.newStatus);
+      counts[key] = (counts[key] || 0) + 1;
+    }
+    return counts;
+  }, [filtered]);
+
+  const byPerson = useMemo(() => {
+    const map = new Map<string, { name: string; level: string; total: number; byStatus: Record<string, number> }>();
+    for (const row of filtered) {
+      const name = row.changedByName || row.changedByEmail || "Unknown";
+      const key = `${name}|${row.changedByLevel}`;
+      const current = map.get(key) || { name, level: row.changedByLevel, total: 0, byStatus: {} };
+      current.total += 1;
+      const status = statusKey(row.newStatus);
+      current.byStatus[status] = (current.byStatus[status] || 0) + 1;
+      map.set(key, current);
+    }
+    const list: { name: string; level: string; total: number; byStatus: Record<string, number> }[] = [];
+    map.forEach((value) => list.push(value));
+    return list.sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+  }, [filtered]);
+
+  const statusColumns = useMemo(() => {
+    const extras = Object.keys(statusCounts).filter((key) => statusCounts[key] > 0 && !STATUS_KEYS.some((known) => known === key));
+    return [...STATUS_KEYS, ...extras];
+  }, [statusCounts]);
+
   const pageRows = filtered.slice((page - 1) * pageSize, page * pageSize);
 
   return (
@@ -127,6 +165,50 @@ export default function AttendanceDirectLogPage() {
           <p className="mt-1 text-3xl font-semibold tabular-nums">{shownSummary.byDlc}</p>
         </div>
       </div>
+
+      <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        {statusColumns.map((key) => (
+          <div key={key} className="rounded-2xl border border-navy/10 bg-white px-4 py-3 shadow-card">
+            <p className="text-xs font-semibold uppercase tracking-wider text-navy/50">{statusLabel(key)}</p>
+            <p className="mt-1 text-2xl font-semibold tabular-nums text-ink">{statusCounts[key] || 0}</p>
+          </div>
+        ))}
+      </div>
+
+      <section className="admin-panel mt-4 overflow-hidden">
+        <div className="border-b border-navy/10 px-4 py-3">
+          <h2 className="text-sm font-semibold text-ink">Who changed what</h2>
+          <p className="text-xs text-navy/50">Each admin’s change count, split by the new attendance status.</p>
+        </div>
+        <div className="overflow-auto">
+          <table className="min-w-full text-left text-sm">
+            <thead className="bg-[#eef3fb] text-[11px] font-semibold uppercase tracking-wider text-navy/55">
+              <tr>
+                <th className="px-4 py-3">Changed by</th>
+                <th className="px-4 py-3">Total</th>
+                {statusColumns.map((key) => (
+                  <th key={key} className="px-4 py-3">{statusLabel(key)}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {byPerson.map((person) => (
+                <tr key={`${person.name}-${person.level}`} className="border-t border-navy/5">
+                  <td className="px-4 py-3">
+                    <p className="font-medium">{person.name}</p>
+                    <p className="text-xs text-navy/45">{person.level}</p>
+                  </td>
+                  <td className="px-4 py-3 font-semibold tabular-nums">{person.total}</td>
+                  {statusColumns.map((key) => (
+                    <td key={key} className="px-4 py-3 tabular-nums">{person.byStatus[key] || 0}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {!byPerson.length ? <p className="p-6 text-sm text-navy/50">No changes in this view.</p> : null}
+        </div>
+      </section>
 
       <div className="mt-4 mb-4 grid gap-3 md:grid-cols-3">
         <label className="text-xs font-medium text-navy/55">
