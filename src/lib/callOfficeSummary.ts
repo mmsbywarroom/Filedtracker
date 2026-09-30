@@ -8,6 +8,7 @@ type SiteName = (typeof CALL_CENTER_SITE_NAMES)[number];
 export type CallerStat = {
   name: string;
   phone: string;
+  halkas: string;
   assigned: number;
   dialed: number;
   fresh: number;
@@ -23,11 +24,11 @@ export type OfficeSummary = CallerStat & {
   users: CallerStat[];
 };
 
-function emptyCaller(): Omit<CallerStat, "name" | "phone"> {
+function emptyCaller(): Omit<CallerStat, "name" | "phone" | "halkas"> {
   return { assigned: 0, dialed: 0, fresh: 0, connected: 0, complete: 0, notConnected: 0, redial: 0 };
 }
 
-function add(target: Omit<CallerStat, "name" | "phone">, row: Omit<CallerStat, "name" | "phone">) {
+function add(target: Omit<CallerStat, "name" | "phone" | "halkas">, row: Omit<CallerStat, "name" | "phone" | "halkas">) {
   target.assigned += row.assigned;
   target.dialed += row.dialed;
   target.fresh += row.fresh;
@@ -47,6 +48,7 @@ export async function loadCallOfficeSummary(): Promise<OfficeSummary[]> {
       name: string;
       phone: string;
       sectorAllotted: string;
+      halkas: string | null;
       assigned: number;
       dialed: number;
       complete: number;
@@ -56,6 +58,7 @@ export async function loadCallOfficeSummary(): Promise<OfficeSummary[]> {
     }>
   >`
     SELECT u.name, u.phone, u."sectorAllotted",
+      string_agg(DISTINCT c.halka, ', ') FILTER (WHERE btrim(c.halka) <> '') AS halkas,
       COUNT(c.id)::int AS assigned,
       COUNT(c.id) FILTER (WHERE COALESCE(r.status, '') <> '')::int AS dialed,
       COUNT(c.id) FILTER (WHERE r.status = 'call_complete')::int AS complete,
@@ -79,6 +82,7 @@ export async function loadCallOfficeSummary(): Promise<OfficeSummary[]> {
     name,
     callers: 0,
     phone: "",
+    halkas: "",
     ...emptyCaller(),
     users: [],
   }));
@@ -92,6 +96,7 @@ export async function loadCallOfficeSummary(): Promise<OfficeSummary[]> {
     const stats: CallerStat = {
       name: person.name,
       phone: person.phone,
+      halkas: person.halkas || "",
       assigned: Number(person.assigned || 0),
       dialed: Number(person.dialed || 0),
       fresh: Math.max(0, Number(person.assigned || 0) - Number(person.dialed || 0)),

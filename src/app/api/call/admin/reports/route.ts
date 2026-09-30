@@ -32,11 +32,26 @@ function answerText(question: CallQuestion | undefined, answers: Record<string, 
 
 async function summaryCsv() {
   const sites = await loadCallOfficeSummary();
-  const lines = ["Office,Caller,Assigned,Dialed,Fresh,Connected,Call complete,Not connected,Re-dial"];
+  const lines = ["Office,Caller,Halka,Assigned,Dialed,Fresh,Connected,Call complete,Not connected,Re-dial"];
+  const total = sites.reduce(
+    (sum, site) => {
+      sum.callers += site.callers;
+      sum.assigned += site.assigned;
+      sum.dialed += site.dialed;
+      sum.fresh += site.fresh;
+      sum.connected += site.connected;
+      sum.complete += site.complete;
+      sum.notConnected += site.notConnected;
+      sum.redial += site.redial;
+      return sum;
+    },
+    { callers: 0, assigned: 0, dialed: 0, fresh: 0, connected: 0, complete: 0, notConnected: 0, redial: 0 }
+  );
+  lines.push(["Total", `${total.callers} callers`, "", total.assigned, total.dialed, total.fresh, total.connected, total.complete, total.notConnected, total.redial].map(csvCell).join(","));
   for (const site of sites) {
-    lines.push([site.name, `${site.callers} callers`, site.assigned, site.dialed, site.fresh, site.connected, site.complete, site.notConnected, site.redial].map(csvCell).join(","));
+    lines.push([site.name, `${site.callers} callers`, "", site.assigned, site.dialed, site.fresh, site.connected, site.complete, site.notConnected, site.redial].map(csvCell).join(","));
     for (const user of site.users) {
-      lines.push([site.name, user.name, user.assigned, user.dialed, user.fresh, user.connected, user.complete, user.notConnected, user.redial].map(csvCell).join(","));
+      lines.push([site.name, user.name, user.halkas, user.assigned, user.dialed, user.fresh, user.connected, user.complete, user.notConnected, user.redial].map(csvCell).join(","));
     }
   }
   return csvResponse("calling-summary.csv", `\uFEFF${lines.join("\n")}\n`);
