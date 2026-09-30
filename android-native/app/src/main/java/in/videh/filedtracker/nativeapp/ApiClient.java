@@ -162,7 +162,7 @@ public final class ApiClient {
         return new JSONObject(body);
     }
 
-    public static void requestOtp(Context ctx, String phone) throws IOException, ApiError {
+    public static JSONObject requestOtp(Context ctx, String phone) throws IOException, ApiError, JSONException {
         JSONObject body = new JSONObject();
         try {
             body.put("phone", phone);
@@ -179,15 +179,18 @@ public final class ApiClient {
         }
         try (Response res =
                 executeFailover(OTP, "/api/auth/otp/request", "POST", RequestBody.create(body.toString(), JSON))) {
+            String raw = res.body() != null ? res.body().string() : "";
             if (!res.isSuccessful()) {
-                String msg = res.body() != null ? res.body().string() : "";
+                String msg = raw;
                 try {
-                    msg = new JSONObject(msg).optString("error", msg);
+                    msg = new JSONObject(raw).optString("error", raw);
                 } catch (Exception ignored) {
                 }
                 throw new ApiError(
                         res.code(), msg.isEmpty() ? "Could not send OTP. Check network and try again." : msg);
             }
+            if (raw.isEmpty()) return new JSONObject();
+            return new JSONObject(raw);
         } catch (ApiError e) {
             throw e;
         }

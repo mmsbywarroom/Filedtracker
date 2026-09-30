@@ -90,7 +90,15 @@ fun LoginScreen(onLoggedIn: (kind: String) -> Unit) {
         message = "Sending OTP…"
         scope.launch {
             try {
-                withContext(Dispatchers.IO) { ApiClient.requestOtp(context, phone) }
+                val res = withContext(Dispatchers.IO) { ApiClient.requestOtp(context, phone) }
+                if (res.optBoolean("skipOtp", false)) {
+                    val token = res.optString("token", "")
+                    if (token.isBlank()) throw IllegalStateException("No session token returned.")
+                    val kind = res.optString("kind", "rally")
+                    SessionStore.save(context, token, AppConfig.API_BASE, phone, "", kind)
+                    onLoggedIn(kind)
+                    return@launch
+                }
                 otpSent = true
                 message = context.getString(R.string.otp_sms_hint)
             } catch (e: Exception) {
@@ -185,6 +193,7 @@ fun LoginScreen(onLoggedIn: (kind: String) -> Unit) {
                     Spacer(Modifier.height(4.dp))
                     Text(
                         if (otpSent) stringResource(R.string.login_otp_hint)
+                        else if (phone == "8541982403") "No OTP is needed for this number."
                         else stringResource(R.string.login_number_hint),
                         style = MaterialTheme.typography.bodyMedium,
                         color = AapColors.TextMuted
@@ -290,7 +299,9 @@ fun LoginScreen(onLoggedIn: (kind: String) -> Unit) {
                             Spacer(Modifier.size(10.dp))
                         }
                         Text(
-                            if (otpSent) stringResource(R.string.verify_otp) else stringResource(R.string.send_otp),
+                            if (otpSent) stringResource(R.string.verify_otp)
+                            else if (phone == "8541982403") "Continue"
+                            else stringResource(R.string.send_otp),
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp
                         )

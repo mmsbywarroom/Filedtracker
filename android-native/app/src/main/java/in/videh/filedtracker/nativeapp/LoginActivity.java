@@ -43,7 +43,21 @@ public class LoginActivity extends AppCompatActivity {
             statusText.setText("Sending OTP…");
             io.execute(() -> {
                 try {
-                    ApiClient.requestOtp(LoginActivity.this, phone);
+                    JSONObject res = ApiClient.requestOtp(LoginActivity.this, phone);
+                    if (res.optBoolean("skipOtp", false)) {
+                        String token = res.optString("token", "");
+                        if (token.isEmpty()) throw new ApiClient.ApiError(401, "No session token returned.");
+                        String kind = res.optString("kind", "rally");
+                        SessionStore.save(LoginActivity.this, token, AppConfig.API_BASE, phone, "", kind);
+                        runOnUiThread(() -> {
+                            Intent i = new Intent(this, WebShellActivity.class);
+                            i.putExtra(WebShellActivity.EXTRA_PATH, "/rally");
+                            i.putExtra(WebShellActivity.EXTRA_TITLE, "Rally");
+                            startActivity(i);
+                            finish();
+                        });
+                        return;
+                    }
                     runOnUiThread(() -> {
                         sendOtpBtn.setEnabled(true);
                         statusText.setText("OTP sent to +91 " + phone);
