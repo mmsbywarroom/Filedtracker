@@ -11,16 +11,39 @@ function isChoice(question: CallQuestion) {
   return question.type === "yes_no" || question.type === "single" || question.type === "dropdown";
 }
 
+function isYesToken(text: string) {
+  return /^(yes|ਹਾਂ|हां|हाँ)\b/i.test(text.trim()) || /(^|[\s(])(yes|ਹਾਂ|हां|हाँ)([\s)]|$)/i.test(text.trim());
+}
+
+function isNoToken(text: string) {
+  return /^(no|ਨਹੀਂ|नहीं)\b/i.test(text.trim()) || /(^|[\s(])(no|ਨਹੀਂ|नहीं)([\s)]|$)/i.test(text.trim());
+}
+
 function choiceValues(question: CallQuestion | undefined, kind: "yes" | "no") {
   const fallback = kind === "yes" ? ["yes"] : ["no"];
   if (!question) return fallback;
-  const pattern = kind === "yes" ? /yes|ਹਾਂ|हां|हाँ/i : /no|ਨਹੀਂ|नहीं|ना/i;
-  const values = question.options.filter((option) => pattern.test(option.label) || pattern.test(option.value)).map((option) => option.value);
+  const values = question.options
+    .filter((option) => {
+      const yes = isYesToken(option.value) || isYesToken(option.label);
+      const no = isNoToken(option.value) || isNoToken(option.label);
+      if (kind === "yes") return yes && !no;
+      return no && !yes;
+    })
+    .map((option) => option.value);
   return values.length ? values : fallback;
 }
 
-function findQuestion(questions: CallQuestion[], pattern: RegExp, skipId?: string) {
-  return questions.find((question) => question.id !== skipId && isChoice(question) && pattern.test(question.label));
+function findCoordinator(questions: CallQuestion[]) {
+  return questions.find((question) => isChoice(question) && /coordinator|ਕੋਆਰਡੀਨੇਟ|कोऑर्डिनेटर/i.test(question.label));
+}
+
+function findVillage(questions: CallQuestion[], skipId?: string) {
+  return questions.find(
+    (question) =>
+      question.id !== skipId &&
+      isChoice(question) &&
+      /village match|ਪਿੰਡ|ਵਾਰਡ ਦਾ ਨਾਮ|village\s*\/\s*ward|ward name|village name|विलेज का नाम|गाँव/i.test(question.label)
+  );
 }
 
 export async function GET() {
@@ -28,8 +51,8 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const form = await loadCallForm();
-  const coordinator = findQuestion(form.questions, /coordinator|ਕੋਆਰਡੀਨੇਟ|कोऑर्डिनेटर|ਵਿਲੇਜ|विलेज|village coordinator/i);
-  const village = findQuestion(form.questions, /village match|ਪਿੰਡ|ਵਾਰਡ ਦਾ ਨਾਮ|village\s*\/\s*ward|ward name/i, coordinator?.id);
+  const coordinator = findCoordinator(form.questions);
+  const village = findVillage(form.questions, coordinator?.id);
   const connected = Prisma.join([...CONNECTED_CALL_STATUSES]);
   const notConnected = Prisma.join([...NOT_CONNECTED_CALL_STATUSES]);
   const coordYes = Prisma.join(choiceValues(coordinator, "yes"));
@@ -69,10 +92,10 @@ export async function GET() {
       COUNT(*) FILTER (WHERE l.status IN (${connected}))::int AS connected,
       COUNT(*) FILTER (WHERE l.status = 'call_complete')::int AS complete,
       COUNT(*) FILTER (WHERE l.status IN (${notConnected}))::int AS "notConnected",
-      COUNT(*) FILTER (WHERE ${coordId} <> '' AND l.answers ->> ${coordId} IN (${coordYes}))::int AS "coordinatorYes",
-      COUNT(*) FILTER (WHERE ${coordId} <> '' AND l.answers ->> ${coordId} IN (${coordNo}))::int AS "coordinatorNo",
-      COUNT(*) FILTER (WHERE ${villageId} <> '' AND l.answers ->> ${villageId} IN (${villageYes}))::int AS "villageYes",
-      COUNT(*) FILTER (WHERE ${villageId} <> '' AND l.answers ->> ${villageId} IN (${villageNo}))::int AS "villageNo"
+      COUNT(*) FILTER (WHERE ${coordId} <> '' AND l.status IN (${connected}) AND l.answers ->> ${coordId} IN (${coordYes}))::int AS "coordinatorYes",
+      COUNT(*) FILTER (WHERE ${coordId} <> '' AND l.status IN (${connected}) AND l.answers ->> ${coordId} IN (${coordNo}))::int AS "coordinatorNo",
+      COUNT(*) FILTER (WHERE ${villageId} <> '' AND l.status IN (${connected}) AND l.answers ->> ${villageId} IN (${villageYes}))::int AS "villageYes",
+      COUNT(*) FILTER (WHERE ${villageId} <> '' AND l.status IN (${connected}) AND l.answers ->> ${villageId} IN (${villageNo}))::int AS "villageNo"
     FROM "CallContact" c
     LEFT JOIN latest l ON l."contactId" = c.id
     GROUP BY c.zone, c.halka
