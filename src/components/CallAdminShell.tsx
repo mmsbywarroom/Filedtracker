@@ -9,6 +9,7 @@ const NAV = [
   { href: "/call/admin/summary", label: "Summary", group: "Calling" },
   { href: "/call/admin/submissions", label: "Call submissions", group: "Calling" },
   { href: "/call/admin/reports", label: "Reports", group: "Calling" },
+  { href: "/call/admin/reports/halka", label: "Halka report", group: "Calling" },
   { href: "/call/admin/form", label: "Form designer", group: "Calling" },
   { href: "/call/admin/users", label: "Users", group: "People" },
   { href: "/call/admin/attendance", label: "Attendance", group: "Attendance" },
@@ -25,7 +26,7 @@ export function CallAdminShell({ children }: { children: ReactNode }) {
   }
 
   function active(href: string) {
-    if (href === "/call/admin") return pathname === "/call/admin";
+    if (href === "/call/admin" || href === "/call/admin/reports") return pathname === href;
     return pathname.startsWith(href);
   }
 
