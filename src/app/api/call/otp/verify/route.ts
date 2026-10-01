@@ -1,13 +1,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { setCallerSession } from "@/lib/auth";
-import { hashOtp, normalizePhone, OTP_LENGTH, rateLimit, safeEqual } from "@/lib/security";
+import { hashOtp, normalizePhone, OTP_LENGTH, safeEqual } from "@/lib/security";
 
 export async function POST(req: Request) {
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "local";
-  const rl = rateLimit(`call-otp-verify:${ip}`, 20, 10 * 60 * 1000);
-  if (!rl.ok) return NextResponse.json({ error: "Too many attempts." }, { status: 429 });
-
   const body = await req.json().catch(() => null);
   const phone = normalizePhone(String(body?.phone || ""));
   const code = String(body?.otp || "").trim();

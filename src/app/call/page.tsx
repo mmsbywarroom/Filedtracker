@@ -40,7 +40,7 @@ export default function CallLoginPage() {
     setShownOtp(code);
     setOtp(code);
     setSent(true);
-    setWait(60);
+    setWait(0);
     setMsg("Use this OTP to log in. No SMS is sent.");
   }
 
