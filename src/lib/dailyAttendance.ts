@@ -25,8 +25,21 @@ export const PRESENT_MIN_HOURS = 6.5;
 export const HALF_DAY_MIN_HOURS = 3.5;
 export const PRESENT_MAX_HOURS = 12;
 
+const istDayFmt = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Kolkata",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+const istClockPartsFmt = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Asia/Kolkata",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
 export function istDateString(d = new Date()) {
-  return d.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  return istDayFmt.format(d);
 }
 
 export function istDayBounds(dateYmd: string) {
@@ -44,12 +57,7 @@ type PunchRow = {
 
 /** Minutes from midnight IST for a timestamp */
 export function istMinutesOfDay(d: Date) {
-  const parts = new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Asia/Kolkata",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(d);
+  const parts = istClockPartsFmt.formatToParts(d);
   const hour = Number(parts.find((p) => p.type === "hour")?.value || 0);
   const minute = Number(parts.find((p) => p.type === "minute")?.value || 0);
   return hour * 60 + minute;

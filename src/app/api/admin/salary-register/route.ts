@@ -3,6 +3,7 @@ import { requireSuperAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { canSeeUser, userScopeWhere } from "@/lib/hierarchy";
 import {
+  isDayStatusFinalized,
   istDateString,
   istDayBounds,
   resolveDayAttendanceStatus,
@@ -89,7 +90,7 @@ export async function GET(req: Request) {
 
   const punchesByUserDay = new Map<string, { punchInAt: Date; punchOutAt: Date | null }[]>();
   for (const p of punches) {
-    const day = p.punchInAt.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+    const day = istDateString(p.punchInAt);
     const key = `${p.userId}|${day}`;
     const list = punchesByUserDay.get(key) || [];
     list.push({ punchInAt: p.punchInAt, punchOutAt: p.punchOutAt });
@@ -133,6 +134,28 @@ export async function GET(req: Request) {
       // Days after they left, with no punch, stay blank instead of Absent.
       if (!eligible && sessions.length === 0 && !mark && !onApprovedLeave) {
         cells[dateYmd] = "";
+        continue;
+      }
+      if (sessions.length === 0 && !mark && !onApprovedLeave) {
+        const holiday = holidayByDay.get(dateYmd) || null;
+        const onHoliday = holidayAppliesTo(holiday, u.designation);
+        if (onHoliday && holiday) {
+          cells[dateYmd] = salaryCell({
+            status: "leave",
+            firstIn: null,
+            reason: holidayLeaveReason(holiday.reason, u.designation),
+            dateYmd,
+            todayYmd,
+          });
+          leave += 1;
+          continue;
+        }
+        if (dateYmd === todayYmd && !isDayStatusFinalized(dateYmd)) {
+          cells[dateYmd] = "";
+          continue;
+        }
+        cells[dateYmd] = "A No punch";
+        absent += 1;
         continue;
       }
       const asOf = dateYmd === todayYmd ? new Date() : dayEnd;

@@ -22,6 +22,21 @@ type Row = {
   leave: number;
 };
 
+const MONTH_NAMES = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
 function monthValue(year: number, month: number) {
   return `${year}-${String(month).padStart(2, "0")}`;
 }
@@ -35,25 +50,41 @@ export default function SalaryRegisterPage() {
   const [days, setDays] = useState<string[]>([]);
   const [rows, setRows] = useState<Row[]>([]);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [reload, setReload] = useState(0);
   const [visibleDens, setVisibleDens] = useState<string[]>(() => hierarchyDesignations());
 
-  async function load() {
-    const [y, m] = month.split("-").map(Number);
-    setBusy(true);
-    const params = new URLSearchParams({ year: String(y), month: String(m) });
-    if (designation) params.set("designation", designation);
-    const res = await fetch(`/api/admin/salary-register?${params}`);
-    setBusy(false);
-    if (res.status === 401) {
-      window.location.href = "/admin/login";
-      return;
-    }
-    const data = await res.json();
-    setDays(data.days || []);
-    setRows(data.rows || []);
-  }
-
   useEffect(() => {
+    const ctrl = new AbortController();
+    let ignore = false;
+    async function load() {
+      const [y, m] = month.split("-").map(Number);
+      if (!y || !m) return;
+      setBusy(true);
+      setError("");
+      try {
+        const params = new URLSearchParams({ year: String(y), month: String(m) });
+        if (designation) params.set("designation", designation);
+        const res = await fetch(`/api/admin/salary-register?${params}`, { signal: ctrl.signal });
+        if (res.status === 401) {
+          window.location.href = "/admin/login";
+          return;
+        }
+        const data = await res.json().catch(() => null);
+        if (ignore) return;
+        if (!res.ok || !Array.isArray(data?.rows) || !Array.isArray(data?.days)) {
+          setError("Could not load this month. Refresh and try again.");
+          return;
+        }
+        setDays(data.days);
+        setRows(data.rows);
+      } catch (err) {
+        if (ignore || (err instanceof DOMException && err.name === "AbortError")) return;
+        setError("Could not load this month. Refresh and try again.");
+      } finally {
+        if (!ignore) setBusy(false);
+      }
+    }
     void load();
     fetch("/api/admin/me")
       .then((r) => r.json())
@@ -63,7 +94,11 @@ export default function SalaryRegisterPage() {
         }
       })
       .catch(() => {});
-  }, [month, designation]);
+    return () => {
+      ignore = true;
+      ctrl.abort();
+    };
+  }, [month, designation, reload]);
 
   const zones = useMemo(
     () => Array.from(new Set(rows.map((r) => r.zone).filter(Boolean))).sort(),
@@ -112,7 +147,7 @@ export default function SalaryRegisterPage() {
 
   const title = useMemo(() => {
     const [y, m] = month.split("-").map(Number);
-    return new Date(y, m - 1, 1).toLocaleString("en-IN", { month: "long", year: "numeric" });
+    return `${MONTH_NAMES[m - 1] || ""} ${y || ""}`.trim();
   }, [month]);
 
   return (
@@ -173,7 +208,7 @@ export default function SalaryRegisterPage() {
             className="admin-field mt-1 block h-11 w-full rounded-xl border border-navy/15 bg-white px-3 text-sm shadow-sm"
           />
         </label>
-        <button type="button" disabled={busy} className="admin-btn-ink h-11" onClick={() => void load()}>
+        <button type="button" disabled={busy} className="admin-btn-ink h-11" onClick={() => setReload((n) => n + 1)}>
           {busy ? "Loading…" : "Refresh"}
         </button>
         <button type="button" disabled={busy || !filtered.length} className="admin-btn-primary h-11" onClick={exportCsv}>
@@ -181,6 +216,7 @@ export default function SalaryRegisterPage() {
         </button>
       </div>
 
+      {error ? <p className="mb-3 text-sm text-red-700">{error}</p> : null}
       <p className="mb-3 text-xs text-navy/50">
         {title} · {filtered.length} users · P = Present + time · HD = Half-day + time · A = Absent + reason · L = Leave
       </p>
