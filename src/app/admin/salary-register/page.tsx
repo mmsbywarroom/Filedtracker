@@ -13,6 +13,8 @@ type Row = {
   zone: string;
   district: string;
   assemblyName: string;
+  isActive?: boolean;
+  leftOn?: string;
   cells: Record<string, string>;
   present: number;
   halfDay: number;
@@ -119,7 +121,7 @@ export default function SalaryRegisterPage() {
       <h1 className="admin-page-title">Salary register</h1>
       <p className="admin-page-sub">
         User-wise, date-wise download for payroll. P / HD show punch-in time. A shows absent reason. L is leave /
-        holiday.
+        holiday. People who left still appear for every day they punched in. Days after they left, with no punch, stay blank.
       </p>
 
       <div className="admin-toolbar mt-4 mb-4 flex flex-wrap items-end gap-3">
@@ -205,7 +207,10 @@ export default function SalaryRegisterPage() {
                 <tr key={r.userId} className="border-t border-navy/5 hover:bg-[#f7f9fd]">
                   <td className="sticky left-0 z-10 bg-white px-3 py-2">
                     <p className="font-semibold text-sm">{r.name}</p>
-                    <p className="text-[11px] text-navy/45">{r.phone}</p>
+                    <p className="text-[11px] text-navy/45">
+                      {r.phone}
+                      {r.leftOn ? ` · Left ${r.leftOn.slice(8, 10)}/${r.leftOn.slice(5, 7)}/${r.leftOn.slice(0, 4)}` : ""}
+                    </p>
                   </td>
                   {days.map((d) => (
                     <td key={d} className="whitespace-nowrap px-2 py-2 text-navy/80">

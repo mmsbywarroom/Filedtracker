@@ -113,30 +113,33 @@ export async function GET(req: Request) {
     let halfDay = 0;
     let absent = 0;
     let leave = 0;
+    const leftOn = u.deactivatedAt ? istDateString(u.deactivatedAt) : "";
     for (const dateYmd of days) {
       if (dateYmd > todayYmd) {
         cells[dateYmd] = "";
         continue;
       }
-      if (
-        !isAttendanceEligibleOnDay({
-          isActive: u.isActive,
-          deactivatedAt: u.deactivatedAt,
-          dateYmd,
-        })
-      ) {
-        cells[dateYmd] = "";
-        continue;
-      }
+      const sessions = punchesByUserDay.get(`${u.id}|${dateYmd}`) || [];
       const { end: dayEnd } = istDayBounds(dateYmd);
-      const asOf = dateYmd === todayYmd ? new Date() : dayEnd;
-      const holiday = holidayByDay.get(dateYmd) || null;
-      const onHoliday = holidayAppliesTo(holiday, u.designation);
       const dayLeaves = leavesByUser.get(u.id) || [];
       const onApprovedLeave = dayLeaves.some((l) => l.fromDate <= dayEnd && l.toDate >= istDayBounds(dateYmd).start);
       const mark = markByUserDay.get(`${u.id}|${dateYmd}`);
+      const eligible = isAttendanceEligibleOnDay({
+        isActive: u.isActive,
+        deactivatedAt: u.deactivatedAt,
+        dateYmd,
+      });
+      // Left / inactive users still count every day they actually punched.
+      // Days after they left, with no punch, stay blank instead of Absent.
+      if (!eligible && sessions.length === 0 && !mark && !onApprovedLeave) {
+        cells[dateYmd] = "";
+        continue;
+      }
+      const asOf = dateYmd === todayYmd ? new Date() : dayEnd;
+      const holiday = holidayByDay.get(dateYmd) || null;
+      const onHoliday = holidayAppliesTo(holiday, u.designation);
       const resolved = resolveDayAttendanceStatus({
-        sessions: punchesByUserDay.get(`${u.id}|${dateYmd}`) || [],
+        sessions,
         asOf,
         dateYmd,
         onApprovedLeave,
@@ -165,6 +168,8 @@ export async function GET(req: Request) {
       zone: u.zone,
       district: u.district,
       assemblyName: u.assemblyName,
+      isActive: u.isActive,
+      leftOn: u.isActive ? "" : leftOn,
       cells,
       present,
       halfDay,
