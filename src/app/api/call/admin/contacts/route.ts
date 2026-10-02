@@ -19,28 +19,37 @@ function callerMobile(raw: string) {
   return phone.length === 12 && phone.startsWith("91") ? phone.slice(2) : phone;
 }
 
+const PAGE_SIZE = 50;
+
 export async function GET(req: Request) {
   const denied = await guard();
   if (denied) return denied;
-  const q = new URL(req.url).searchParams.get("q")?.trim() || "";
+  const url = new URL(req.url);
+  const q = url.searchParams.get("q")?.trim() || "";
+  const page = Math.max(1, Number(url.searchParams.get("page") || 1) || 1);
   const digits = q.replace(/\D/g, "");
-  const contacts = await prisma.callContact.findMany({
-    where: q
-      ? {
-          OR: [
-            { name: { contains: q, mode: "insensitive" } },
-            { halka: { contains: q, mode: "insensitive" } },
-            { villageWard: { contains: q, mode: "insensitive" } },
-            { zone: { contains: q, mode: "insensitive" } },
-            { district: { contains: q, mode: "insensitive" } },
-            { assigneePhone: { contains: digits || q } },
-            ...(digits ? [{ phone: { contains: digits } }] : []),
-          ],
-        }
-      : {},
-    orderBy: { updatedAt: "desc" },
-    take: 2000,
-  });
+  const where = q
+    ? {
+        OR: [
+          { name: { contains: q, mode: "insensitive" as const } },
+          { halka: { contains: q, mode: "insensitive" as const } },
+          { villageWard: { contains: q, mode: "insensitive" as const } },
+          { zone: { contains: q, mode: "insensitive" as const } },
+          { district: { contains: q, mode: "insensitive" as const } },
+          { assigneePhone: { contains: digits || q } },
+          ...(digits ? [{ phone: { contains: digits } }] : []),
+        ],
+      }
+    : {};
+  const [total, contacts] = await Promise.all([
+    prisma.callContact.count({ where }),
+    prisma.callContact.findMany({
+      where,
+      orderBy: { updatedAt: "desc" },
+      skip: (page - 1) * PAGE_SIZE,
+      take: PAGE_SIZE,
+    }),
+  ]);
   const ids = contacts.map((c) => c.id);
   const latest = ids.length
     ? await prisma.$queryRaw<Array<{ contactId: string; status: string }>>`
@@ -70,6 +79,9 @@ export async function GET(req: Request) {
   });
 
   return NextResponse.json({
+    total,
+    page,
+    pageSize: PAGE_SIZE,
     contacts: contacts.map((c) => ({
       id: c.id,
       zone: c.zone,

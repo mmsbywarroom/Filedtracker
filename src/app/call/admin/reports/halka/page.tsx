@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 type HalkaRow = {
   zone: string;
   halka: string;
+  raw?: boolean;
   total: number;
   dialed: number;
   notAttempted: number;
@@ -160,7 +161,7 @@ export default function HalkaReportPage() {
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Halka report</h1>
-          <p className="mt-1 max-w-3xl text-sm text-slate-600">Question 2 Yes counts as Yes. If Question 2 is No, Question 2.1 Yes still counts as Yes and Question 2.1 No counts as No. Village match counts only those Yes rows.</p>
+          <p className="mt-1 max-w-3xl text-sm text-slate-600">Counts use the latest submission for each number, the same row as the submissions download. Question 2 Yes counts as Yes. Question 2 No counts as No, unless Question 2.1 is Yes. Village match counts only those Yes rows. Total Calls also includes numbers that have not been called yet, so it is larger than the submissions file.</p>
         </div>
         <button type="button" disabled={busy || !rows.length} onClick={() => void downloadPdf()} className="rounded-xl bg-[#0A1628] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
           {busy ? "Preparing PDF…" : "Download PDF"}
@@ -193,33 +194,35 @@ export default function HalkaReportPage() {
             <tr className="font-bold" style={{ background: CYAN }}>
               <td className="border border-sky-200 px-2 py-2" />
               <td className="border border-sky-200 px-2 py-2" />
-              <Count value="Total" />
-              <Count value={total.total} />
-              <Count value={total.dialed} />
-              <Count value={total.notAttempted} />
-              <Count value={total.connected} />
-              <Count value={total.complete} />
-              <Count value={total.notConnected} />
-              <Count value={total.coordinatorYes} />
-              <Count value={total.coordinatorNo} />
-              <Count value={total.villageYes} />
-              <Count value={total.villageNo} />
+              <Count value="Total" href={reportHref("total")} />
+              <Count value={total.total} href={reportHref("total")} />
+              <Count value={total.dialed} href={reportHref("dialed")} />
+              <Count value={total.notAttempted} href={reportHref("notAttempted")} />
+              <Count value={total.connected} href={reportHref("connected")} />
+              <Count value={total.complete} href={reportHref("complete")} />
+              <Count value={total.notConnected} href={reportHref("notConnected")} />
+              <Count value={total.coordinatorYes} href={reportHref("coordinatorYes")} />
+              <Count value={total.coordinatorNo} href={reportHref("coordinatorNo")} />
+              <Count value={total.villageYes} href={reportHref("villageYes")} />
+              <Count value={total.villageNo} href={reportHref("villageNo")} />
             </tr>
             {rows.map((row, index) => (
               <tr key={`${row.zone}-${row.halka}`} style={{ background: index % 2 === 0 ? ROW : "#ffffff" }}>
                 <td className="border border-sky-100 px-2 py-2 text-center font-semibold text-blue-700">{index + 1}</td>
                 <td className="border border-sky-100 px-2 py-2">{row.zone}</td>
-                <td className="border border-sky-100 px-2 py-2 font-semibold text-blue-800">{row.halka}</td>
-                <Count value={row.total} />
-                <Count value={row.dialed} />
-                <Count value={row.notAttempted} />
-                <Count value={row.connected} />
-                <Count value={row.complete} />
-                <Count value={row.notConnected} />
-                <Count value={row.coordinatorYes} />
-                <Count value={row.coordinatorNo} />
-                <Count value={row.villageYes} />
-                <Count value={row.villageNo} />
+                <td className="border border-sky-100 px-2 py-2 font-semibold text-blue-800">
+                  <a href={reportHref("total", row)} className="underline decoration-blue-300 underline-offset-2 hover:text-blue-950">{row.halka}</a>
+                </td>
+                <Count value={row.total} href={reportHref("total", row)} />
+                <Count value={row.dialed} href={reportHref("dialed", row)} />
+                <Count value={row.notAttempted} href={reportHref("notAttempted", row)} />
+                <Count value={row.connected} href={reportHref("connected", row)} />
+                <Count value={row.complete} href={reportHref("complete", row)} />
+                <Count value={row.notConnected} href={reportHref("notConnected", row)} />
+                <Count value={row.coordinatorYes} href={reportHref("coordinatorYes", row)} />
+                <Count value={row.coordinatorNo} href={reportHref("coordinatorNo", row)} />
+                <Count value={row.villageYes} href={reportHref("villageYes", row)} />
+                <Count value={row.villageNo} href={reportHref("villageNo", row)} />
               </tr>
             ))}
           </tbody>
@@ -231,6 +234,24 @@ export default function HalkaReportPage() {
   );
 }
 
-function Count({ value }: { value: number | string }) {
-  return <td className="border border-sky-100 px-2 py-2 text-center tabular-nums">{value}</td>;
+function reportHref(metric: string, row?: HalkaRow) {
+  const params = new URLSearchParams({ metric });
+  if (row && row.halka !== "Total") {
+    params.set("halka", row.halka);
+    if (row.raw) {
+      params.set("raw", "1");
+      params.set("zone", row.zone);
+    }
+  }
+  return `/call/admin/submissions?${params}`;
+}
+
+function Count({ value, href }: { value: number | string; href: string }) {
+  return (
+    <td className="border border-sky-100 px-2 py-2 text-center tabular-nums">
+      <a href={href} className="font-semibold text-blue-800 underline decoration-blue-300 underline-offset-2 hover:text-blue-950">
+        {value}
+      </a>
+    </td>
+  );
 }

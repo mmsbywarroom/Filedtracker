@@ -2,13 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { TEXT_QUESTION_TYPES, type CallQuestionType } from "@/lib/callForm";
+import { HALKA_METRIC_LABEL, isHalkaMetric } from "@/lib/halkaReportMatch";
 
 type Option = { value: string; label: string };
 type Column = { id: string; label: string; type: CallQuestionType; options: Option[] };
 type Status = { value: string; label: string };
 type Row = {
   id: string;
-  createdAt: string;
+  createdAt: string | null;
   callerPhone: string;
   status: string;
   statusLabel: string;
@@ -48,6 +49,22 @@ export default function CallSubmissionsPage() {
   const [openKey, setOpenKey] = useState("");
   const [editing, setEditing] = useState<Row | null>(null);
   const [msg, setMsg] = useState("");
+  const [drill, setDrill] = useState<{ metric: string; halka: string; zone: string; raw: string } | null>(null);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const metric = params.get("metric") || "";
+    if (isHalkaMetric(metric)) {
+      setDrill({
+        metric,
+        halka: params.get("halka") || "",
+        zone: params.get("zone") || "",
+        raw: params.get("raw") || "",
+      });
+    }
+    setReady(true);
+  }, []);
 
   useEffect(() => {
     fetch("/api/call/admin/submissions?lists=1").then(async (res) => {
@@ -80,7 +97,14 @@ export default function CallSubmissionsPage() {
   }
 
   useEffect(() => {
+    if (!ready) return;
     const params = new URLSearchParams({ page: String(page) });
+    if (drill) {
+      params.set("metric", drill.metric);
+      if (drill.halka) params.set("halka", drill.halka);
+      if (drill.zone) params.set("zone", drill.zone);
+      if (drill.raw) params.set("raw", drill.raw);
+    }
     for (const [key, values] of Object.entries(filters)) {
       for (const value of values) params.append(key, value);
     }
@@ -96,7 +120,7 @@ export default function CallSubmissionsPage() {
       setTotal(Number(data.total || 0));
       setPageSize(Number(data.pageSize || 50));
     });
-  }, [page, filters]);
+  }, [page, filters, drill, ready]);
 
   async function remove(row: Row) {
     if (!window.confirm(`Delete ${row.name}'s submission? This member returns to the caller as a fresh call.`)) return;
@@ -169,6 +193,14 @@ export default function CallSubmissionsPage() {
           Download report
         </a>
       </div>
+      {drill ? (
+        <p className="mt-3 rounded-xl bg-white px-3 py-2 text-sm text-slate-700 shadow-sm">
+          {HALKA_METRIC_LABEL[drill.metric as keyof typeof HALKA_METRIC_LABEL]}
+          {drill.halka ? ` · ${drill.halka}` : " · every halka"}
+          {" · "}
+          <a href="/call/admin/reports/halka" className="font-semibold text-blue-800 underline">Back to halka report</a>
+        </p>
+      ) : null}
       {msg ? <p className="mt-3 text-sm">{msg}</p> : null}
       <div className="mt-4 overflow-auto rounded-2xl bg-white shadow-sm">
         <table className="min-w-max text-left text-xs">
@@ -198,7 +230,7 @@ export default function CallSubmissionsPage() {
           <tbody>
             {rows.map((r) => (
               <tr key={r.id} className="border-t align-top">
-                <td className="whitespace-nowrap px-3 py-2">{new Date(r.createdAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}</td>
+                <td className="whitespace-nowrap px-3 py-2">{r.createdAt ? new Date(r.createdAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) : "—"}</td>
                 <td className="whitespace-nowrap px-3 py-2">{r.callerPhone}</td>
                 <td className="px-3 py-2">{r.halka}</td>
                 <td className="px-3 py-2">{r.villageWard}</td>

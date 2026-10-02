@@ -4,6 +4,9 @@ import { getCallAdminSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { isCallScriptLabel, TEXT_QUESTION_TYPES, type CallQuestion } from "@/lib/callForm";
 import { loadCallForm } from "@/lib/callFormStore";
+import { canonicalCallHalka } from "@/lib/assemblyHalkaCodes";
+import { halkaReportPredicates, isHalkaMetric, type HalkaMetric } from "@/lib/halkaReportMatch";
+import type { CallFormShape } from "@/lib/callForm";
 
 const PAGE_SIZE = 50;
 
@@ -62,6 +65,111 @@ function answerIn(id: string, values: string[]) {
     parts.push(Prisma.sql`('|' || COALESCE(r.answers ->> ${id}, '') || '|') ILIKE ${wrapped} ESCAPE '\\'`);
   }
   return parts.length ? anyOf(parts) : null;
+}
+
+async function drillHalka(
+  url: URL,
+  metric: HalkaMetric,
+  form: CallFormShape,
+  questions: Array<{ id: string; label: string; type: CallQuestion["type"]; options: Array<{ value: string; label: string }> }>,
+  questionById: Map<string, CallQuestion>
+) {
+  const page = Math.max(1, Number(url.searchParams.get("page") || 1) || 1);
+  const halka = url.searchParams.get("halka")?.trim() || "";
+  const zone = url.searchParams.get("zone")?.trim() || "";
+  const raw = url.searchParams.get("raw") === "1";
+  const { metricWhere } = halkaReportPredicates(form);
+  let halkaSql = Prisma.sql`TRUE`;
+  if (halka && raw) {
+    const zoneSql = zone === "Unlisted" ? Prisma.sql`btrim(COALESCE(c.zone, '')) = ''` : Prisma.sql`c.zone = ${zone}`;
+    const nameSql = halka === "No halka" ? Prisma.sql`btrim(COALESCE(c.halka, '')) = ''` : Prisma.sql`c.halka = ${halka}`;
+    halkaSql = Prisma.sql`${zoneSql} AND ${nameSql}`;
+  } else if (halka) {
+    const distinct = await prisma.callContact.findMany({ distinct: ["halka"], select: { halka: true } });
+    const names = distinct.map((row) => row.halka).filter((name) => canonicalCallHalka(name)?.halka === halka);
+    halkaSql = names.length ? Prisma.sql`c.halka IN (${Prisma.join(names)})` : Prisma.sql`FALSE`;
+  }
+  const skip = (page - 1) * PAGE_SIZE;
+  const where = Prisma.sql`${halkaSql} AND (${metricWhere[metric]})`;
+  const totalRow = await prisma.$queryRaw<Array<{ n: number }>>`
+    WITH latest AS (
+      SELECT DISTINCT ON ("contactId") "contactId", status, answers
+      FROM "CallPortalResponse"
+      ORDER BY "contactId", "createdAt" DESC
+    )
+    SELECT COUNT(*)::int AS n
+    FROM "CallContact" c
+    LEFT JOIN latest l ON l."contactId" = c.id
+    WHERE ${where}
+  `;
+  const pageIds = await prisma.$queryRaw<Array<{ id: string }>>`
+    WITH latest AS (
+      SELECT DISTINCT ON ("contactId") "contactId", status, answers, "createdAt"
+      FROM "CallPortalResponse"
+      ORDER BY "contactId", "createdAt" DESC
+    )
+    SELECT c.id
+    FROM "CallContact" c
+    LEFT JOIN latest l ON l."contactId" = c.id
+    WHERE ${where}
+    ORDER BY l."createdAt" DESC NULLS LAST, c.name ASC
+    LIMIT ${PAGE_SIZE} OFFSET ${skip}
+  `;
+  const ids = pageIds.map((row) => row.id);
+  const contacts = ids.length
+    ? await prisma.callContact.findMany({ where: { id: { in: ids } } })
+    : [];
+  const responses = ids.length
+    ? await prisma.callPortalResponse.findMany({
+        where: { contactId: { in: ids } },
+        orderBy: { createdAt: "desc" },
+      })
+    : [];
+  const contactById = new Map(contacts.map((contact) => [contact.id, contact]));
+  const latestByContact = new Map<string, (typeof responses)[number]>();
+  for (const row of responses) {
+    if (!latestByContact.has(row.contactId)) latestByContact.set(row.contactId, row);
+  }
+  const rows = ids.flatMap((id) => {
+    const c = contactById.get(id);
+    if (!c) return [];
+    const row = latestByContact.get(id);
+    const stored = (row?.answers as Record<string, unknown>) || {};
+    const rawAnswers: Record<string, string> = {};
+    for (const [key, value] of Object.entries(stored)) {
+      if (key.startsWith("__") || typeof value !== "string") continue;
+      rawAnswers[key] = value;
+    }
+    return [
+      {
+        id: c.id,
+        createdAt: row?.createdAt || null,
+        callerPhone: row?.callerPhone || c.assigneePhone,
+        status: row?.status || "",
+        statusLabel: row ? form.statuses.find((st) => st.value === row.status)?.label || row.status : "Not attempted",
+        remarks: row?.remarks || "",
+        halka: c.halka,
+        villageWard: c.villageWard,
+        name: c.name,
+        phone: c.phone,
+        age: c.age,
+        gender: c.gender,
+        position: c.position,
+        rawAnswers,
+        answers: Object.fromEntries(questions.map((q) => [q.id, answerText(questionById.get(q.id), rawAnswers, q.id)])),
+      },
+    ];
+  });
+  return NextResponse.json({
+    questions,
+    statuses: form.statuses,
+    rows,
+    page,
+    pageSize: PAGE_SIZE,
+    total: Number(totalRow[0]?.n || 0),
+    metric,
+    halka,
+  });
 }
 
 export async function GET(req: Request) {
@@ -160,6 +268,11 @@ export async function GET(req: Request) {
       options[question.id] = question.options.map((option) => ({ value: option.value, label: option.label }));
     }
     return NextResponse.json({ options });
+  }
+
+  const metric = url.searchParams.get("metric")?.trim() || "";
+  if (isHalkaMetric(metric)) {
+    return drillHalka(url, metric, form, questions, questionById);
   }
 
   const selected = new Map<string, string[]>();

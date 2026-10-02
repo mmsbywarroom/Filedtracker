@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 const LIST_CACHE = "ft-call-admin-list";
+const CALLER_PAGE = 36;
 
 type Contact = {
   id: string;
@@ -35,12 +36,16 @@ export function CallAdminHome() {
   const [bulkCaller, setBulkCaller] = useState("");
   const [assigning, setAssigning] = useState("");
   const [q, setQ] = useState("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const [total, setTotal] = useState(0);
+  const [callerPage, setCallerPage] = useState(1);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  async function load(search = q) {
-    const res = await fetch(`/api/call/admin/contacts?q=${encodeURIComponent(search)}`);
+  async function load(search = q, nextPage = page) {
+    const res = await fetch(`/api/call/admin/contacts?q=${encodeURIComponent(search)}&page=${nextPage}`);
     if (res.status === 401) {
       window.location.href = "/call/admin/login";
       return;
@@ -50,32 +55,18 @@ export function CallAdminHome() {
     setCallers(data.callers || []);
     setAgents(data.agents || []);
     setHalkas(data.halkas || []);
-    if (!search) {
-      try {
-        sessionStorage.setItem(
-          LIST_CACHE,
-          JSON.stringify({ contacts: data.contacts, callers: data.callers, agents: data.agents, halkas: data.halkas })
-        );
-      } catch {
-        /* ignore quota */
-      }
-    }
+    setTotal(Number(data.total || 0));
+    setPage(Number(data.page || nextPage));
+    setPageSize(Number(data.pageSize || 50));
   }
 
   useEffect(() => {
     try {
-      const raw = sessionStorage.getItem(LIST_CACHE);
-      if (raw) {
-        const data = JSON.parse(raw);
-        if (Array.isArray(data.contacts)) setContacts(data.contacts);
-        if (Array.isArray(data.callers)) setCallers(data.callers);
-        if (Array.isArray(data.agents)) setAgents(data.agents);
-        if (Array.isArray(data.halkas)) setHalkas(data.halkas);
-      }
+      sessionStorage.removeItem(LIST_CACHE);
     } catch {
-      /* ignore bad cache */
+      /* ignore */
     }
-    load();
+    void load("", 1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -94,7 +85,7 @@ export function CallAdminHome() {
     const errs = Array.isArray(data.errors) ? data.errors : [];
     const first = errs[0] ? ` Row ${errs[0].row}: ${errs[0].error}` : "";
     setMsg(`Created ${data.created || 0}, updated ${data.updated || 0}, assigned ${data.assigned || 0}${errs.length ? `, ${errs.length} row errors.${first}` : ""}.`);
-    load();
+    void load(q, 1);
   }
 
   function template() {
@@ -125,7 +116,7 @@ export function CallAdminHome() {
       return;
     }
     setMsg(assigneePhone ? "Caller assigned." : "Caller removed.");
-    load();
+    void load(q, page);
   }
 
   async function reassignHalka() {
@@ -152,7 +143,7 @@ export function CallAdminHome() {
       return;
     }
     setMsg(`Reassigned ${Number(data.updated || 0).toLocaleString("en-IN")} members in ${halkaLabel}.`);
-    load();
+    void load(q, page);
   }
 
   async function deleteAll() {
@@ -165,8 +156,13 @@ export function CallAdminHome() {
       return;
     }
     setMsg("Deleted.");
-    load();
+    void load("", 1);
   }
+
+  const pages = Math.max(1, Math.ceil(total / pageSize));
+  const callerPages = Math.max(1, Math.ceil(callers.length / CALLER_PAGE));
+  const safeCallerPage = Math.min(callerPage, callerPages);
+  const callerSlice = callers.slice((safeCallerPage - 1) * CALLER_PAGE, safeCallerPage * CALLER_PAGE);
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-6">
@@ -210,10 +206,19 @@ export function CallAdminHome() {
         </section>
 
         <section className="mt-5 rounded-2xl bg-white p-4 shadow-sm">
-          <h2 className="text-sm font-semibold">Callers</h2>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold">Callers · {callers.length.toLocaleString("en-IN")}</h2>
+            {callerPages > 1 ? (
+              <div className="flex items-center gap-2 text-xs">
+                <button type="button" disabled={safeCallerPage <= 1} onClick={() => setCallerPage((n) => Math.max(1, n - 1))} className="rounded-lg border px-2 py-1 font-semibold disabled:opacity-40">Previous</button>
+                <span>{safeCallerPage} / {callerPages}</span>
+                <button type="button" disabled={safeCallerPage >= callerPages} onClick={() => setCallerPage((n) => n + 1)} className="rounded-lg border px-2 py-1 font-semibold disabled:opacity-40">Next</button>
+              </div>
+            ) : null}
+          </div>
           <div className="mt-2 flex flex-wrap gap-2">
-            {callers.map((c) => (
-              <button key={c.phone} type="button" onClick={() => { setQ(c.phone); void load(c.phone); }} className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium">
+            {callerSlice.map((c) => (
+              <button key={c.phone} type="button" onClick={() => { setQ(c.phone); void load(c.phone, 1); }} className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium">
                 {c.phone} · {c.assigned}
               </button>
             ))}
@@ -221,7 +226,7 @@ export function CallAdminHome() {
           </div>
           <div className="mt-3 flex gap-2">
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, phone, halka" className="h-10 flex-1 rounded-xl border px-3 text-sm" />
-            <button type="button" onClick={() => load()} className="rounded-xl bg-slate-900 px-3 text-sm font-semibold text-white">Search</button>
+            <button type="button" onClick={() => void load(q, 1)} className="rounded-xl bg-slate-900 px-3 text-sm font-semibold text-white">Search</button>
           </div>
         </section>
 
@@ -237,7 +242,7 @@ export function CallAdminHome() {
             <tbody>
               {contacts.map((c, i) => (
                 <tr key={c.id} className="border-t">
-                  <td className="px-3 py-2 font-medium text-slate-500">{i + 1}</td>
+                  <td className="px-3 py-2 font-medium text-slate-500">{(page - 1) * pageSize + i + 1}</td>
                   <td className="px-3 py-2">{c.zone}</td>
                   <td className="px-3 py-2">{c.district}</td>
                   <td className="px-3 py-2">{c.halka}</td>
@@ -279,6 +284,18 @@ export function CallAdminHome() {
             </tbody>
           </table>
           {!contacts.length ? <p className="p-6 text-sm text-slate-500">No numbers uploaded yet.</p> : null}
+        </div>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm text-slate-600">
+          <p>
+            {total
+              ? `Showing ${((page - 1) * pageSize + 1).toLocaleString("en-IN")}–${Math.min(page * pageSize, total).toLocaleString("en-IN")} of ${total.toLocaleString("en-IN")}`
+              : "No rows"}
+          </p>
+          <div className="flex items-center gap-2">
+            <button type="button" disabled={page <= 1} onClick={() => void load(q, page - 1)} className="rounded-lg bg-white px-3 py-1.5 font-semibold shadow-sm disabled:opacity-40">Previous</button>
+            <span>{page} / {pages}</span>
+            <button type="button" disabled={page >= pages} onClick={() => void load(q, page + 1)} className="rounded-lg bg-white px-3 py-1.5 font-semibold shadow-sm disabled:opacity-40">Next</button>
+          </div>
         </div>
     </main>
   );
